@@ -196,9 +196,13 @@ def distance_node_to_point( digraph, u, q, weight='weight' ) :
 
 
 
-
-
 if __name__ == '__main__' :
-    raise 'make a unit test, man!'
+    import random
         
+    def randomaddress( roadnet, length='length' ) :
+        _,__,road,data = random.choice( roadnet.edges( keys=True, data=True ) )
+        roadlen = data.get(length,1)
+        y = roadlen * np.random.rand()
+        return RoadAddress(road,y)
+    
     
