@@ -43,11 +43,15 @@ def sampleroadnet( n=10, p=.3, n_oneway=0 ) :
 
 
 def sampleaddress( roadnet, length='length' ) :
-    _,__,road,data = random.choice( roadnet.edges( keys=True, data=True ) )
-    roadlen = data.get( length, 1 )
-    y = roadlen * np.random.rand()
-    return RoadAddress(road,y)
+    _,__,road = random.choice( roadnet.edges( keys=True ) )
+    return sample_onroad( roadnet, road, length ) 
 
+
+def sample_onroad( road, roadnet, length='length' ) :
+    _, road_data = ROAD.obtain_edge( roadnet, road, True )
+    roadlen = road_data.get( length, 1 )
+    y = roadlen * np.random.rand()
+    return ROAD.RoadAddress(road,y)
 
 
 
