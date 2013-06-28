@@ -44,7 +44,7 @@ def sampleroadnet( n=10, p=.3, n_oneway=0 ) :
 
 def sampleaddress( roadnet, length='length' ) :
     _,__,road = random.choice( roadnet.edges( keys=True ) )
-    return sample_onroad( roadnet, road, length ) 
+    return sample_onroad( road, roadnet, length ) 
 
 
 def sample_onroad( road, roadnet, length='length' ) :
