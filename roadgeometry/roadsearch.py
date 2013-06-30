@@ -14,11 +14,25 @@ import bintrees
 import roadmap_basic as ROAD
 
 
-class node :
-    def __init__(self) :
-        self.type = None    # can be 'node' or 'addr'
-        self.vertex
-        self.addr
+def my_isaddress( addr ) :
+    # an annoying quick fix for ROAD being two different modules in two different places... arg!
+    try :
+        r,x = addr.road, addr.coord
+        return True
+    except :
+        return False
+        
+    
+    
+# convenience utilities
+def roadinfo( road, roadnet, length='length' ) :
+    edge, data  = ROAD.obtain_edge( roadnet, road, True )
+    u, v, key   = edge
+    roadlen     = data.get( length, 1 )
+    #
+    return u, v, roadlen
+
+
 
 
 class PointSet :
@@ -26,9 +40,9 @@ class PointSet :
         """ _points will contain one RBTree for each road that it knows about """
         self._points = {}
         
-    def count(self) :
-        # can I implement len?
-        return sum([ len( tree ) for tree in self._points ]) 
+    def __len__(self) :
+        # todo: I think this over-counts by two per road
+        return sum([ len( tree ) - 2 for tree in self._points.values() ])
         
         
     def get_roadtree(self, road ) :
@@ -43,12 +57,12 @@ class PointSet :
         return res
             
     def insert(self, addr ) :
-        assert isinstance( addr, ROAD.RoadAddress )
+        assert my_isaddress( addr )
         roadtree = self.get_roadtree( addr.road )
         roadtree[ addr.coord ] = addr
         
     def remove(self, addr ) :
-        assert isinstance( addr, ROAD.RoadAddress )
+        assert my_isaddress( addr )
         assert addr.road in self._points
         roadtree = self.get_roadtree( addr.road )
         assert addr.coord in roadtree
@@ -56,15 +70,7 @@ class PointSet :
         
         
     def find_nearest(self, addr, roadnet, length='length' ) :
-        assert isinstance( addr, ROAD.RoadAddress )
-        
-        # convenience utilities
-        def roadinfo( road ) :
-            edge, data  = ROAD.obtain_edge( roadnet, road, True )
-            u, v, key   = edge
-            roadlen     = data.get( length, 1 )
-            #
-            return u, v, roadlen
+        assert my_isaddress( addr )
         
         # PREPARE for best first search [with branch and bound]
         OPEN = []       # priority queue of points to be checked, sorted according to min distance;
@@ -73,10 +79,40 @@ class PointSet :
                         # when it reaches the old-priority copy, the node will be in CLOSED already
         CLOSED = set()  # nodes already checked, which should not be opened again
         
-        # populate initial conditions of the search
-        options = [] # options contains tuples of: ( target symbol, target address )
+        # populate initial conditions for the search
+        INIT = self._expand_address( addr, roadnet, length )
+        for targ, time in INIT :
+            heapq.heappush( OPEN, ( time, targ ) )
         
-        # 1. find the interval containing addr
+        # do best first search, with "branch and bound"
+        res = None
+        while len( OPEN ) > 0 :
+            traveltime, curr_targ = heapq.heappop( OPEN )
+            
+            # if it's a point, then we're done!
+            if my_isaddress( curr_targ ) :
+                res = curr_targ
+                break
+            
+            # if it's closed already, ignore;
+            if curr_targ in CLOSED : continue
+            # if not, then close it...
+            CLOSED.add( curr_targ )
+            
+            # then, we need to expand
+            CANDS = self._expand_node( curr_targ, roadnet, length )
+            for targ, extra_time in CANDS :
+                total_time = traveltime + extra_time
+                heapq.heappush( OPEN, ( total_time, targ ) )
+        
+        return res
+        
+        
+    def _expand_address(self, addr, roadnet, length='length' ) :
+        # only ever done at the beginning!!
+        options = []
+        
+        # find the interval containing addr
         roadtree = self.get_roadtree( addr.road )
         _, floor_addr = roadtree.floor_item( addr.coord )
         _, ceil_addr = roadtree.ceiling_item( addr.coord )
@@ -85,41 +121,82 @@ class PointSet :
         u, v, roadlen = roadinfo( addr.road, roadnet )
         # look left
         if floor_addr is None :
-            lbp = ROAD.RoadAddress( road, 0. )
-            options.append( ( u, lbp ) )
-        elif isinstance( floor_addr, ROAD.RoadAddress ) :
+            left_boundary = ROAD.RoadAddress( addr.road, 0. )
+            options.append( ( u, left_boundary ) )
+        elif my_isaddress( floor_addr ) :
             options.append( ( floor_addr, floor_addr ) )
         else :
             raise 'invalid node type'
         # look right
         if ceil_addr is None :
-            rbp = ROAD.RoadAddress( road, roadlen )
-            options.append( ( v, rbp ) )
-        elif isinstance( floor_addr, ROAD.RoadAddress ) :
+            right_boundary = ROAD.RoadAddress( addr.road, roadlen )
+            options.append( ( v, right_boundary ) )
+        elif my_isaddress( ceil_addr ) :
             options.append( ( ceil_addr, ceil_addr ) )
         else :
             raise 'invalid node type'
-        # add all options to OPEN 
+        
+        res = []
         for ( targ, targ_addr ) in options :
-            traveltime = ROAD.distance( roadnet, addr, targ_addr )
-            heapq.heappush( ( traveltime, targ ) )
+            traveltime = ROAD.distance( roadnet, addr, targ_addr, length )
+            res.append( ( targ, traveltime ) )
+        return res
         
-        # do best first search, with branch and bound
-        res = None
-        while len( OPEN ) > 0 :
-            traveltime, curr_targ = heapq.heappop( OPEN )
+        
+    def _expand_node(self, node, roadnet, length='length' ) :
+        res = []
+        
+        # expand out-going edges
+        for _, __, road, road_data in roadnet.out_edges_iter( node, keys=True, data=True ) :
+            addr = ROAD.RoadAddress( road, 0. )
+            subres = self._expand_address( addr, roadnet, length )
+            res.extend( subres )
             
-            # if it's a point, then we're done!
-            if isinstance( curr_targ, ROAD.RoadAddress ) :
-                res = curr_addr
-                break
+        # expand in-coming edges
+        for _, __, road, road_data in roadnet.in_edges_iter( node, keys=True, data=True ) :
+            roadlen = road_data.get( length, 1 )
+            addr = ROAD.RoadAddress( road, roadlen )
+            subres = self._expand_address( addr, roadnet, length )
+            res.extend( subres )
             
-            # if it's closed already, ignore
-            if curr_targ in CLOSED : continue
-                
-            # otherwise, we need to obtain all neighbors
-            # do some shit...
+        return res
+
+
+
+
+if __name__ == '__main__' :
+    import roadgeometry.probability as roadprob
+    
+    roadnet = roadprob.sampleroadnet()
+    
+    n = 100
+    points = [ roadprob.sampleaddress( roadnet ) for i in range(n) ]
+    
+    pset = PointSet()
+    
+    for p in points :
+        pset.insert( p )
         
-        return curr_addr
         
+    def find_nearest( addr ) :
+        dist_to = lambda q : ROAD.distance( roadnet, addr, q, 'length' )
+        trips = [ ( dist_to(q), q ) for q in points ]
+        return min( trips )[1]
         
+    def sidebyside( addr ) :
+        by_pset = pset.find_nearest( addr, roadnet )
+        by_naive = find_nearest( addr )
+        return by_pset, by_naive
+    
+    samples = 100
+    testpoints = [ roadprob.sampleaddress( roadnet ) for i in range(samples) ]
+    answers = [ sidebyside( q ) for q in testpoints ]
+    error = [ ROAD.distance( roadnet, p, q, 'length' ) for p, q in answers ]
+
+
+
+
+
+
+
+
