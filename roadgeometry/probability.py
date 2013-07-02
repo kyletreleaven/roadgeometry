@@ -55,28 +55,3 @@ def sample_onroad( road, roadnet, length='length' ) :
 
 
 
-def samplepair( roadnet, distr1, distr2=None, length_attr='length' ) :
-    """ assume distr sums to one; if not, no guaranteed behavior """
-    if distr2 is not None : raise 'not implemented yet'
-    
-    # choose appropriately, randomly... can probably do better
-    x = np.random.rand()
-    X = 0.
-    for (road1,road2), prob in distr1.iteritems() :
-        X += prob
-        if X >= x : break
-        
-    _, data1 = ROAD.obtain_edge( roadnet, road1, data_flag=True )
-    _, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
-    roadlen1 = data1.get( 'length' )
-    roadlen2 = data2.get( 'length' )
-    
-    x = roadlen1 * np.random.rand()
-    y = roadlen2 * np.random.rand()
-    p = ROAD.RoadAddress( road1, x )
-    q = ROAD.RoadAddress( road2, y )
-    
-    return p, q
-
-
-
