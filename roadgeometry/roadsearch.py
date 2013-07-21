@@ -1,7 +1,7 @@
 
 # python standard
 import heapq
-
+import itertools
 
 # science common
 import numpy as np
@@ -44,6 +44,10 @@ class PointSet :
         # todo: I think this over-counts by two per road
         return sum([ len( tree ) - 2 for tree in self._points.values() ])
         
+    def __iter__(self) :
+        rtree_iters = [ tree.iter_items() for tree in self._points.values() ]
+        chain = itertools.chain( *rtree_iters )
+        return ( p for _,p in chain if p is not None )
         
     def get_roadtree(self, road ) :
         if road in self._points :
