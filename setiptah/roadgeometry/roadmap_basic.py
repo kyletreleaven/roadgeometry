@@ -114,15 +114,14 @@ Class defs
 """
 
 class RoadAddress(object) :
-    def __init__(self, road, coord ) :
+    def __init__(self, road, coord ) : self.init(road,coord)
+    
+    def init(self, road, coord ) :
         self.road = road
         self.coord = coord
         
     def __repr__(self) :
         return '(%s,%s)' % ( repr( self.road ), repr( self.coord ) )
-    
-    
-
 
 
 """ Distance functions """
@@ -196,11 +195,9 @@ def distance_node_to_point( digraph, u, q, weight='weight' ) :
 
 
 
-
-
 if __name__ == '__main__' :
     import random
-        
+    
     def randomaddress( roadnet, length='length' ) :
         _,__,road,data = random.choice( roadnet.edges( keys=True, data=True ) )
         roadlen = data.get(length,1)
