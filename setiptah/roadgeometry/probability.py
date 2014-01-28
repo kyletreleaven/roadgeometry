@@ -98,7 +98,7 @@ class UniformDist :
         road = self.road_sampler.sample()
         L = ROAD.get_road_data( road, self.roadnet ).get( 'length', 1 )
         y = L * np.random.rand()
-        return (road,y)
+        return ROAD.RoadAddress( road, y )
 
 
 
