@@ -72,6 +72,10 @@ def obtain_edge( digraph, road, data_flag=False ) :
             store[road] = edge
             return result( edge )
 
+def get_road_data( road, roadnet ) :
+    for _,__,key, data in roadnet.edges_iter( keys=True, data=True ) :
+        if key == road : return data
+
 
 def check_point( digraph, point, weight='weight' ) :
     """ answers whether a RoadAddress is contained by the Roadmap digraph """
