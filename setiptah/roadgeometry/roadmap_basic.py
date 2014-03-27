@@ -61,8 +61,15 @@ def obtain_edge( digraph, road, data_flag=False ) :
         else :
             return edge
     
+    # try to fetch it from cache...
     store = digraph.graph
-    edge = store.get( road, None )
+    try :
+        edge = store.get( road, None )
+        
+    except TypeError as e :
+        print 'tried to fetch road: ', road
+        raise
+    
     if edge is not None and digraph.has_edge( *edge ) : return result( edge )
     
     # else, find and cache
@@ -126,6 +133,11 @@ class RoadAddress(object) :
         
     def __repr__(self) :
         return '(%s,%s)' % ( repr( self.road ), repr( self.coord ) )
+    
+    def __iter__(self) :
+        """ wow... this elegantly solved a *lot* of problems """
+        yield self.road
+        yield self.coord
 
 
 """ Distance functions """
