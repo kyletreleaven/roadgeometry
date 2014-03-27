@@ -86,7 +86,9 @@ def pathEvaluate( path, x ) :
         B = A + y
         if x <= B : break
         A = B
-    if x > B : raise Exception('query distance longer than path')      # only happens when B == path length
+    if x > B :
+        print x, B
+        raise Exception('query distance longer than path')      # only happens when B == path length
     
     segment = path[i]
     dx = x - A
@@ -146,12 +148,8 @@ def minpath( p, q, roadmap, length_attr='length' ) :
     minpath.first.init(road,0.)
     minpath.second.init(road,roadlen)
     for u, qq in zip( (i,j), minpath.points ) :
-        try :
-            first = minpath_on_road( p, qq, road, roadmap, length_attr )
-            second = minpath_node_to_point( u, q, roadmap, length_attr )
-        except None :
-            print p, q
-            raise Exception()
+        first = minpath_on_road( p, qq, road, roadmap, length_attr )
+        second = minpath_node_to_point( u, q, roadmap, length_attr )
         path = first + second
         options.append( ( pathLength(path), path ) )
         
