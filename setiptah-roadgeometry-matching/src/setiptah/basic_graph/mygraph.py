@@ -1,15 +1,8 @@
+"""
 
-#import itertools
-#import numpy as np
+TODO: Taking a O(log n) hit for dictionary lookups?
 
-#import networkx as nx
-#import bintrees
-
-#from priodict import *
-
-
-# I'm getting tired of networkx's stupid layout
-# Right now, I don't care about any O(log n) hits for dictionary lookups
+"""
 
 class mygraph :
     def __init__(self) :
@@ -60,9 +53,7 @@ class mygraph :
     def has_edge(self, e ) : return e in self.E
         
     def endpoints(self, e ) : return self.E[e]
-        
-        
-        
+
         
 if __name__ == '__main__' :
     g = mygraph()
@@ -73,6 +64,3 @@ if __name__ == '__main__' :
     
     c = { 'a' : 10., 'b' : 5., 'c' : 1., 'd' : .5 }
     f = { 'a' : 3., 'b' : 1.37 }
-    
-    
-    
