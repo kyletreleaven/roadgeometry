@@ -1,0 +1,10 @@
+Install with :
+	python setup.py install
+
+requires :
+	numpy
+	scipy
+	networkx
+	bintrees
+
+Test: Run the setiptah/roadbm/bm.py module as a script.

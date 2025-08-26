@@ -1,0 +1,21 @@
+# compiled python
+*.pyc
+
+# backups
+*.bak
+*~
+
+# images
+*.pdf
+*.png
+*.svg
+
+# compiled latex
+*.aux
+*.log
+*.nav
+*.out
+*.toc
+
+# generated content
+slides/*

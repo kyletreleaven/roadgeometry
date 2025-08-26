@@ -1,0 +1,48 @@
+
+# roadmap elements
+set ROADS ;
+set VERTS ;
+
+# (r,u,v) in TOPOLOGY => r is from u->v
+set TOPOLOGY within ROADS cross VERTS cross VERTS ;
+# each road exactly once
+check { road in ROADS } card( { (r,u,v) in TOPOLOGY : r == road } ) == 1 ;
+
+# road surpluses
+param b { ROADS }, integer, default 0 ;
+# zero total surplus 
+check sum { r in ROADS } b[r] == 0 ;
+
+# lines
+set LINES ;
+param slope { LINES } ;
+param offset { LINES } ;
+
+# rows
+set ROWS within LINES cross ROADS ;
+# each line assigned to exactly one road
+check { line in LINES } card( { (l,r) in ROWS : l == line } ) == 1 ;
+
+# variables
+var z { ROADS } ;		# road "assistance", should be integer
+var cost { ROADS } ;		# road cost, slack variables
+
+
+minimize match_cost : sum { r in ROADS } cost[r] ;
+
+subject to conservation { node in VERTS } :
+	sum { (r,u,v) in TOPOLOGY : node == u } z[r] == sum { (r,u,v) in TOPOLOGY : node == v } ( z[r] + b[r] ) ;
+
+subject to epigraph { (line,r) in ROWS } :
+	cost[r] >= offset[line] + slope[line] * z[r] ;
+
+
+
+
+solve ;
+
+printf { r in ROADS } "%s %d\n", r, z[r] ;
+
+
+end ;
+
