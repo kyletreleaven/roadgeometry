@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "setiptah-roadgeometry"
+description = "A small library for road network geometry queries"
+dynamic = ["version"]
+authors = [
+    { name = "Kyle Treleaven", email = "ktreleav@gmail.com" }
+]
+readme = "README.md"
+dependencies = [
+    "bintrees",
+    "numpy",  # confirm?
+    "networkx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "matplotlib",
+    "ipython",
+    "notebook",
+    "ipywidgets",
+    "pandas",
+    "nbconvert",
+]
+test = [
+    "pytest",
+    "pytest-coverage",
+]
+package = [
+    "black",
+    "sphinx",
+    "sphinx_rtd_theme",
+    "sphinx-codeautolink",
+    "sphinx-autobuild",
+    "nbsphinx",
+]

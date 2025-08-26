@@ -6,7 +6,7 @@ import numpy as np
 
 import networkx as nx       # it's time for better control
 
-import astar_basic
+from . import astar_basic
 
 __author__ = "Kyle Treleaven <ktreleav@mit.edu>"
 __all__ = [ 'RoadAddress', 'distance' ]
@@ -67,7 +67,7 @@ def obtain_edge( digraph, road, data_flag=False ) :
         edge = store.get( road, None )
         
     except TypeError as e :
-        print 'tried to fetch road: ', road
+        print('tried to fetch road: ', road)
         raise
     
     if edge is not None and digraph.has_edge( *edge ) : return result( edge )
@@ -160,7 +160,7 @@ def distance( digraph, p, q, weight='weight' ) :
             dist = distance_on_road( digraph, road, p, qq, weight=weight )
             dist += distance_node_to_point( digraph, u, q, weight=weight )
         except :
-            print p, q
+            print(p, q)
             raise Exception()
         options.append( dist )
         
@@ -220,8 +220,4 @@ if __name__ == '__main__' :
         y = roadlen * np.random.rand()
         return RoadAddress(road,y)
 
-	raise 'make a unit test, man!'
-    
-
-        
-    
+    raise 'make a unit test, man!'

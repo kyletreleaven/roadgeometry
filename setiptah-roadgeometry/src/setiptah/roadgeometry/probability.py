@@ -1,5 +1,4 @@
-
-# built-in
+# builtin
 import random, itertools
 
 # scientific common
@@ -7,26 +6,32 @@ import numpy as np
 import networkx as nx
 
 # community
+# TODO: Upgrade to `sortedcontainers`.
 import bintrees     # --- weird warnings?
 
 # dev
-import roadmap_basic as ROAD 
+from . import roadmap_basic as ROAD
 
 
 def sampleroadnet( n=10, p=.3, n_oneway=0 ) :
     # based on Erdos Renyi ; n=# of nodes, p=probability any two nodes are linked
     g = nx.erdos_renyi_graph( n, p )
     # ...then just get the biggest connected component
-    g = nx.connected_component_subgraphs( g )[0]
+    for c in nx.connected_components(g):
+        g = g.subgraph(c)
+        break
+    else:
+        raise StopIteration("No connected component found?")
     
     # create a roadnet with such connectivity and random street lengths
     roadnet = nx.MultiDiGraph()
     def roadmaker() :
-        for i in itertools.count() : yield 'road%d' % i, np.random.exponential()
+        for i in itertools.count():
+            yield 'road%d' % i, np.random.exponential()
     road_iter = roadmaker()
     
-    for i, ( u,v,data ) in enumerate( g.edges_iter( data=True ) ) :
-        label, length = road_iter.next()
+    for i, (u, v, data) in enumerate(g.edges(data=True)):
+        label, length = next(road_iter)
         roadnet.add_edge( u, v, label, length=length )
         
     # add some random one-way roads
@@ -34,7 +39,7 @@ def sampleroadnet( n=10, p=.3, n_oneway=0 ) :
     for i in range( n_oneway ) :
         u = random.choice( nodes )
         v = random.choice( nodes )
-        label, length = road_iter.next()
+        label, length = next(road_iter)
         roadnet.add_edge( u, v, label, length=length, oneway=True )
         
     return roadnet
