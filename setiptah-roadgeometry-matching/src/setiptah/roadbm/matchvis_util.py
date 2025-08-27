@@ -3,7 +3,6 @@
 import networkx as nx
 
 import setiptah.roadgeometry.roadmap_basic as ROAD
-#from setiptah.roadgeometry.roadmap_basic import RoadAddress, get_road_data
 
 from setiptah.roadbm import bm as roadbm
 

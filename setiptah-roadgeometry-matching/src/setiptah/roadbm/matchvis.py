@@ -60,10 +60,6 @@ def SCORE_GRAPH( match, S, T, roadmap, pos, length_attr='length' ) :
     pass
 
 
-
-
-
-
 def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
                 ax=None, **kwargs ) :
     """
@@ -109,10 +105,6 @@ def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
             
                         
     SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax )
-
-            
-
-
 
 
 def SHOWMATCH( match, S, T, roadmap, pos, length_attr='length', ax=None,
@@ -166,8 +158,6 @@ def SHOWMATCH( match, S, T, roadmap, pos, length_attr='length', ax=None,
             data['score'] += 1
 
     SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax )
-
-
 
 
 def SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax ) :            
@@ -224,86 +214,3 @@ def SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax ) :
     positions = [position(addr, roadmap, pos).tolist() for addr in T]
     X, Y = pointsToXY( positions )
     ax.scatter( X, Y, color='b', zorder=ZPOINTS, marker='$\circ$', **options )
-
-
-
-
-
-
-
-if __name__ == '__main__' :
-    plt.close('all')
-    
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument( '--number', type=int, default=10 )
-    args = parser.parse_args()
-    
-    N = args.number
-    def sampledisc() :
-        while True :
-            p = np.random.rand(2)
-            if np.linalg.norm( p ) < 1 : return p
-            
-    interchanges = [ sampledisc() for i in xrange(N) ]
-    
-    import scipy.spatial as spatial
-    """ Connect points using a Delaunay triangulation """
-    tri = spatial.Delaunay( interchanges )
-    
-    import networkx as nx
-    graph = nx.Graph()
-    # find the edges in the triangulation
-    indices, seq = tri.vertex_neighbor_vertices
-    for i in xrange(N) :
-        for j in seq[ indices[i]:indices[i+1] ] :
-            graph.add_edge(i,j)
-    
-    # construct the roadmap
-    roadmap = nx.MultiDiGraph()
-    for ridx, (u,v) in enumerate( graph.edges() ) :
-        x, y = [ tri.points[k] for k in (u,v) ]
-        roadmap.add_edge(u,v, 'road %d' % ridx, length=np.linalg.norm(y-x) )
-        
-    # and positions
-    pos = { k : point for k, point in enumerate( tri.points ) }
-    
-    
-    
-    # now, draw two sets of points
-    import setiptah.roadgeometry.probability as roadprob
-    uniform = roadprob.UniformDist( roadmap )
-    
-    
-    
-    if False :
-        addresses = [ uniform.sample() for i in xrange(M) ]
-        positions = [position(addr, roadmap, pos) for addr in addresses]
-        
-        X = [ x for x,y in positions ]
-        Y = [ y for x,y in positions ]
-        
-        nx.draw(graph, pos=pos)
-        ax = plt.gca()
-        ax.scatter(X,Y)
-        ax.set_aspect('equal')
-    
-    if True :
-        # requires bintrees, too.
-        #import setiptah.roadgeometry.roadmap_basic as ROAD
-        
-        M = 500
-        unpack = lambda addr : ( addr.road, addr.coord )
-        SS = [ unpack( uniform.sample() ) for i in xrange(M) ]
-        TT = [ unpack( uniform.sample() ) for i in xrange(M) ]
-        
-        import setiptah.roadbm.bm as roadbm
-        match = roadbm.ROADSBIPARTITEMATCH( SS, TT, roadmap )
-        #match = [ (i,i) for i in xrange(M) ]
-        SHOWMATCH( match[:], SS, TT, roadmap, pos=pos )
-        
-        
-        
-        
-        
-        

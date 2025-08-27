@@ -19,9 +19,11 @@ dependencies = [
 test = [
     "pytest",
     "pytest-coverage",
-    # extra deps for test code
+    # extra deps _just_ for test code
     "numpy",
     "networkx",
+    "scipy",
+    "matplotlib",
 ]
 dev = [
     "scipy",
