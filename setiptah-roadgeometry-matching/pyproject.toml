@@ -12,6 +12,7 @@ authors = [
 readme = "README.md"
 dependencies = [
     # GOAL: can this be none?
+    "setiptah-roadgeometry",    # TODO: Kill it?
 ]
 
 [project.optional-dependencies]
