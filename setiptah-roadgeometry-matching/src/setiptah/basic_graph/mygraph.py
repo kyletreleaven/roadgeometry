@@ -7,13 +7,12 @@ TODO: Taking a O(log n) hit for dictionary lookups?
 class mygraph :
     def __init__(self) :
         self.E = {}
-        self.V = {}
-        self.W = {}     # partial list
+        self.V = {}     # out edges
+        self.W = {}     # in edges
         
     def __repr__(self) :
         return '(V:%s, E:%s, W:%s)' % ( repr(self.V), repr(self.E), repr(self.W) )
-    
-        
+
     def add_node(self, i ) :
         self.V.setdefault( i, set() )
         self.W.setdefault( i, set() )

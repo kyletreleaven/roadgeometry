@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "setiptah-roadgeometry-matching"
+description = "A small library for road network geometry queries"
+dynamic = ["version"]
+authors = [
+    { name = "Kyle Treleaven", email = "ktreleav@gmail.com" }
+]
+readme = "README.md"
+dependencies = [
+    # GOAL: can this be none?
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-coverage",
+    # extra deps for test code
+    "numpy",
+    "networkx",
+]
+dev = [
+    "matplotlib",
+    "ipython",
+    "notebook",
+    "ipywidgets",
+    "pandas",
+    "nbconvert",
+]

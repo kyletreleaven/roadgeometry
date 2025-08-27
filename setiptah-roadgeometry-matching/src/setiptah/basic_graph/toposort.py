@@ -1,8 +1,5 @@
-
-import numpy as np
-
 from mygraph import mygraph
-#from priodict import *
+
 
 """ recursive form, why not, obtained from Cormen """
 WHITE = 0

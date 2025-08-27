@@ -27,7 +27,7 @@ def test_dijkstra():
     for (i, x), (j, y) in itertools.product(X, X):
         cost = np.linalg.norm(y - x)
         if cost < .3:
-            e = edgegen.next()
+            e = next(edgegen)
             g.add_edge(e, i, j)
             c[e] = cost
 
@@ -35,6 +35,11 @@ def test_dijkstra():
 
     s = 0
     d, pred = Dijkstra(g, c, s)
+
+    # Compare to networkx solution
     nxd = nx.single_source_dijkstra_path_length(nxg, s)
 
-    # TODO: Assert something...
+    assert all(
+        d.get(u) == nxd.get(u)
+        for u in set(d) | set(nxd)
+    )
