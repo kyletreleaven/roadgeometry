@@ -88,9 +88,12 @@ if True and NUMPOINT <= 50:
         w = ROAD.distance(roadnet, r.point, b.point, 'length')
         graph.add_edge(r, b, weight=-w)
         match_mat[i, j] = w
-    match_dict = nx.max_weight_matching(graph, True)
 
-    match_brute = [(r.idx, match_dict[r].idx) for r in RED]  # match pruning
+    match_brute = [
+        (r.idx, b.idx)
+        for r, b in nx.max_weight_matching(graph, True)
+    ]
+    # match_brute = [(r.idx, match_dict[r].idx) for r in RED]  # match pruning
     #        matchstats = [ ( r.point, b.point, ROAD.distance( roadnet, r.point, b.point, 'length' ) )
     #                      for r,b in match ]
     costs_brute = MATCHCOSTS(match_brute, PP, QQ, roadnet)
