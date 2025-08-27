@@ -7,7 +7,7 @@ def SOLVER( roadnet, surplus, objectives ) :
     prog.solve()
     
     res = dict()
-    for road, a in assist.iteritems() :
+    for road, a in assist.items() :
         res[road] = int( round( a.value ) )
         
     return res
@@ -20,7 +20,7 @@ def PROGRAM( roadnet, surplus, objectives ) :
     cost = dict()
     DELTA = .00001   # cvxpy isn't quite robust to non-full dimensional optimization
     
-    for _,__,road in roadnet.edges_iter( keys=True ) :
+    for _,__,road in roadnet.edges( keys=True ) :
         assist[road] = cvxpy.variable( name='z_{%s}' % road )
         cost[road] = cvxpy.variable( name='c_{%s}' % road )
     #print assist
@@ -32,7 +32,7 @@ def PROGRAM( roadnet, surplus, objectives ) :
     CONSTRAINTS = []
     
     # the flow conservation constraints
-    for u in roadnet.nodes_iter() :
+    for u in roadnet.nodes() :
         INFLOWS = []
         for _,__,road in roadnet.in_edges( u, keys=True ) :
             INFLOWS.append( assist[road] + surplus[road] )

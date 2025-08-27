@@ -32,7 +32,7 @@ def SOLVER( roadnet, surplus, objectives ) :
     #
     oneway_offset = {}  # for one-way roads
     
-    for i,j, road, data in roadnet.edges_iter( keys=True, data=True ) :
+    for i,j, road, data in roadnet.edges( keys=True, data=True ) :
         supply[j] += surplus[road]
         cost_data = objectives[road]
         
@@ -71,7 +71,7 @@ def SOLVER( roadnet, surplus, objectives ) :
     f = MinConvexCostFlow( network, {}, supply, cost, U )
     
     flow = {}
-    for i, j, road in roadnet.edges_iter( keys=True ) :
+    for i, j, road in roadnet.edges( keys=True ) :
         if road in oneway_offset :
             flow[road] = f[road] + oneway_offset[road]
         else :

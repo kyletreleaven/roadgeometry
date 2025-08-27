@@ -26,7 +26,7 @@ update one
 """
     
     
-def ResidualGraph( rgraph, flow, capacity, Delta, network, edge=None ) :
+def ResidualGraph( rgraph: mygraph, flow, capacity, Delta, network, edge=None ) :
     if edge is None :
         iter = network.edges()
     else :
@@ -34,7 +34,7 @@ def ResidualGraph( rgraph, flow, capacity, Delta, network, edge=None ) :
         
     for e in iter :
         x = flow.get( e, 0. )
-        u = capacity.get( e, np.Inf )
+        u = capacity.get( e, np.inf )
         assert x >= 0. and x <= u
         
         i,j = network.endpoints(e)
@@ -118,7 +118,7 @@ def MinConvexCostFlow( network, capacity, supply, cost, U, epsilon=None ) :
     flow = FragileMCCF( network_aug, capacity_rename, supply, cost_aug, U, epsilon )
     
     # prepare output --- perhaps do some feasibility checking in the future
-    res = { e : x for (type,e), x in flow.iteritems() if type == ALGGLOBAL.REGULAR }
+    res = { e : x for (type,e), x in flow.items() if type == ALGGLOBAL.REGULAR }
     return res
 
 
@@ -144,10 +144,10 @@ def MCCFRobustInstance( network, capacity, supply, cost, U ) :
     # since costs are convex, a feasible flow cannot have cost greater than CBOUND
     prohibit = line(CBOUND)
     
-    NODES = network.nodes()
+    NODES = list(network.nodes())
     edgegen = itertools.count()
     for i,j in zip( NODES, NODES[1:] + NODES[:1] ) :
-        frwd = (ALGGLOBAL.AUGMENTING, edgegen.next() )
+        frwd = (ALGGLOBAL.AUGMENTING, next(edgegen) )
         network_aug.add_edge( frwd, i, j )
         cost_aug[frwd] = prohibit
         
@@ -186,7 +186,7 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
     # most treatments fail to consider negative initial slope, which is totally possible... 
     capacity = {}
     for e in network.edges() :
-        capacity[e] = min( U, capacity_in.get( e, np.Inf ) )
+        capacity[e] = min( U, capacity_in.get( e, np.inf ) )
         
     try :
         temp = math.floor( math.log(U,2) )
@@ -195,7 +195,7 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
         raise ex
         
     Delta = 2.**temp
-    print 'Delta: %d' % Delta
+    print('Delta: %d' % Delta)
     
     
     flow = { e : 0. for e in network.edges() }
@@ -204,25 +204,25 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
     potential = { i : 0. for i in network.nodes() }
         
     while Delta >= epsilon :
-        print '\nnew phase: Delta=%f' % Delta
+        print('\nnew phase: Delta=%f' % Delta)
         
         # Delta is fresh, so we need to [re-] linearize the costs and compute residual graph 
         LinearizeCost( lincost, cost, flow, Delta, network )
         ReducedCost( redcost, lincost, potential, network )
         ResidualGraph( rgraph, flow, capacity, Delta, network )
         #
-        cert = { re : c for (re,c) in redcost.iteritems() if re in rgraph.edges() }
-        print 'reduced costs on res. graph, phase init: %s' % repr( cert )
+        cert = { re : c for (re,c) in redcost.items() if re in rgraph.edges() }
+        print('reduced costs on res. graph, phase init: %s' % repr( cert ))
         
         """ Stage 1. """
         # for every arc (i,j) in the residual network G(x)
-        for resedge in rgraph.edges() :
+        for resedge in list(rgraph.edges()):
             e,dir = resedge
             # theory says, we only need to do this at most once per edge...
             # wouldn't want to question theory
             # ... keep an eye out for a flip-flop; in theory, shouldn't happen
             if redcost[resedge] < 0. :
-                print 'correcting negative red. cost on resedge %s: %f' % ( resedge, redcost[resedge] )
+                print('correcting negative red. cost on resedge %s: %f' % ( resedge, redcost[resedge] ))
                 
                 # no augment, just saturate!
                 flow[e] += dir * Delta
@@ -234,37 +234,37 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
                 ReducedCost( redcost, lincost, potential, network, edge=e )
                 
         # at end of each stage, verify the optimality certificate (should be empty every time)
-        CERT = { re : c for (re,c) in redcost.iteritems() if re in rgraph.edges() and c < 0. }
-        print 'certificate, end stage ONE: %s' % repr( CERT )
+        CERT = { re : c for (re,c) in redcost.items() if re in rgraph.edges() and c < 0. }
+        print('certificate, end stage ONE: %s' % repr( CERT ))
         #if len( CERT ) > 0 : print "STAGE ONE CERTIFICATE CORRUPT!"
         # am considering removing this assertion, but leaving the stage two one
         # could be running into problems where the functional form is defined beyond saturation bounds
-        RELAXCERT = { re : c for (re,c) in redcost.iteritems() if re in rgraph.edges() and c < -PHASE_ERROR }
+        RELAXCERT = { re : c for (re,c) in redcost.items() if re in rgraph.edges() and c < -PHASE_ERROR }
         if len( RELAXCERT ) > 0 : 
-            print RELAXCERT
-            print "STAGE ONE CERTIFICATE CORRUPT!"
-        print RELAXCERT
+            print(RELAXCERT)
+            print("STAGE ONE CERTIFICATE CORRUPT!")
+        print(RELAXCERT)
         assert len( RELAXCERT ) <= 0
         
                 
         """ Stage 2. """
         # while there are imbalanced nodes
         while True :
-            print 'flow: %s' % repr( flow )
+            print('flow: %s' % repr( flow ))
             #excess = Excess( flow, network, supply )        # last function that needs to be increment-ized
             #print 'excess: %s' % repr(excess)
             
-            SS = [ i for i,ex in excess.iteritems() if ex >= Delta ]
-            TT = [ i for i,ex in excess.iteritems() if ex <= -Delta ]
-            print 'surplus nodes: %s' % repr( SS )
-            print 'deficit nodes: %s' % repr( TT )
+            SS = [ i for i,ex in excess.items() if ex >= Delta ]
+            TT = [ i for i,ex in excess.items() if ex <= -Delta ]
+            print('surplus nodes: %s' % repr( SS ))
+            print('deficit nodes: %s' % repr( TT ))
             if len( SS ) <= 0 or len( TT ) <= 0 : break
             
             s = SS[0] ; t = TT[0]
-            print 'shall augment %s to %s' % ( repr(s), repr(t) )
+            print('shall augment %s to %s' % ( repr(s), repr(t) ))
             
             #print 'potentials: %s' % repr( potential )
-            cert = { re : c for (re,c) in redcost.iteritems() if re in rgraph.edges() }
+            cert = { re : c for (re,c) in redcost.items() if re in rgraph.edges() }
             #print 'reduced costs on res. graph, for shortest paths: %s' % repr( cert )
             
             dist, upstream = Dijkstra( rgraph, redcost, s )
@@ -290,7 +290,7 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
                 
                 raise e
                     
-            print 'using path: %s' % repr( PATH )
+            print('using path: %s' % repr( PATH ))
             
             # augment Delta flow along the path P
             for e,dir in PATH :
@@ -309,12 +309,12 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
             
             
         # at end of each stage, verify the optimality certificate (should be empty every time)
-        CERT = { re : c for (re,c) in redcost.iteritems() if re in rgraph.edges() and c < 0. }
-        print 'certificate, end stage TWO: %s' % repr( CERT )
-        RELAXCERT = { re : c for (re,c) in redcost.iteritems() if re in rgraph.edges() and c < -PHASE_ERROR }
+        CERT = { re : c for (re,c) in redcost.items() if re in rgraph.edges() and c < 0. }
+        print('certificate, end stage TWO: %s' % repr( CERT ))
+        RELAXCERT = { re : c for (re,c) in redcost.items() if re in rgraph.edges() and c < -PHASE_ERROR }
         if len( RELAXCERT ) > 0 :
-            print RELAXCERT
-            print "STAGE TWO CERTIFICATE CORRUPT!"
+            print(RELAXCERT)
+            print("STAGE TWO CERTIFICATE CORRUPT!")
         assert len( RELAXCERT ) <= 0
                     
         # end the phase
@@ -342,7 +342,7 @@ if __name__ == '__main__' :
             
         for e in network.edges() :
             i,j = network.endpoints(e)
-            digraph.add_edge( i, j, capacity=capacity.get(e, np.Inf ), weight=weight.get(e, 1. ) )
+            digraph.add_edge( i, j, capacity=capacity.get(e, np.inf ), weight=weight.get(e, 1. ) )
         return digraph
     
     
@@ -396,13 +396,13 @@ if __name__ == '__main__' :
     
     
     def FLOWCOST( flow, cost ) :
-        res = [ cc( flow.get( e, 0. ) ) for e, cc in cost.iteritems() ]    # big difference!
+        res = [ cc( flow.get( e, 0. ) ) for e, cc in cost.items() ]    # big difference!
         #res = [ cost.get( e, line(0.) )( flow[e] ) for e in flow ]
         return sum( res )
     
     def FEAS( flow, capacity, network ) :
         for e in network.edges() :
-            if flow.get(e, 0. ) > capacity.get(e, np.Inf ) : return False
+            if flow.get(e, 0. ) > capacity.get(e, np.inf ) : return False
         return True
     
     flow = MinConvexCostFlow( g, u, supply, cf, epsilon=.001 )

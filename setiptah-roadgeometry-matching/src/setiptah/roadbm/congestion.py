@@ -26,7 +26,7 @@ def BIPARTITEMATCH_ROADS_CONGESTED( S, T, roadmap, congestion_dict ) :
     surplus_dict = dict()
     measure_dict = dict()
     
-    for road, segment in segment_dict.iteritems() :
+    for road, segment in segment_dict.items() :
         match = roadbm.PREMATCH( segment )
         MATCH.extend( match )
         
@@ -95,7 +95,7 @@ def SOLVER( roadnet, surplus, measure_dict, congestion_dict ) :
     #
     oneway_offset = {}  # to process one-way roads
     
-    for i,j, road, data in roadnet.edges_iter( keys=True, data=True ) :
+    for i,j, road, data in roadnet.edges( keys=True, data=True ) :
         supply[j] += surplus[road]
         measure = measure_dict[road]
         rho = congestion_dict[road]
@@ -132,7 +132,7 @@ def SOLVER( roadnet, surplus, measure_dict, congestion_dict ) :
     f = MinConvexCostFlow( network, {}, supply, cost, U )   # U, here, determines phase count
     
     flow = {}
-    for i, j, road in roadnet.edges_iter( keys=True ) :
+    for i, j, road in roadnet.edges( keys=True ) :
         if road in oneway_offset :
             flow[road] = f[road] + oneway_offset[road]
         else :
@@ -317,7 +317,7 @@ if __name__== '__main__' :
                 roadmap.add_edge(v,4, r3 )
                 
         # give length annotations
-        for u,v, road, data in roadmap.edges_iter( keys=True, data=True ) :
+        for u,v, road, data in roadmap.edges( keys=True, data=True ) :
             #p = np.array( pos[u] )
             #q = np.array( pos[v] )
             data['length'] = np.linalg.norm( pos[v] - pos[u] )
@@ -352,7 +352,7 @@ if __name__== '__main__' :
     # algorithm
     # stolen form ROADSBIPARTITEMATCH    
     
-    rho_dict = { road : rho for i,j,road in roadmap.edges_iter(keys=True) }
+    rho_dict = { road : rho for i,j,road in roadmap.edges(keys=True) }
     
     
     assist = BIPARTITEMATCH_ROADS_CONGESTED( S, T, roadmap, rho_dict )
@@ -373,7 +373,7 @@ if __name__== '__main__' :
         segment_dict = roadbm.SEGMENTS( S, T, roadmap )
         measure_dict = {}
         
-        for road, segment in segment_dict.iteritems() :
+        for road, segment in segment_dict.items() :
             match = roadbm.PREMATCH( segment )
             MATCH.extend( match )
             

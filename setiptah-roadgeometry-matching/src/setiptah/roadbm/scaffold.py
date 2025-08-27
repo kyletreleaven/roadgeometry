@@ -103,7 +103,7 @@ def LOOSENCOST( segment, length ) :
         for i in Lq.P : level[i] = 0.
             
         # enumerate past points
-        for ff, level in SEEN.iteritems() :
+        for ff, level in SEEN.items() :
             for i in level :
                 if ff <= f :
                     level[i] -= width
@@ -162,9 +162,9 @@ if __name__ == '__main__' :
     loose = LOOSENCOST( segment, LENGTH )       # this looks decent from inspection
     BEST = dict()
     BESTCOST = dict()
-    for f, level in loose.iteritems() :
+    for f, level in loose.items() :
         if len( level ) <= 0 : continue
-        options = [ ( c+NNDIST[i], i ) for i,c in level.iteritems() ]
+        options = [ ( c+NNDIST[i], i ) for i,c in level.items() ]
         (cc,ii) = min( options )
         BEST[f] = ii
         BESTCOST[f] = cc
@@ -172,7 +172,7 @@ if __name__ == '__main__' :
     # cumulative sum
     CUMBEST = dict()
     total = 0.
-    for f, c in BESTCOST.iteritems() :
+    for f, c in BESTCOST.items() :
         total += c
         CUMBEST[f] = total
         

@@ -27,7 +27,7 @@ def SANITIZE( I_graph ) :
 
 def INITIALIZE_BAGS( I_graph ) :
     
-    for i, data in I_graph.nodes_iter( data=True ) :
+    for i, data in I_graph.nodes( data=True ) :
         typei, labeli = i
         
         data.update( S=[], T=[] )
@@ -122,7 +122,7 @@ def DISPLAY_STATE( I_graph, pos, active_node=None ) :
     interchange_labels = {}
     
     # draw nodes
-    for i, data in I_graph.nodes_iter( data=True ) :
+    for i, data in I_graph.nodes( data=True ) :
         typei, labeli = i
         
         if i == active_node :
@@ -153,7 +153,7 @@ def DISPLAY_STATE( I_graph, pos, active_node=None ) :
     
     S_bags = {}
     T_bags = {}
-    for i, data in I_graph.nodes_iter( data=True ) :
+    for i, data in I_graph.nodes( data=True ) :
         temp = data['S']
         if len(temp) > 0 : S_bags[i] = temp
         
@@ -161,7 +161,7 @@ def DISPLAY_STATE( I_graph, pos, active_node=None ) :
         if len(temp) > 0 : T_bags[i] = temp
     
     offset = .01
-    pos_labels = { i : (x,y+offset) for i, (x,y) in pos.iteritems() }
+    pos_labels = { i : (x,y+offset) for i, (x,y) in pos.items() }
     def show_labels( labels, **kwargs ) :
         nx.draw_networkx_labels( I_graph, pos=pos_labels, ax=ax, labels=labels, **kwargs )
     show_labels( S_bags, font_color='r' )
@@ -171,7 +171,7 @@ def DISPLAY_STATE( I_graph, pos, active_node=None ) :
     
     # draw edges
     score_map = {}
-    for i, j, data in I_graph.edges_iter( data=True ) :
+    for i, j, data in I_graph.edges( data=True ) :
         score = data['score']
         
         if score not in score_map : score_map[score] = []
@@ -179,7 +179,7 @@ def DISPLAY_STATE( I_graph, pos, active_node=None ) :
         
     #print 'SCORE_MAP', score_map
     
-    for score, edges in score_map.iteritems() :
+    for score, edges in score_map.items() :
         nx.draw_networkx_edges( I_graph, pos=pos, edgelist=edges, width=score,
                                 label=None, ax=ax )
         
@@ -228,7 +228,7 @@ def DISPLAY_STATE_TIKZ( I_graph, pos, MATCH=None, active_node=None ) :
     # categorize nodes
     opt = {}
     k = 0
-    for i, data in I_graph.nodes_iter( data=True ) :
+    for i, data in I_graph.nodes( data=True ) :
         typei, labeli = i
         
         # map nodes to coordinates
@@ -278,7 +278,7 @@ def DISPLAY_STATE_TIKZ( I_graph, pos, MATCH=None, active_node=None ) :
     # draw bags
     S_bags = {}
     T_bags = {}
-    for i, data in I_graph.nodes_iter( data=True ) :
+    for i, data in I_graph.nodes( data=True ) :
         temp = data['S']
         if len(temp) > 0 : S_bags[i] = temp
         
@@ -289,19 +289,19 @@ def DISPLAY_STATE_TIKZ( I_graph, pos, MATCH=None, active_node=None ) :
     data = dict( offset=.001 )
     
     data.update( color='red' )
-    for i, bag in S_bags.iteritems() :
+    for i, bag in S_bags.items() :
         data.update( k=node_indices[i], label=repr(bag) )
         mystr += fmt % data
         
     data.update( color='blue' )
-    for i, bag in T_bags.iteritems() :
+    for i, bag in T_bags.items() :
         data.update( k=node_indices[i], label=repr(bag) )
         mystr += fmt % data
         
         
     # draw edges
     score_map = {}
-    for i, j, data in I_graph.edges_iter( data=True ) :
+    for i, j, data in I_graph.edges( data=True ) :
         score = data['score']
         
         if score not in score_map : score_map[score] = []
@@ -310,7 +310,7 @@ def DISPLAY_STATE_TIKZ( I_graph, pos, MATCH=None, active_node=None ) :
     fmt = '\\draw [->,line width=%(w)f] (coord%(k1)d) -- (coord%(k2)d) '
     fmt += 'node [midway,below] {\\tiny %(score)d};\n'
     data = {}
-    for score, edges in score_map.iteritems() :
+    for score, edges in score_map.items() :
         data.update( w= .5 * score, score=score )
         
         for i, j in edges :

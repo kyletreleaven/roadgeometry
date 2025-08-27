@@ -56,12 +56,12 @@ def PROGRAM( roadnet, surplus, objectives ) :
     assist = dict()
     
     VERTS = dict()
-    for k, u in enumerate( roadnet.nodes_iter() ) :
+    for k, u in enumerate( roadnet.nodes() ) :
         VERTS[u] = k
     
     ROADS = dict()
     TOPOLOGY = []
-    for k, e in enumerate( roadnet.edges_iter( keys=True ) ) :
+    for k, e in enumerate( roadnet.edges( keys=True ) ) :
         u, v, road = e
         ROADS[road] = k
         assist[k] = road
@@ -83,7 +83,7 @@ def PROGRAM( roadnet, surplus, objectives ) :
     data_str += ";\n\n"
     
     data_str += "param b := "
-    for road, b in surplus.iteritems() :
+    for road, b in surplus.items() :
         data_str += "%d %d  " % ( ROADS[road], b )
     data_str += ";\n\n"
     
@@ -93,7 +93,7 @@ def PROGRAM( roadnet, surplus, objectives ) :
     offset = dict()
     
     line_iter = itertools.count()
-    for road, line_data in objectives.iteritems() :
+    for road, line_data in objectives.items() :
         for f, line in line_data.iter_items() :
             k = line_iter.next()
             LINES.append( k )
@@ -112,12 +112,12 @@ def PROGRAM( roadnet, surplus, objectives ) :
     data_str += ";\n\n"
     
     data_str += "param slope := "
-    for item in slope.iteritems() :
+    for item in slope.items() :
         data_str += "%d %f  " % item
     data_str += ";\n\n"
     
     data_str += "param offset := "
-    for item in offset.iteritems() :
+    for item in offset.items() :
         data_str += "%d %f  " % item
     data_str += ";\n\n"
     

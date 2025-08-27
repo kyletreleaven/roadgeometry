@@ -45,7 +45,7 @@ def drawRoadmap( roadmap, pos, ax=None, **kwargs ) :
     nx.draw_networkx_edges( skeleton, pos=pos, ax=ax, zorder=ZEDGES, **kwargs )
     
     road_labels = { (u,v) : road + '\n'     # the endline is to raise the label
-                   for u,v,road in roadmap.edges_iter( keys=True ) }
+                   for u,v,road in roadmap.edges( keys=True ) }
     nx.draw_networkx_edge_labels( skeleton, pos=pos, ax=ax, 
                                   edge_labels=road_labels, zorder=ZLABELS )
     
@@ -81,7 +81,7 @@ def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
     # initialize a path graph
     graph = nx.Graph()
     
-    for u, v, road, data in roadmap.edges_iter( keys=True, data=True ) :
+    for u, v, road, data in roadmap.edges( keys=True, data=True ) :
         width = data.get( length_attr, 1 )
         
         def traverse() :
@@ -136,7 +136,7 @@ def SHOWMATCH( match, S, T, roadmap, pos, length_attr='length', ax=None,
     # make a path graph
     graph = nx.Graph()
     
-    for u, v, road, data in roadmap.edges_iter( keys=True, data=True ) :
+    for u, v, road, data in roadmap.edges( keys=True, data=True ) :
         width = data.get( length_attr, 1 )
         
         def traverse() :
@@ -178,19 +178,19 @@ def SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax ) :
               POINT_IN_T: pos_from_T}
     
     other_pos = {}
-    for uu in graph.nodes_iter() :
+    for uu in graph.nodes() :
         typeu, labelu = uu
         other_pos[uu] = switch[typeu]( labelu )
     
     if False :
         # figure out how to do this?
-        colors = [ data['score'] for _,__,data in graph.edges_iter( data=True ) ]
+        colors = [ data['score'] for _,__,data in graph.edges( data=True ) ]
         nx.draw_networkx_edges( graph, pos=other_pos, edge_color=colors )
         plt.colorbar()  #?
         #nx.draw(G,pos,node_color='#A0CBE2',edge_color=colors,width=4,edge_cmap=plt.cm.Blues,with_labels=False)
     else :
         # plot edges in graph with variable thickness? or some other visual cue
-        for uu, vv, data in graph.edges_iter( data=True ) :
+        for uu, vv, data in graph.edges( data=True ) :
             score = data['score']
             if score <= 0 : continue    # would just waste effort
             

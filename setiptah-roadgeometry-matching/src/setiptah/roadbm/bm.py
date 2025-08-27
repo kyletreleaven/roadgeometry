@@ -38,7 +38,7 @@ def ROADSBIPARTITEMATCH( P, Q, roadnet, **kwargs ) :
     objective_dict = dict()
     measure_dict = dict()
     
-    for road, segment in segment_dict.iteritems() :
+    for road, segment in segment_dict.items() :
         match = PREMATCH( segment )
         MATCH.extend( match )
         
@@ -109,7 +109,7 @@ def WRITEOBJECTIVES( P, Q, roadnet ) :
     surplus_dict = dict()
     objective_dict = dict()
     
-    for road, segment in segment_dict.iteritems() :
+    for road, segment in segment_dict.items() :
         match = PREMATCH( segment )
         MATCH.extend( match )
         
@@ -131,7 +131,7 @@ def SEGMENTS( P, Q, roadnet ) :
     a dictionary whose keys are coordinates and whose values are local (P,Q) index queues 
     """
     segments = dict()
-    for _,__,road in roadnet.edges_iter( keys=True ) :
+    for _,__,road in roadnet.edges( keys=True ) :
         ensure_road( road, segments )   # these, and only these, roads are allowed
         
     for i, p in enumerate( P ) :
@@ -160,20 +160,17 @@ def ONESEGMENT( S, T ) :
     segments = SEGMENTS( SS, TT, roadnet )
     return segments['line']
 
-
-    
     
 def PREMATCH( segment ) :
     match = []
     for y, q in segment.iter_items() :
         annih = min( len( q.P ), len( q.Q ) )
         for k in range( annih ) :
-            i = queues.P.pop(0)
-            j = queues.Q.pop(0)
+            i = q.P.pop(0)
+            j = q.Q.pop(0)
             match.append( (i,j) )
             
     return match
-
 
 
 def SURPLUS( segment ) :
@@ -298,7 +295,7 @@ def SOLVER( roadnet, surplus, measure_dict ) :
     #
     oneway_offset = {}  # for one-way roads
     
-    for i,j, road, data in roadnet.edges_iter( keys=True, data=True ) :
+    for i,j, road, data in roadnet.edges( keys=True, data=True ) :
         supply[j] += surplus[road]
         measure = measure_dict[road]
         
@@ -351,7 +348,7 @@ def SOLVER( roadnet, surplus, measure_dict ) :
     f = MinConvexCostFlow( network, {}, supply, cost, U )
     
     flow = {}
-    for i, j, road in roadnet.edges_iter( keys=True ) :
+    for i, j, road in roadnet.edges( keys=True ) :
         if road in oneway_offset :
             flow[road] = f[road] + oneway_offset[road]
         else :
@@ -375,12 +372,12 @@ def SOLVER( roadnet, surplus, measure_dict ) :
 
 
 def CHECKFLOW( flow, roadnet, surplus ) :
-    balance = { u : 0. for u in roadnet.nodes_iter() }
-    for i, j, road in roadnet.edges_iter( keys=True ) :
+    balance = { u : 0. for u in roadnet.nodes() }
+    for i, j, road in roadnet.edges( keys=True ) :
         balance[i] -= flow.get( road, 0. )
         balance[j] += flow.get( road, 0. ) + surplus.get( road, 0. )
         
-    return { k:v for k,v in balance.iteritems() if v != 0. }
+    return { k:v for k,v in balance.items() if v != 0. }
 
 
 
@@ -413,17 +410,17 @@ def TOPOGRAPH( segment_dict, assist, roadnet ) :
     topograph = nx.DiGraph()
     
     special = dict()
-    for u in roadnet.nodes_iter() :
+    for u in roadnet.nodes() :
         #data = TwoQueues()
         node = terminal( None )
         special[u] = node
         
-    for u,v, road, data in roadnet.edges_iter( keys=True, data=True ) :
+    for u,v, road, data in roadnet.edges( keys=True, data=True ) :
         segment = segment_dict[road]
         z = assist[road]
         
         edges = EDGES( segment )
-        for f, intervals in edges.iteritems() :
+        for f, intervals in edges.items() :
             h = f + z
             for (ll,rr) in intervals :
                 if ll.q == '-' : ll = special[u]
@@ -447,11 +444,11 @@ def CHECKTOPO( topograph ) :
             b = len( q.P ) - len( q.Q )
             
         # plus input
-        for e in topograph.in_edges_iter( u ) :
+        for e in topograph.in_edges( u ) :
             b += topograph.get_edge_data( *e ).get('weight')
             
         # minus output
-        for e in topograph.out_edges_iter( u ) :
+        for e in topograph.out_edges( u ) :
             b -= topograph.get_edge_data( *e ).get('weight')
             
         return b
@@ -479,7 +476,7 @@ def TRAVERSE( topograph ) :
                 i = L.pop(0)
                 match.append( (i,j) )
         
-        for _,v, data in topograph.out_edges_iter( u, data=True ) :
+        for _,v, data in topograph.out_edges( u, data=True ) :
             w = data.get('weight')
             prefix, L = L[:w], L[w:]
             LISTS[v].extend( prefix )

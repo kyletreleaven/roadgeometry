@@ -55,7 +55,7 @@ z = np.arange(-NUMPOINT, NUMPOINT, .25)
 objective_dict = WRITEOBJECTIVES(PP, QQ, roadnet)
 
 if VISUAL:
-    for road, Cz in objective_dict.iteritems():
+    for road, Cz in objective_dict.items():
         cost = costWrapper(Cz)
         C = [cost(zz) for zz in z]
         plt.figure()
@@ -64,12 +64,9 @@ if VISUAL:
 match = ROADSBIPARTITEMATCH(PP, QQ, roadnet)
 costs = MATCHCOSTS(match, PP, QQ, roadnet)
 cost = ROADMATCHCOST(match, PP, QQ, roadnet)
-print
-match
-print
-costs
-print
-cost
+print(match)
+print(costs)
+print(cost)
 
 # compare to optimal matching
 if True and NUMPOINT <= 50:
@@ -98,12 +95,9 @@ if True and NUMPOINT <= 50:
     #                      for r,b in match ]
     costs_brute = MATCHCOSTS(match_brute, PP, QQ, roadnet)
     cost_brute = ROADMATCHCOST(match_brute, PP, QQ, roadnet)
-    print
-    match_brute
-    print
-    costs_brute
-    print
-    cost_brute
+    print(match_brute)
+    print(costs_brute)
+    print(cost_brute)
     # print 'optimal match has cost: %f' % matchcost
 
 if False:  # validate CTREES
@@ -111,7 +105,7 @@ if False:  # validate CTREES
     zmax = NUMPOINT / 2
     ZZZ = range(zmin, zmax)
     #
-    for road, C in CTREES.iteritems():
+    for road, C in CTREES.items():
         ax = drawCBounds(ZZ, CTREES[road])
         # plt.plot( ZZ, Cz, linestyle='--' )
 
@@ -139,7 +133,7 @@ if False:
 
     # compute a matching and verify cost
     matchZ = dict()
-    for road, var in assist.iteritems():
+    for road, var in assist.items():
         matchZ[road] = int(round(var.value))
     the_match = ROADMATCH(PP, QQ, matchZ, roadnet)
     the_match_cost = ROADMATCHCOST(the_match, roadnet)

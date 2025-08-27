@@ -20,7 +20,7 @@ def INTERVAL_GRAPH( match, S, T, roadmap, pos, length_attr='length' ) :
     # sort points onto segments
     segments = roadbm.SEGMENTS( S, T, roadmap)
 
-    for u, v, road, data in roadmap.edges_iter( keys=True, data=True ) :
+    for u, v, road, data in roadmap.edges( keys=True, data=True ) :
         # store coordinate of the r^+ endpoint for later use
         length = data.get( length_attr, 1 )
 
@@ -79,7 +79,7 @@ def INTERVAL_GRAPH( match, S, T, roadmap, pos, length_attr='length' ) :
               POINT_IN_T : pos_from_T }
 
     other_pos = {}
-    for uu in digraph.nodes_iter() :
+    for uu in digraph.nodes() :
         typeu, labelu = uu
         other_pos[uu] = switch[typeu]( labelu )
 

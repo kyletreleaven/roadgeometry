@@ -23,7 +23,7 @@ import setiptah.vehrouting.routeinspection as rinspect
 class token : pass
 
 def get_road_data( road, roadnet ) :
-    for _,__,key, data in roadnet.edges_iter( keys=True, data=True ) :
+    for _,__,key, data in roadnet.edges( keys=True, data=True ) :
         if key == road : return data
 
 class traversal :
@@ -39,7 +39,7 @@ class traversal :
 
 def quantity( arr ) :
     num = 0
-    for k, tree in arr.iteritems() :
+    for k, tree in arr.items() :
         Z = [ len(q) for y,q in tree.iter_items() ]
         num += sum( Z )
     return num
@@ -245,7 +245,7 @@ if False :
 
 def DOUBLETOUR( roadnet ) :
     eulerian = nx.MultiDiGraph()
-    for u,v, road in roadnet.edges_iter( keys=True ) :
+    for u,v, road in roadnet.edges( keys=True ) :
         eulerian.add_edge( u,v, label=traversal( road, True ) )
         eulerian.add_edge( v,u, label=traversal( road, False ) )
         
@@ -321,7 +321,7 @@ if False :
         graph = nx.Graph()
         x = ROAD.RoadAddress(None,None)
         
-        for agent, agentLoc in agentLocs.iteritems() :
+        for agent, agentLoc in agentLocs.items() :
             t = token()
             t.agent = agent
             def cost( demidx ) :
@@ -428,7 +428,7 @@ if __name__ == '__main__' :
     print assign == assign_star
     
     costs = { i : WALKCOST( walk, DEMANDS, demand.getTail, demand.getHead, fhk.distance )
-             for i, walk in assign_star.iteritems() }
+             for i, walk in assign_star.items() }
     
     
     
