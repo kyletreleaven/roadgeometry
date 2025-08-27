@@ -1,3 +1,6 @@
+from typing import Dict, TypeVar
+from collections import defaultdict
+
 import numpy as np
 import bintrees
 
@@ -7,6 +10,7 @@ import networkx as nx
 import setiptah.roadgeometry.roadmap_basic as ROAD
 from setiptah.roadgeometry.roadmap_basic import RoadAddress, get_road_data
 
+TRoad = TypeVar("TRoad")
 
 # to construct the optimization problem
 
@@ -27,8 +31,7 @@ class ROADSBIPARTITE :
     @classmethod
     def FLOW(cls, S, T, roadnet ) :
         pass
-    
-    
+
 
 def ROADSBIPARTITEMATCH( P, Q, roadnet, **kwargs ) :
     MATCH = []
@@ -123,9 +126,18 @@ def WRITEOBJECTIVES( P, Q, roadnet ) :
     return objective_dict
 
 
+OrderedPoints = bintrees.RBTree
+"""
+
+A collection data structure for bipartite points on a road.
+The keys are numeric coordinates (e.g., float), with
+a `TwoQueues`---a pair of "queues" (AKA lists)---containing points of the two types,
+respectively, at given coordinate.
+
+"""
 
 
-def SEGMENTS( P, Q, roadnet ) :
+def SEGMENTS(P, Q, roadnet: nx.MultiDiGraph) -> Dict[TRoad, OrderedPoints]:
     """
     returns:
     a dictionary whose keys are coordinates and whose values are local (P,Q) index queues 
@@ -173,7 +185,7 @@ def PREMATCH( segment ) :
     return match
 
 
-def SURPLUS( segment ) :
+def SURPLUS(segment: OrderedPoints):
     deltas = [ len( q.P ) - len( q.Q ) for y,q in segment.iter_items() ]
     return sum( deltas )
 
@@ -454,18 +466,18 @@ def CHECKTOPO( topograph ) :
         return b
             
     return [ u for u in topograph.nodes() if balance(u) != 0 ]
-    
-    
+
+
 def TRAVERSE( topograph ) :
     match = []
     nodes_ord = nx.topological_sort( topograph )
-    
-    LISTS = dict()
-    for u in nodes_ord : LISTS[u] = []
-    
-    for u in nodes_ord :
+
+    LISTS = defaultdict(list)
+
+    for u in nodes_ord:
         L = LISTS[u]
-        
+        LISTS.pop(u)  # not needed anymore
+
         queue = u.q
         if queue is not None :
             # collect points from S
@@ -528,7 +540,8 @@ class terminal :    # simple node type for TRAVERSE
     def __init__(self, q ) :
         self.q = q
 
-
+    def __repr__(self):
+        return f"terminal({self.q})"
 
 
 def INTERVALS( segment ) :      # very similar routine, used to build the walk graph

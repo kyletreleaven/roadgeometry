@@ -28,6 +28,49 @@ def test_roadnet_matching():
     PP = [sampler.sample() for i in range(NUMPOINT)]
     QQ = [sampler.sample() for i in range(NUMPOINT)]
 
+    segs = SEGMENTS(PP, QQ, roadnet)
+
+    # prematch
+    pm = set(
+        m
+        for road, seg in segs.items()
+        for m in PREMATCH(seg)
+    )
+    # assert False, pm
+
+    # surplus
+    surplus_dict = {
+        road: SURPLUS(seg)
+        for road, seg in segs.items()
+    }
+    # assert False, surplus_dict
+
+    roadlen = {
+        road: get_road_data(road, roadnet).get('length', 1)
+        for road in segs
+    }
+
+    measure_dict = {
+        road: MEASURE(seg, roadlen[road])
+        for road, seg in segs.items()
+    }
+    # assert False, measure_dict
+
+    assist = SOLVER(roadnet, surplus_dict, measure_dict)
+
+    # Good to check!
+    imbalance = CHECKFLOW(assist, roadnet, surplus_dict)
+    assert len(imbalance) <= 0
+
+    topograph = TOPOGRAPH(segs, assist, roadnet)
+    # assert False, topograph.edges(data=True)
+
+    nodes = list(nx.topological_sort( topograph ))
+    # assert False, (len(nodes), nodes)
+
+    match = TRAVERSE(topograph)
+    # assert False, match
+
     match = ROADSBIPARTITEMATCH(PP, QQ, roadnet)
     assert len(match) == NUMPOINT
 
