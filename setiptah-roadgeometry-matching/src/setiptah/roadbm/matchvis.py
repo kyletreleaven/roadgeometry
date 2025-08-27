@@ -32,22 +32,25 @@ def pointsToXY( points ) :
     return X, Y
 
 
-
-
-
-
-def drawRoadmap( roadmap, pos, ax=None, **kwargs ) :
+def drawRoadmap( roadmap: nx.DiGraph, pos, ax=None, **kwargs ) :
     if ax is None : ax = plt.gca()
     
     # draw the skeleton (undirected)
-    skeleton = nx.convert.convert_to_undirected( roadmap )
-    nx.draw_networkx_nodes( skeleton, pos, ax=ax, zorder=ZNODES )
-    nx.draw_networkx_edges( skeleton, pos=pos, ax=ax, zorder=ZEDGES, **kwargs )
+    skeleton = roadmap.to_undirected()
+    nx.draw_networkx_nodes( skeleton, pos, ax=ax
+                            # , zorder=ZNODES
+                            )
+    nx.draw_networkx_edges( skeleton, pos=pos, ax=ax,
+                            # zorder=ZEDGES,
+                            **kwargs,
+                            )
     
     road_labels = { (u,v) : road + '\n'     # the endline is to raise the label
                    for u,v,road in roadmap.edges( keys=True ) }
     nx.draw_networkx_edge_labels( skeleton, pos=pos, ax=ax, 
-                                  edge_labels=road_labels, zorder=ZLABELS )
+                                  edge_labels=road_labels,
+                                  # zorder=ZLABELS
+                                  )
     
     return ax
 
@@ -92,17 +95,17 @@ def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
             yield width, VERTEX, v
             
         ITER = traverse()
-        next = ITER.next()
+        prev = prev(ITER)
         z = assist[road]    # start road assistance +0
         for y2, type2, label2 in ITER :
-            y1, type1, label1 = next
+            y1, type1, label1 = prev
             graph.add_edge( (type1,label1), (type2,label2), weight=y2-y1, score=abs(z) )
             if type2 == POINT_IN_S:
                 z += 1
             elif type2 == POINT_IN_T:
                 z -= 1 
             
-            next = y2, type2, label2
+            prev = y2, type2, label2
             
                         
     SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax )
@@ -147,11 +150,11 @@ def SHOWMATCH( match, S, T, roadmap, pos, length_attr='length', ax=None,
             yield width, VERTEX, v
             
         ITER = traverse()
-        next = ITER.next()
+        prev = next(ITER)
         for y2, type2, label2 in ITER :
-            y1, type1, label1 = next
+            y1, type1, label1 = prev
             graph.add_edge( (type1,label1), (type2,label2), weight=y2-y1, score=0 )
-            next = y2, type2, label2
+            prev = y2, type2, label2
             
     # add unit weight to shortest paths
     for i, j in match :

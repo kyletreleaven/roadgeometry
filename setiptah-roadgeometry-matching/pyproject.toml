@@ -24,6 +24,7 @@ test = [
     "networkx",
 ]
 dev = [
+    "scipy",
     "matplotlib",
     "ipython",
     "notebook",

@@ -66,15 +66,15 @@ if __name__ == '__main__' :
     uniform = roadprob.UniformDist( roadmap )
     unpack = lambda addr : ( addr.road, addr.coord )
     
-    SS = [ unpack( uniform.sample() ) for i in xrange(M) ]
-    TT = [ unpack( uniform.sample() ) for i in xrange(M) ]
+    SS = [ unpack( uniform.sample() ) for i in range(M) ]
+    TT = [ unpack( uniform.sample() ) for i in range(M) ]
     
     
     """ obtain a random matching """
     import random
-    order = range(M)
+    order = list(range(M))
     random.shuffle(order)
-    bad_match = zip( xrange(M), order )
+    bad_match = list(zip( range(M), order ))
     
     """ obtain the optimal matching """
     import setiptah.roadbm.bm as roadbm
@@ -107,8 +107,8 @@ if __name__ == '__main__' :
     
     # gui widgets
     axcolor = 'lightgoldenrodyellow'
-    #axfreq = plt.axes([0.25, 0.1, 0.65, 0.03], axisbg=axcolor)
-    axmatches = plt.axes([0.25, 0.1, 0.65, 0.03], axisbg=axcolor)
+    #axfreq = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+    axmatches = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
     
     #sfreq = Slider(axfreq, 'Freq', 0.1, 30.0, valinit=15.)
     sliderCount = Slider(axmatches, '# Matches', 0, len( opt_match ), valfmt='%d', valinit=0 )
@@ -127,7 +127,7 @@ if __name__ == '__main__' :
             #print 'incremental'
             SSS = [ SS[s] for s,t in submatch ]
             TTT = [ TT[t] for s,t in submatch ]
-            pltmatch = zip( xrange(MM), xrange(MM) )
+            pltmatch = zip( range(MM), range(MM) )
             
         elif switch == SHOWALL :
             #print 'showall'
@@ -155,7 +155,7 @@ if __name__ == '__main__' :
     #sfreq.on_changed(update)
     sliderCount.on_changed(update)
     
-    rax = plt.axes([0.025, 0.5, 0.15, 0.15], axisbg=axcolor)
+    rax = plt.axes([0.025, 0.5, 0.15, 0.15], facecolor=axcolor)
     radio = RadioButtons(rax, ('allpoints','incremental'), active=1)
     def setswitch( label ) :
         global switch
@@ -171,7 +171,7 @@ if __name__ == '__main__' :
     radio.on_clicked( setswitch )
     
 
-    mrax = plt.axes([0.025, 0.75, 0.15, 0.15], axisbg=axcolor)
+    mrax = plt.axes([0.025, 0.75, 0.15, 0.15], facecolor=axcolor)
     matchrad = RadioButtons(mrax, ('random','optimal'), active=0)
     def setmatch( label ) :
         global figmatch
@@ -213,13 +213,3 @@ if __name__ == '__main__' :
     # draw once
     update( None )
     plt.show()
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
