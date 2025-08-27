@@ -536,6 +536,7 @@ class LineData :
     def __repr__(self) :
         return '<%f z + %f>' % ( self.slope, self.offset )
 
+
 class terminal :    # simple node type for TRAVERSE
     def __init__(self, q ) :
         self.q = q
