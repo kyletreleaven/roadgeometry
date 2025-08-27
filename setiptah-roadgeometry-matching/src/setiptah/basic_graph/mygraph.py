@@ -52,14 +52,3 @@ class mygraph :
     def has_edge(self, e ) : return e in self.E
         
     def endpoints(self, e ) : return self.E[e]
-
-        
-if __name__ == '__main__' :
-    g = mygraph()
-    g.add_edge( 'a', 0, 1 )
-    g.add_edge( 'b', 0, 2 )
-    g.add_edge( 'c', 2, 3 )
-    g.add_edge( 'd', 3, 0 )
-    
-    c = { 'a' : 10., 'b' : 5., 'c' : 1., 'd' : .5 }
-    f = { 'a' : 3., 'b' : 1.37 }
