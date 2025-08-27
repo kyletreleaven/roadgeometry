@@ -67,8 +67,8 @@ class WeightedSet :
         doesn't check for repeats
         """
         targets = weight_dict.keys()
-        weights = weight_dict.values()
-        scores = np.cumsum( np.array( weights ) )
+        weights = list(weight_dict.values())
+        scores = np.cumsum( np.array(weights) )
         
         self._hiscore = scores[-1]
         self._tree = bintrees.RBTree()
@@ -93,7 +93,7 @@ class UniformDist :
         if length is None : length = 'length'
         
         weight_dict = dict()
-        for _,__, road, data in roadnet.edges_iter( keys=True, data=True ) :
+        for _,__, road, data in roadnet.edges( keys=True, data=True ) :
             weight_dict[road] = data.get( length, 1 )
             
         self.roadnet = roadnet

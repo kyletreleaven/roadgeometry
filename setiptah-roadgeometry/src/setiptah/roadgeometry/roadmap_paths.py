@@ -265,7 +265,7 @@ if __name__ == '__main__' :
         q = roadprob.sampleaddress( roadmap )
     
     # give me a summary of the road network
-    for u,v,road, data in roadmap.edges_iter( keys=True, data=True ) :
+    for u,v,road, data in roadmap.edges( keys=True, data=True ) :
         print '%s: %s -> %s ; length=%f' % ( road, repr(u), repr(v), data.get('length',1) )
         
     print '...going from %s to %s' % ( repr(p), repr(q) )

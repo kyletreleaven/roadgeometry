@@ -179,8 +179,8 @@ class PlanarLayout(object) :
         
         # sort relevant data, by length
         # ( length, road, (left,right) )
-        temp1 = [ ( data.get( length, 1 ), road, (u,v) ) for road, data in roads_utov.iteritems() ]
-        temp2 = [ ( data.get( length, 1 ), road, (v,u) ) for road, data in roads_vtou.iteritems() ]
+        temp1 = [ ( data.get( length, 1 ), road, (u,v) ) for road, data in roads_utov.items() ]
+        temp2 = [ ( data.get( length, 1 ), road, (v,u) ) for road, data in roads_vtou.items() ]
         temp = sorted( temp1 + temp2 )
         
         # get a RoadData per road, including shapes, add arrows to oneways; add to road_layout 

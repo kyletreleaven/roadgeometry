@@ -73,14 +73,14 @@ def obtain_edge( digraph, road, data_flag=False ) :
     if edge is not None and digraph.has_edge( *edge ) : return result( edge )
     
     # else, find and cache
-    for i,j,key in digraph.edges_iter( keys=True ) :
+    for i,j,key in digraph.edges( keys=True ) :
         if key == road :
             edge = i,j,key
             store[road] = edge
             return result( edge )
 
 def get_road_data( road, roadnet ) :
-    for _,__,key, data in roadnet.edges_iter( keys=True, data=True ) :
+    for _,__,key, data in roadnet.edges( keys=True, data=True ) :
         if key == road : return data
 
 

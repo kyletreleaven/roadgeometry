@@ -217,7 +217,7 @@ class PlanarLayout(object) :
         #angle = np.arctan2( diff[1], diff[0] )
         
         d = lnet.get_edge_data(i,j,key).get('weight', 1.0 )
-        if not d < np.Inf : return shapes
+        if not d < np.inf : return shapes
         
         Art = []
         if dEuc < d :

@@ -15,8 +15,8 @@ def update_distance_tableau( tableau, graph, weight_attr='weight', self_loops=Tr
         else :
             simple_graph = nx.Graph()
             
-        simple_graph.add_nodes_from( graph.nodes_iter() )
-        for u, v, key, data in graph.edges_iter( keys=True, data=True ) :
+        simple_graph.add_nodes_from( graph.nodes() )
+        for u, v, key, data in graph.edges( keys=True, data=True ) :
             cand_val = data[ weight_attr ]
             prev_val = simple_graph.get_edge_data( u, v, {} ).get( weight_attr, np.inf )
             if cand_val < prev_val :
@@ -26,9 +26,9 @@ def update_distance_tableau( tableau, graph, weight_attr='weight', self_loops=Tr
         simple_graph = graph
         
     # ensure inclusion of nodes
-    for u in simple_graph.nodes_iter() : tableau.setdefault( u, {} )
+    for u in simple_graph.nodes() : tableau.setdefault( u, {} )
     
-    for u, v, data in simple_graph.edges_iter( data=True ) :
+    for u, v, data in simple_graph.edges( data=True ) :
         cand_val = data[ weight_attr ]
         if v not in tableau[u] or cand_val < tableau[u][v] :
             tableau[u][v] = cand_val
@@ -96,7 +96,7 @@ def floyd_warshall_test( rad=.15 ) :
     
     graph = nx.random_geometric_graph( 20, rad )
     
-    for u, v, data in graph.edges_iter( data=True ) :
+    for u, v, data in graph.edges( data=True ) :
         #u, v = edge
         p = np.array( graph.node[u]['pos'] )
         q = np.array( graph.node[v]['pos'] )
