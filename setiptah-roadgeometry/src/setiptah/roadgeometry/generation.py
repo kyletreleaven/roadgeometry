@@ -1,8 +1,5 @@
-
 import numpy as np
 import networkx as nx
-
-
 
 
 def DelaunayRoadMap( interchanges ) :
@@ -15,7 +12,7 @@ def DelaunayRoadMap( interchanges ) :
     graph = nx.Graph()
     # find the edges in the triangulation
     indices, seq = tri.vertex_neighbor_vertices
-    for i in xrange(N) :
+    for i in range(N) :
         for j in seq[ indices[i]:indices[i+1] ] :
             graph.add_edge(i,j)
     
@@ -26,5 +23,3 @@ def DelaunayRoadMap( interchanges ) :
         roadmap.add_edge(u,v, 'road %d' % ridx, length=np.linalg.norm(y-x) )
         
     return roadmap
-
-
