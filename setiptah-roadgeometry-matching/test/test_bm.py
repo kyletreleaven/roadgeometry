@@ -87,4 +87,4 @@ def test_roadnet_matching():
 
     costs_ = flow_cost_per_road(assist, obj_fn_dict)
 
-    assert sum(costs_.values()) == cost
+    assert abs(cost - sum(costs_.values())) < 1e-7
