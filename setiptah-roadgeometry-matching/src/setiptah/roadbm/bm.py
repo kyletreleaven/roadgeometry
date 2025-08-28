@@ -145,16 +145,13 @@ def WRITEOBJECTIVES(P, Q, roadnet_graph: nx.MultiDiGraph):
 
 
 def write_objectives(P, Q, roadnet: Roadnet):
-    MATCH = []      # although, we just toss this...
-    
     segment_dict = compute_segments(P, Q, roadnet)
     surplus_dict = dict()
     objective_dict = dict()
     
-    for road, segment in segment_dict.items() :
+    for road, segment in segment_dict.items():
         match = PREMATCH( segment )
-        MATCH.extend( match )
-        
+
         surplus_dict[road] = SURPLUS( segment )
 
         measure = MEASURE( segment, roadnet.length(road))
@@ -616,27 +613,15 @@ def INTERVALS( segment ) :      # very similar routine, used to build the walk g
     return res
 
 
-
-
-
-
-
-
-
-
-
-
-
-""" MATCH TESTING Utilities """
-
-def MATCHCOSTS( match, P, Q, roadnet ) :
+def MATCHCOSTS(matching: Tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
     costs = []
-    for i, j in match :
+    for i, j in matching:
         p = ROAD.RoadAddress( *P[i] )
         q = ROAD.RoadAddress( *Q[j] )
         d = ROAD.distance( roadnet, p, q, 'length' )
         costs.append( d )
     return costs
+
 
 def ROADMATCHCOST( match, P, Q, roadnet ) :
     costs = MATCHCOSTS( match, P, Q, roadnet )
