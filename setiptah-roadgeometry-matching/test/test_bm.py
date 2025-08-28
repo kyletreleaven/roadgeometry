@@ -88,3 +88,44 @@ def test_roadnet_matching():
     costs_ = flow_cost_per_road(assist, obj_fn_dict)
 
     assert abs(cost - sum(costs_.values())) < 1e-7
+
+
+def test_roadnet_matching_int():
+
+    roadnet = nx.MultiDiGraph()
+    if True:
+        roadnet.add_edge(0, 1, 'N', length=1.)
+    else:
+        # TODO: Do this in a meaningful way.
+        # to test one-way roads capabilities
+        roadnet.add_edge(0, 1, 'N', length=1., oneway=True)
+
+    roadnet.add_edge(1, 2, 'E', length=1.)
+    roadnet.add_edge(2, 3, 'S', length=1.)
+    roadnet.add_edge(3, 0, 'W', length=1.)
+
+    if True:
+        roadnet.add_edge(0, 4, 'dangler', length=1.)
+
+    sampler = roadprob.UniformDist(roadnet)
+
+    NUMPOINT = 50
+    #
+    PP_ = [sampler.sample() for i in range(NUMPOINT)]
+    QQ_ = [sampler.sample() for i in range(NUMPOINT)]
+
+    roadnet_, roadnet_graph_ = MultiDiGraphRoadnet(roadnet), roadnet
+    matching_ = optimal_roadnet_matching(PP_, QQ_, roadnet_)
+
+    inst, _roads, __ = StructRoadnet.from_roadnet(PP_, QQ_, roadnet_)
+    roadnet = inst
+    # assert False, roadnet
+
+    PP, QQ = inst.P, inst.Q  # TODO: Oops? It's not a roadnet, it's an instance...
+    matching = optimal_roadnet_matching(PP, QQ, roadnet)
+
+    # Compare their costs.
+    cost_ = ROADMATCHCOST(matching_, PP_, QQ_, roadnet_graph_)
+    roadnet_graph = roadnet.create_multigraph()
+    cost = ROADMATCHCOST(matching, PP, QQ, roadnet_graph)
+    assert cost == cost_

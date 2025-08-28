@@ -1,4 +1,5 @@
-from typing import Dict, TypeVar, Tuple, Generic, Protocol, Iterable
+from functools import cached_property
+from typing import Dict, TypeVar, Tuple, Generic, Protocol, Iterable, List
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -79,6 +80,123 @@ class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
 
     def is_oneway(self, road: TRoad) -> bool:
         return self.data[road].oneway
+
+
+@dataclass(frozen=True)
+class PointInfo:
+    road_index: int
+    coordinate: float
+
+
+@dataclass(frozen=True)
+class RoadInfo:
+    length: float
+    left: int
+    right: int
+    oneway: bool
+
+
+@dataclass(frozen=True)
+class StructRoadnet(Roadnet[int, int]):
+    P: Tuple[PointInfo, ...]
+    Q: Tuple[PointInfo, ...]
+    roads: Tuple[RoadInfo, ...]
+    n_vertices: int
+
+    @classmethod
+    def from_roadnet(cls, P_, Q_, rn: Roadnet):
+
+        vert_map = {u: k for k, u in enumerate(rn.nodes())}
+
+        road_map = {}
+        roads: List[RoadInfo] = []
+        for k, road_ in enumerate(rn.edges()):
+            road_map[road_] = k
+
+            i_, j_ = rn.endpoints(road_)
+            length = rn.length(road_)
+            oneway = rn.is_oneway(road_)
+
+            road_info = RoadInfo(length, vert_map[i_], vert_map[j_], oneway)
+            roads.append(road_info)
+
+        def make_points(points_) -> Tuple[PointInfo, ...]:
+            return tuple(
+                (road_map[r_], x)
+                for r_, x in points_
+            )
+
+        P, Q = make_points(P_), make_points(Q_)
+
+        inst = cls(tuple(P), tuple(Q), tuple(roads), len(vert_map))
+
+        def invert_map(dict_):
+            result = [None] * len(dict_)
+            for i, k in dict_.items():
+                result[k] = i
+            return result
+
+        return inst, invert_map(road_map), invert_map(vert_map)
+
+    def create_multigraph(self):
+        g = nx.MultiDiGraph()
+        g.add_nodes_from(self.nodes())
+        for k, road_info in enumerate(self.roads):
+            g.add_edge(road_info.left, road_info.right, k, length=road_info.length, oneway=road_info.oneway)
+        return g
+
+    def nodes(self) -> Iterable[TVert]:
+        return range(self.n_vertices)
+
+    @cached_property
+    def n_points(self) -> int:
+        n, = len({len(self.P), len(self.Q)})
+        return n
+
+    @property
+    def n_roads(self) -> int:
+        return len(self.roads)
+
+    def edges(self) -> Iterable[TRoad]:
+        return range(self.n_roads)
+
+    def is_valid(self):
+        if self.n_vertices < 0:
+            return False
+        nodes = self.nodes()
+
+        def road_is_valid(road: RoadInfo):
+            return (
+                road.length > 0.
+                and road.left in nodes
+                and road.right in nodes
+            )
+
+        if not all(road_is_valid(road) for road in self.roads):
+            return False
+
+        def point_is_valid(point: PointInfo):
+            try:
+                road_length = self.roads[point.road_index].length
+            except IndexError:
+                return False
+
+            return 0 <= point.coordinate <= road_length
+
+        if not all(point_is_valid(p) for p in (*self.P, *self.Q)):
+            return False
+
+        return True
+
+    def length(self, road: int) -> float:
+        return self.roads[road].length
+
+    def endpoints(self, road: int) -> Tuple[int, int]:
+        road_info = self.roads[road]
+        return road_info.left, road_info.right
+
+    def is_oneway(self, road: TRoad) -> bool:
+        return self.roads[road].oneway
 
 
 def ROADSBIPARTITEMATCH( P, Q, roadnet_graph: nx.MultiDiGraph, **kwargs ) :
