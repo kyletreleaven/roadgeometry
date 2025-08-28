@@ -1,4 +1,5 @@
-from .mygraph import mygraph
+from typing import List, Any, Dict
+from .mygraph import mygraph, TV
 
 """ recursive form, why not, obtained from Cormen """
 WHITE = 0
@@ -6,7 +7,7 @@ GRAY = 1
 BLACK = 2
 
 
-def toposort(graph: mygraph) :
+def toposort(graph: mygraph[TV, Any]) -> List[TV]:
     """
     do a DFS traversal of graph, and apply visit at each node
     """
@@ -18,8 +19,9 @@ def toposort(graph: mygraph) :
         if c == WHITE :
             DFSVISIT( graph, u, color, order )
     return order
-            
-def DFSVISIT( graph, u, color, order ) :
+
+
+def DFSVISIT(graph: mygraph[TV, Any], u: TV, color: Dict[TV, int], order: List[TV]):
     color[u] = GRAY
     for e in graph.V[u] :
         _,v = graph.endpoints(e)
