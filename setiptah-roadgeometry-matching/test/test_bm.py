@@ -45,13 +45,15 @@ def test_roadnet_matching():
     }
     # assert False, surplus_dict
 
-    roadlen = {
-        road: get_road_data(road, roadnet).get('length', 1)
+    roadnet_frfr = MultiDiGraphRoadnet(roadnet)
+
+    road_len = {
+        road: roadnet_frfr.length(road)
         for road in segs
     }
 
     measure_dict = {
-        road: MEASURE(seg, roadlen[road])
+        road: MEASURE(seg, road_len[road])
         for road, seg in segs.items()
     }
     # assert False, measure_dict

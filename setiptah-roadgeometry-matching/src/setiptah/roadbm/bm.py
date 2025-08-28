@@ -1,44 +1,97 @@
-from typing import Dict, TypeVar
+from typing import Dict, TypeVar, Tuple, Generic, Protocol, Iterable
 from collections import defaultdict
+from dataclasses import dataclass
 
 import numpy as np
-import bintrees
+import bintrees  # Migrate to `sortedcontainers`?
 
-import networkx as nx
+import networkx as nx   # TODO: Migrate it out?
 
 """ my dependencies """
 import setiptah.roadgeometry.roadmap_basic as ROAD
-from setiptah.roadgeometry.roadmap_basic import RoadAddress, get_road_data
+"""
+
+TODO: Migrate away?
+
+Here only used to compute individual match costs, and total matching cost (which we can compute directly from the flow).  
+
+"""
 
 TRoad = TypeVar("TRoad")
-
-# to construct the optimization problem
-
+TVert = TypeVar("TVert")
 
 
+class Roadnet(Protocol[TRoad, TVert]):
 
-""" ALGORITHM HIGH LEVEL """
+    def edges(self) -> Iterable[TRoad]:
+        """Iterate the edges (roads) in the graph."""
 
-class ROADSBIPARTITE :
-    @classmethod
-    def MATCH(cls, S, T, roadnet ) :
-        pass
-    
-    @classmethod
-    def COST(cls, S, T, roadnet ) :
-        pass
-    
-    @classmethod
-    def FLOW(cls, S, T, roadnet ) :
-        pass
+    def nodes(self) -> Iterable[TVert]:
+        """Iterate the nodes in the graph.
+
+        TODO: Needed?
+
+        """
+
+    def length(self, road: TRoad) -> float:
+        """Get the length of a road in the network."""
+
+    def endpoints(self, road: TRoad) -> Tuple[TVert, TVert]:
+        """Get the endpoints of the road."""
+
+    def is_oneway(self, road: TRoad) -> bool:
+        """Get whether the road is one-way."""
 
 
-def ROADSBIPARTITEMATCH( P, Q, roadnet, **kwargs ) :
+@dataclass(frozen=True)
+class _EdgeData(Generic[TRoad, TVert]):
+    edge: TRoad
+    length: float
+    i: TVert
+    j: TVert
+    oneway: bool
+
+
+class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
+
+    def __init__(self, graph: nx.MultiDiGraph):
+        self.graph = graph
+
+        self.data = {
+            road: _EdgeData(
+                road, data["length"], i, j, data.get("oneway", False)
+            )
+            for i, j, road, data in self.graph.edges(keys=True, data=True)
+        }
+
+    def edges(self):
+        return self.data.keys()
+
+    def nodes(self) -> Iterable[TVert]:
+        return self.graph.nodes()
+
+    def length(self, road) -> float:
+        return self.data[road].length
+
+    def endpoints(self, road: TRoad) -> Tuple[TVert, TVert]:
+        data = self.data[road]
+        return data.i, data.j
+
+    def is_oneway(self, road: TRoad) -> bool:
+        return self.data[road].oneway
+
+
+def ROADSBIPARTITEMATCH( P, Q, roadnet_graph: nx.MultiDiGraph, **kwargs ) :
+    return optimal_roadnet_matching(
+        P, Q, MultiDiGraphRoadnet(roadnet_graph), **kwargs
+    )
+
+
+def optimal_roadnet_matching(P, Q, roadnet: Roadnet, **kwargs):
     MATCH = []
-    
-    segment_dict = SEGMENTS( P, Q, roadnet )
+
+    segment_dict = compute_segments( P, Q, roadnet )
     surplus_dict = dict()
-    objective_dict = dict()
     measure_dict = dict()
     
     for road, segment in segment_dict.items() :
@@ -46,30 +99,17 @@ def ROADSBIPARTITEMATCH( P, Q, roadnet, **kwargs ) :
         MATCH.extend( match )
         
         surplus_dict[road] = SURPLUS( segment )
-        
-        roadlen = get_road_data( road, roadnet ).get( 'length', 1 )
-        measure = MEASURE( segment, roadlen )
+
+        road_len = roadnet.length(road)
+        measure = MEASURE( segment, road_len )
         measure_dict[road] = measure
-        #objective_dict[road] = OBJECTIVE( measure )
-        #objective_dict[road] = objective
-        
-    #from nxflow.capscaling import SOLVER
-    if True :
-        assist = SOLVER( roadnet, surplus_dict, measure_dict )
-    else :
-        try :
-            assist = SOLVER( roadnet, surplus_dict, objective_dict )
-        except Exception as ex :
-            ex.segs = segment_dict
-            ex.surp = surplus_dict
-            ex.obj = objective_dict
-            
-            raise ex
-    
-    if False :		# activate for debug
-        imbalance = CHECKFLOW( assist, roadnet, surplus_dict )
-    else :
-        imbalance = []
+
+    assist = compute_optimal_flow(roadnet, surplus_dict, measure_dict)
+
+    # TODO: Is this needed, e.g., to check feasibility?
+    imbalance = check_flow(assist, roadnet, surplus_dict)
+    # Previously, this was active.
+    # imbalance = []
         
     try :
         assert len( imbalance ) <= 0
@@ -77,10 +117,10 @@ def ROADSBIPARTITEMATCH( P, Q, roadnet, **kwargs ) :
         ex.imbal = imbalance
         raise ex
 
-    if kwargs.get('assist_only', False ) : return assist
-    
-    
-    topograph = TOPOGRAPH( segment_dict, assist, roadnet )
+    if kwargs.get('assist_only', False ):
+        return assist
+
+    topograph = create_topograph(segment_dict, assist, roadnet)
     
     try :
         match = TRAVERSE( topograph )
@@ -93,11 +133,6 @@ def ROADSBIPARTITEMATCH( P, Q, roadnet, **kwargs ) :
     return MATCH
 
 
-
-
-
-
-
 """ ALGORITHM SUB-ROUTINES """
 
 
@@ -105,10 +140,14 @@ def ROADSBIPARTITEMATCH( P, Q, roadnet, **kwargs ) :
 """ Phase I: Transcription """
 
 
-def WRITEOBJECTIVES( P, Q, roadnet ) :
+def WRITEOBJECTIVES(P, Q, roadnet_graph: nx.MultiDiGraph):
+    return write_objectives(P, Q, MultiDiGraphRoadnet(roadnet_graph))
+
+
+def write_objectives(P, Q, roadnet: Roadnet):
     MATCH = []      # although, we just toss this...
     
-    segment_dict = SEGMENTS( P, Q, roadnet )
+    segment_dict = compute_segments(P, Q, roadnet)
     surplus_dict = dict()
     objective_dict = dict()
     
@@ -117,12 +156,10 @@ def WRITEOBJECTIVES( P, Q, roadnet ) :
         MATCH.extend( match )
         
         surplus_dict[road] = SURPLUS( segment )
-        
-        roadlen = get_road_data( road, roadnet ).get( 'length', 1 )
-        measure = MEASURE( segment, roadlen )
+
+        measure = MEASURE( segment, roadnet.length(road))
         objective_dict[road] = OBJECTIVE( measure )
-        #objective_dict[road] = objective
-        
+
     return objective_dict
 
 
@@ -138,29 +175,32 @@ respectively, at given coordinate.
 
 
 def SEGMENTS(P, Q, roadnet: nx.MultiDiGraph) -> Dict[TRoad, OrderedPoints]:
+    return compute_segments(P, Q, MultiDiGraphRoadnet(roadnet))
+
+
+def compute_segments(P, Q, roadnet: Roadnet[TRoad, TVert]) -> OrderedPoints:
     """
     returns:
-    a dictionary whose keys are coordinates and whose values are local (P,Q) index queues 
+    a dictionary whose keys are coordinates and whose values are local (P,Q) index queues
     """
     segments = dict()
-    for _,__,road in roadnet.edges( keys=True ) :
-        ensure_road( road, segments )   # these, and only these, roads are allowed
-        
-    for i, p in enumerate( P ) :
-        r,y = p
-        tree = segments[r]      # crash by design if r not in segments
-        queues = ensure_key( y, tree )
-        queues.P.append( i )
-        
-    for j, q in enumerate( Q ) :
-        r,y = q
+    for road in roadnet.edges():
+        ensure_road(road, segments)  # these, and only these, roads are allowed
+
+    for i, p in enumerate(P):
+        r, y = p
+        tree = segments[r]  # crash by design if r not in segments
+        queues = ensure_key(y, tree)
+        queues.P.append(i)
+
+    for j, q in enumerate(Q):
+        r, y = q
         tree = segments[r]
-        queues = ensure_key( y, tree )
-        queues.Q.append( j )
-        
+        queues = ensure_key(y, tree)
+        queues.Q.append(j)
+
     return segments
-    
-    
+
 
 def ONESEGMENT( S, T ) :
     roadnet = nx.MultiDiGraph()
@@ -297,24 +337,32 @@ def OBJECTIVE_FUNC( measure ) :
     return costWrapper( OBJECTIVE(measure) )
 
 
-
-
 def SOLVER( roadnet, surplus, measure_dict ) :
+    return compute_optimal_flow(MultiDiGraphRoadnet(roadnet), surplus, measure_dict)
+
+
+def compute_optimal_flow(
+        roadnet: Roadnet[TRoad, TVert],
+        surplus: Dict[TVert, float],
+        measure_dict: bintrees.RBTree,  # float -> float
+) -> Dict[TRoad, float]:
     network = mygraph()
-    capacity = {}
+    capacity = {}  # TODO: Was this for something?
     supply = { i : 0. for i in roadnet.nodes() }
     cost = {}   # functions
     #
     oneway_offset = {}  # for one-way roads
-    
-    for i,j, road, data in roadnet.edges( keys=True, data=True ) :
+
+    for road in roadnet.edges():
+        i, j = roadnet.endpoints(road)
+
         supply[j] += surplus[road]
         measure = measure_dict[road]
         
         fobj = OBJECTIVE_FUNC( measure )
         
         # edge construction
-        if data.get( 'oneway', False ) :
+        if roadnet.is_oneway(road):
             # if one-way road
             
             # record minimum allowable flow on road
@@ -360,7 +408,7 @@ def SOLVER( roadnet, surplus, measure_dict ) :
     f = MinConvexCostFlow( network, {}, supply, cost, U )
     
     flow = {}
-    for i, j, road in roadnet.edges( keys=True ) :
+    for road in roadnet.edges():
         if road in oneway_offset :
             flow[road] = f[road] + oneway_offset[road]
         else :
@@ -368,32 +416,29 @@ def SOLVER( roadnet, surplus, measure_dict ) :
             
         flow[road] = int( flow[road] )
     
-    #print flow
     return flow
 
 
+def CHECKFLOW(
+        flow: Dict[TRoad, float],
+        roadnet: nx.MultiDiGraph,
+        surplus: Dict[TVert, float]
+) -> Dict[TVert, float]:
+    return check_flow(flow, MultiDiGraphRoadnet(roadnet), surplus)
 
 
+def check_flow(
+        flow: Dict[TRoad, float],
+        roadnet: Roadnet[TRoad, TVert],
+        surplus: Dict[TVert, float]
+) -> Dict[TVert, float]:
+    balance = {u: 0. for u in roadnet.nodes()}
+    for road in roadnet.edges():
+        i, j = roadnet.endpoints(road)
+        balance[i] -= flow.get(road, 0.)
+        balance[j] += flow.get(road, 0.) + surplus.get(road, 0.)
 
-
-
-
-
-
-
-
-
-def CHECKFLOW( flow, roadnet, surplus ) :
-    balance = { u : 0. for u in roadnet.nodes() }
-    for i, j, road in roadnet.edges( keys=True ) :
-        balance[i] -= flow.get( road, 0. )
-        balance[j] += flow.get( road, 0. ) + surplus.get( road, 0. )
-        
-    return { k:v for k,v in balance.items() if v != 0. }
-
-
-
-
+    return {k: v for k, v in balance.items() if v != 0.}
 
 
 """ Phase III: Matching Construction """
@@ -416,36 +461,46 @@ def EDGES( segment ) :      # very similar routine, used to build the walk graph
     return edges
 
 
+def TOPOGRAPH(
+        segment_dict, assist: Dict[TRoad, float], roadnet: nx.MultiDiGraph
+) -> nx.DiGraph:
+    return create_topograph(
+        segment_dict, assist, MultiDiGraphRoadnet(roadnet)
+    )
 
 
-def TOPOGRAPH( segment_dict, assist, roadnet ) :
+def create_topograph(
+        segment_dict, assist: Dict[TRoad, float], roadnet: Roadnet
+) -> nx.DiGraph:
     topograph = nx.DiGraph()
-    
+
     special = dict()
-    for u in roadnet.nodes() :
-        #data = TwoQueues()
-        node = terminal( None )
+    for u in roadnet.nodes():
+        # data = TwoQueues()
+        node = terminal(None)
         special[u] = node
-        
-    for u,v, road, data in roadnet.edges( keys=True, data=True ) :
+
+    for road in roadnet.edges():
+        u, v = roadnet.endpoints(road)
+
         segment = segment_dict[road]
         z = assist[road]
-        
-        edges = EDGES( segment )
-        for f, intervals in edges.items() :
+
+        edges = EDGES(segment)
+        for f, intervals in edges.items():
             h = f + z
-            for (ll,rr) in intervals :
-                if ll.q == '-' : ll = special[u]
-                if rr.q == '+' : rr = special[v]
-                
-                if h > 0 :
-                    topograph.add_edge( ll, rr, weight = h )
-                if h < 0 :
-                    topograph.add_edge( rr, ll, weight = -h )
-                    
+            for (ll, rr) in intervals:
+                if ll.q == '-': ll = special[u]
+                if rr.q == '+': rr = special[v]
+
+                if h > 0:
+                    topograph.add_edge(ll, rr, weight=h)
+                if h < 0:
+                    topograph.add_edge(rr, ll, weight=-h)
+
     return topograph
-    
-    
+
+
 def CHECKTOPO( topograph ) :
     def balance( u ) :
         # starting balance
