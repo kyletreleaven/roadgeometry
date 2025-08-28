@@ -626,3 +626,10 @@ def MATCHCOSTS(matching: Tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
 def ROADMATCHCOST( match, P, Q, roadnet ) :
     costs = MATCHCOSTS( match, P, Q, roadnet )
     return sum( costs )
+
+
+def flow_cost_per_road(flow: Dict[TRoad, float], obj_dict):
+    return {
+        road: obj_dict[road](x)
+        for road, x in flow.items()
+    }

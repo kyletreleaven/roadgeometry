@@ -11,6 +11,7 @@ def test_roadnet_matching():
     if True:
         roadnet.add_edge(0, 1, 'N', length=1.)
     else:
+        # TODO: Do this in a meaningful way.
         # to test one-way roads capabilities
         roadnet.add_edge(0, 1, 'N', length=1., oneway=True)
 
@@ -58,7 +59,7 @@ def test_roadnet_matching():
     }
     # assert False, measure_dict
 
-    assist = SOLVER(roadnet, surplus_dict, measure_dict)
+    assist = compute_optimal_flow(roadnet_frfr, surplus_dict, measure_dict)
 
     # Good to check!
     imbalance = CHECKFLOW(assist, roadnet, surplus_dict)
@@ -76,5 +77,14 @@ def test_roadnet_matching():
     match = ROADSBIPARTITEMATCH(PP, QQ, roadnet)
     assert len(match) == NUMPOINT
 
-    costs = MATCHCOSTS(match, PP, QQ, roadnet)
+    # costs = MATCHCOSTS(match, PP, QQ, roadnet)
     cost = ROADMATCHCOST(match, PP, QQ, roadnet)
+
+    obj_fn_dict = {
+        road: OBJECTIVE_FUNC(measure)
+        for road, measure in measure_dict.items()
+    }  # write_objectives(PP, QQ, roadnet_frfr)
+
+    costs_ = flow_cost_per_road(assist, obj_fn_dict)
+
+    assert sum(costs_.values()) == cost
