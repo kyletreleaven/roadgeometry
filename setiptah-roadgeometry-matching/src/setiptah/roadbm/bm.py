@@ -1,6 +1,7 @@
 from functools import cached_property
-from typing import Dict, TypeVar, Tuple, Generic, Protocol, Iterable, List
+from typing import TypeVar, Generic, Protocol
 from collections import defaultdict
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -23,21 +24,22 @@ TVert = TypeVar("TVert")
 
 
 class Roadnet(Protocol[TRoad, TVert]):
+    """The basic protocol of a metric graph, potentially with one-way roads.
 
-    def edges(self) -> Iterable[TRoad]:
-        """Iterate the edges (roads) in the graph."""
+    TODO: This is very low-level. Move this into geometry package?
 
-    def nodes(self) -> Iterable[TVert]:
-        """Iterate the nodes in the graph.
+    """
 
-        TODO: Needed?
+    def edges(self) -> Collection[TRoad]:
+        """Get the edges (roads) in the graph."""
 
-        """
+    def nodes(self) -> Collection[TVert]:
+        """Get the nodes (interchanges) in the graph."""
 
     def length(self, road: TRoad) -> float:
         """Get the length of a road in the network."""
 
-    def endpoints(self, road: TRoad) -> Tuple[TVert, TVert]:
+    def endpoints(self, road: TRoad) -> tuple[TVert, TVert]:
         """Get the endpoints of the road."""
 
     def is_oneway(self, road: TRoad) -> bool:
@@ -74,7 +76,7 @@ class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
     def length(self, road) -> float:
         return self.data[road].length
 
-    def endpoints(self, road: TRoad) -> Tuple[TVert, TVert]:
+    def endpoints(self, road: TRoad) -> tuple[TVert, TVert]:
         data = self.data[road]
         return data.i, data.j
 
@@ -98,9 +100,14 @@ class RoadInfo:
 
 @dataclass(frozen=True)
 class StructRoadnet(Roadnet[int, int]):
-    P: Tuple[PointInfo, ...]
-    Q: Tuple[PointInfo, ...]
-    roads: Tuple[RoadInfo, ...]
+    """
+
+    TODO: Actually, this is a matching problem instance.
+
+    """
+    P: tuple[PointInfo, ...]
+    Q: tuple[PointInfo, ...]
+    roads: tuple[RoadInfo, ...]
     n_vertices: int
 
     @classmethod
@@ -109,7 +116,7 @@ class StructRoadnet(Roadnet[int, int]):
         vert_map = {u: k for k, u in enumerate(rn.nodes())}
 
         road_map = {}
-        roads: List[RoadInfo] = []
+        roads: list[RoadInfo] = []
         for k, road_ in enumerate(rn.edges()):
             road_map[road_] = k
 
@@ -120,7 +127,7 @@ class StructRoadnet(Roadnet[int, int]):
             road_info = RoadInfo(length, vert_map[i_], vert_map[j_], oneway)
             roads.append(road_info)
 
-        def make_points(points_) -> Tuple[PointInfo, ...]:
+        def make_points(points_) -> tuple[PointInfo, ...]:
             return tuple(
                 (road_map[r_], x)
                 for r_, x in points_
@@ -145,7 +152,7 @@ class StructRoadnet(Roadnet[int, int]):
             g.add_edge(road_info.left, road_info.right, k, length=road_info.length, oneway=road_info.oneway)
         return g
 
-    def nodes(self) -> Iterable[TVert]:
+    def nodes(self) -> Collection[TVert]:
         return range(self.n_vertices)
 
     @cached_property
@@ -157,7 +164,7 @@ class StructRoadnet(Roadnet[int, int]):
     def n_roads(self) -> int:
         return len(self.roads)
 
-    def edges(self) -> Iterable[TRoad]:
+    def edges(self) -> Collection[TRoad]:
         return range(self.n_roads)
 
     def is_valid(self):
@@ -191,7 +198,7 @@ class StructRoadnet(Roadnet[int, int]):
     def length(self, road: int) -> float:
         return self.roads[road].length
 
-    def endpoints(self, road: int) -> Tuple[int, int]:
+    def endpoints(self, road: int) -> tuple[int, int]:
         road_info = self.roads[road]
         return road_info.left, road_info.right
 
@@ -289,7 +296,7 @@ respectively, at given coordinate.
 """
 
 
-def SEGMENTS(P, Q, roadnet: nx.MultiDiGraph) -> Dict[TRoad, OrderedPoints]:
+def SEGMENTS(P, Q, roadnet: nx.MultiDiGraph) -> dict[TRoad, OrderedPoints]:
     return compute_segments(P, Q, MultiDiGraphRoadnet(roadnet))
 
 
@@ -458,9 +465,9 @@ def SOLVER( roadnet, surplus, measure_dict ) :
 
 def compute_optimal_flow(
         roadnet: Roadnet[TRoad, TVert],
-        surplus: Dict[TVert, float],
+        surplus: dict[TVert, float],
         measure_dict: bintrees.RBTree,  # float -> float
-) -> Dict[TRoad, float]:
+) -> dict[TRoad, float]:
     network = mygraph()
     capacity = {}  # TODO: Was this for something?
     supply = { i : 0. for i in roadnet.nodes() }
@@ -535,18 +542,18 @@ def compute_optimal_flow(
 
 
 def CHECKFLOW(
-        flow: Dict[TRoad, float],
+        flow: dict[TRoad, float],
         roadnet: nx.MultiDiGraph,
-        surplus: Dict[TVert, float]
-) -> Dict[TVert, float]:
+        surplus: dict[TVert, float]
+) -> dict[TVert, float]:
     return check_flow(flow, MultiDiGraphRoadnet(roadnet), surplus)
 
 
 def check_flow(
-        flow: Dict[TRoad, float],
+        flow: dict[TRoad, float],
         roadnet: Roadnet[TRoad, TVert],
-        surplus: Dict[TVert, float]
-) -> Dict[TVert, float]:
+        surplus: dict[TVert, float]
+) -> dict[TVert, float]:
     balance = {u: 0. for u in roadnet.nodes()}
     for road in roadnet.edges():
         i, j = roadnet.endpoints(road)
@@ -577,7 +584,7 @@ def EDGES( segment ) :      # very similar routine, used to build the walk graph
 
 
 def TOPOGRAPH(
-        segment_dict, assist: Dict[TRoad, float], roadnet: nx.MultiDiGraph
+        segment_dict, assist: dict[TRoad, float], roadnet: nx.MultiDiGraph
 ) -> nx.DiGraph:
     return create_topograph(
         segment_dict, assist, MultiDiGraphRoadnet(roadnet)
@@ -585,7 +592,7 @@ def TOPOGRAPH(
 
 
 def create_topograph(
-        segment_dict, assist: Dict[TRoad, float], roadnet: Roadnet
+        segment_dict, assist: dict[TRoad, float], roadnet: Roadnet
 ) -> nx.DiGraph:
     topograph = nx.DiGraph()
 
@@ -731,7 +738,7 @@ def INTERVALS( segment ) :      # very similar routine, used to build the walk g
     return res
 
 
-def MATCHCOSTS(matching: Tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
+def MATCHCOSTS(matching: tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
     costs = []
     for i, j in matching:
         p = ROAD.RoadAddress( *P[i] )
@@ -746,7 +753,7 @@ def ROADMATCHCOST( match, P, Q, roadnet ) :
     return sum( costs )
 
 
-def flow_cost_per_road(flow: Dict[TRoad, float], obj_dict):
+def flow_cost_per_road(flow: dict[TRoad, float], obj_dict):
     return {
         road: obj_dict[road](x)
         for road, x in flow.items()
