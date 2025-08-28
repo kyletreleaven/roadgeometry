@@ -68,7 +68,7 @@ def dev(session):
     session.run("ipython")
 
 
-@nox.session
+@nox.session(venv_backend="virtualenv")  # TODO: Until I understand what's wrong...
 def run(session):
     local_install(session, ".")
 
