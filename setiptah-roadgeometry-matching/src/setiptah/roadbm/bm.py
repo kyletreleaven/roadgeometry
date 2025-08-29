@@ -30,33 +30,51 @@ class _EdgeData(Generic[TRoad, TVert]):
     oneway: bool
 
 
+@dataclass(frozen=True)
+class _NodeData(Generic[TRoad, TVert]):
+    out_edges: set[TRoad]
+    in_edges: set[TRoad]
+
+
 class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
 
     def __init__(self, graph: nx.MultiDiGraph):
         self.graph = graph
 
-        self.data = {
-            road: _EdgeData(
+        self.node_data = {
+            u: _NodeData(set(), set())
+            for u in graph.nodes
+        }
+        self.edge_data = {}
+
+        for i, j, road, data in self.graph.edges(keys=True, data=True):
+            self.edge_data[road] = _EdgeData(
                 road, data["length"], i, j, data.get("oneway", False)
             )
-            for i, j, road, data in self.graph.edges(keys=True, data=True)
-        }
+            self.node_data[i].out_edges.add(road)
+            self.node_data[j].in_edges.add(road)
 
     def edges(self):
-        return self.data.keys()
+        return self.edge_data.keys()
+
+    def out_edges(self, u: TVert) -> Collection[TRoad]:
+        return self.node_data[u].out_edges
+
+    def in_edges(self, u: TVert) -> Collection[TRoad]:
+        return self.node_data[u].in_edges
 
     def nodes(self) -> Iterable[TVert]:
         return self.graph.nodes()
 
     def length(self, road) -> float:
-        return self.data[road].length
+        return self.edge_data[road].length
 
     def endpoints(self, road: TRoad) -> tuple[TVert, TVert]:
-        data = self.data[road]
+        data = self.edge_data[road]
         return data.i, data.j
 
     def is_oneway(self, road: TRoad) -> bool:
-        return self.data[road].oneway
+        return self.edge_data[road].oneway
 
 
 @dataclass(frozen=True)
