@@ -21,6 +21,12 @@ class Roadnet(Protocol[TRoad, TVert]):
     def edges(self) -> Collection[TRoad]:
         """Get the edges (roads) in the graph."""
 
+    def out_edges(self, u: TVert) -> Collection[TRoad]:
+        """Get edges out of a vertex."""
+
+    def in_edges(self, u: TVert) -> Collection[TRoad]:
+        """Get edges into a vertex."""
+
     def nodes(self) -> Collection[TVert]:
         """Get the nodes (interchanges) in the graph."""
 
