@@ -4,7 +4,8 @@ import numpy as np
 import networkx as nx
 
 from setiptah.basic_graph.mygraph import mygraph
-from setiptah.basic_graph.dijkstra import Dijkstra
+from setiptah.basic_graph.dijkstra import *
+from setiptah.roadbm import MultiDiGraphRoadnet
 
 
 def test_dijkstra():
@@ -43,3 +44,33 @@ def test_dijkstra():
         d.get(u) == nxd.get(u)
         for u in set(d) | set(nxd)
     )
+
+
+def test_metric():
+
+    roadnet = nx.MultiDiGraph()
+    if True:
+        roadnet.add_edge(0, 1, 'N', length=1.)
+    else:
+        # TODO: Do this in a meaningful way.
+        # to test one-way roads capabilities
+        roadnet.add_edge(0, 1, 'N', length=1., oneway=True)
+
+    roadnet.add_edge(1, 2, 'E', length=1.)
+    roadnet.add_edge(2, 3, 'S', length=1.)
+    roadnet.add_edge(3, 0, 'W', length=1.)
+
+    if True:
+        roadnet.add_edge(0, 4, 'dangler', length=1.)
+
+    roadnet, roadnet_graph = MultiDiGraphRoadnet(roadnet), roadnet
+    # assert False, roadnet.nodes()
+    # assert False, roadnet.node_data
+
+    metric = RoadnetMetric(roadnet)
+    # assert False, list(metric._out_edges(2))
+
+    metric._ensure(2, 4)
+    assert False, metric._upstream
+
+    # TODO: BUGFIX: Self upstream should not be in the map!
