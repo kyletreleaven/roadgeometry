@@ -48,11 +48,11 @@ class RoadnetMetric(Generic[TRoad, TVert]):
 
     @cached_property
     def _distance(self) -> dict[SourceVertex, dict[TargetVertex, float]]:
-        return defaultdict(dict)
+        return {}
 
     @cached_property
     def _upstream(self) -> dict[SourceVertex, dict[TargetVertex, TVert]]:
-        return defaultdict(dict)
+        return {}
 
     def _out_edges(self, i: TVert):
         for e in self.roadnet.out_edges(i):
@@ -64,48 +64,49 @@ class RoadnetMetric(Generic[TRoad, TVert]):
             j, _ = self.roadnet.endpoints(e)
             yield e, j
 
-    def shortest_path_length(self, source: SourceVertex, target: TargetVertex) -> float:
-        self._ensure(source, target)
-        return self._distance[source][target]
+    def graph_shortest_path_length(self, source: SourceVertex, target: TargetVertex) -> float:
+        self._ensure(source)
+        return self._distance[source].get(target, np.inf)
 
-    def _ensure(self, source: SourceVertex, target: TargetVertex):
-        if target not in self._distance[source]:
+    def graph_shortest_path(self, source: SourceVertex, target: TargetVertex):
+        self._ensure(source)
+        upstream = self._upstream[source]
+
+        path = [target]
+        j = target
+        while j in upstream:
+            _e, i = tup = upstream[j]
+            path.extend(tup)
+            j = i
+        assert j == source, (j, source)
+
+        path.reverse()
+        return path
+
+    def _ensure(self, source: SourceVertex):
+        if source not in self._distance:
             self._populate_dijkstra(source)
 
     def _populate_dijkstra(self, source: SourceVertex):
-        d = self._distance[source]
-        upstream = self._upstream[source]
+        d = {}  # only in here if they are seen... duh!!
+        upstream = {}
 
         OPEN = priorityDictionary()
         OPEN[source] = 0.
 
         while len(OPEN) > 0:
             i = OPEN.smallest()
-            up = upstream.get(i)  # None when i == source
-
-            source_, di = i, 0.
-            while True:
-                self._distance[source_][i] = di
-                if up:
-                    self._upstream[source_][i] = up
-
-                if source_ == source:
-                    break
-
-                # otherwise move up
-                e, i_ = upstream[source_]
-                source_, di = i_, di + self.roadnet.length(e)
-
+            d[i] = di = OPEN[i]
             del OPEN[i]
 
             for e, j in self._out_edges(i):
-                if j in d:  # we already know shortest path source -> j!
+                if j in d:
                     continue
+
                 dj = di + self.roadnet.length(e)
                 if dj < OPEN.get(j, np.inf):
                     OPEN[j] = dj
                     upstream[j] = e, i
 
-    def _dijkstra(self, source: SourceVertex):
-        # Return a copy of what's _already_ in the map.
-        return {**self._distance[source]}, {**self._upstream[source]}
+        self._distance[source] = d
+        self._upstream[source] = upstream

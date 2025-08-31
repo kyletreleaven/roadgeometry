@@ -70,7 +70,10 @@ def test_metric():
     metric = RoadnetMetric(roadnet)
     # assert False, list(metric._out_edges(2))
 
-    metric._ensure(2, 4)
-    assert False, metric._upstream
+    assert metric.graph_shortest_path_length(2, 4) == 3
 
-    # TODO: BUGFIX: Self upstream should not be in the map!
+    # TODO: Spy test to assert one call only.
+    metric.graph_shortest_path_length(2, 0)
+
+    # assert False, metric._upstream
+    assert False, metric.graph_shortest_path(2, 4)
