@@ -46,6 +46,8 @@ TargetVertex = TVert
 class RoadnetMetric(Generic[TRoad, TVert]):
     roadnet: Roadnet[TRoad, TVert]
 
+    Point = Roadnet[TRoad, TVert].Point
+
     @cached_property
     def _distance(self) -> dict[SourceVertex, dict[TargetVertex, float]]:
         return {}
@@ -110,3 +112,75 @@ class RoadnetMetric(Generic[TRoad, TVert]):
 
         self._distance[source] = d
         self._upstream[source] = upstream
+
+    def is_valid_point(self, p: Point):
+        road, _ = p
+        return self.is_on_road(p, road)
+
+    def is_on_road(self, p: Point, road: TRoad) -> bool:
+        road_, x = p
+        return (
+            road_ == road
+            and 0. <= x <= self.roadnet.length(road)
+        )
+
+    def distance(self, p: Point, q: Point) -> float:
+        """
+
+        returns the shortest-path distance between two points on a Roadmap
+
+        TODO: We'll want _path_ version of this method!
+
+        """
+        assert self.is_valid_point(p)
+        road, x = p
+
+        i, j = self.roadnet.endpoints(road)
+        nodes = [i, j]
+        points = [(road, 0.), (road, self.roadnet.length(road))]
+
+        options = [
+            self.distance_on_road(p, p_, road) + self.distance_node_to_point(u, q)
+            for u, p_ in zip(nodes, points)
+        ]
+
+        return min(options)
+
+    def distance_on_road(self, p: Point, q: Point, road: TRoad) -> float:
+        """
+
+        returns the distance from p to q on road,
+        if the direction of travel is admissible;
+        if not, or if p and q are not co-'road'-al, returns infinity
+
+        """
+        if not self.is_on_road(p, road) or not self.is_on_road(q, road):
+            return np.inf
+
+        _, xp = p
+        _, xq = q
+
+        if xq < xp and self.roadnet.is_oneway(road):
+            return np.inf
+
+        return abs(xq - xp)
+
+    def distance_node_to_point(self, u: TVert, q: Point) -> float:
+        """
+
+        returns the shortest-path distance from a node u to a point q, on digraph
+
+        """
+        assert self.is_valid_point(q)
+        road, x = q
+
+        i, j = self.roadnet.endpoints(road)
+        nodes = [i, j]
+        points = [(road, 0.), (road, self.roadnet.length(road))]
+
+        options = [
+            self.graph_shortest_path_length(u, v) + self.distance_on_road(q_, q, road)
+            for v, q_ in zip(nodes, points)
+        ]
+
+        return min(options)

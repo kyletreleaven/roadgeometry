@@ -76,4 +76,5 @@ def test_metric():
     metric.graph_shortest_path_length(2, 0)
 
     # assert False, metric._upstream
-    assert False, metric.graph_shortest_path(2, 4)
+    # assert False, metric.graph_shortest_path(2, 4)
+    assert False, metric.distance(("E", 1.), ("dangler", .5))
