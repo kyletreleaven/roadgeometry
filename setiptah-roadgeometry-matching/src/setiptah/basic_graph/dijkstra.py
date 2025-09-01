@@ -2,7 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property
 from numbers import Number
-from typing import Dict
+from typing import Dict, Generator
 
 import numpy as np
 
@@ -65,6 +65,12 @@ class RoadnetMetric(Generic[TRoad, TVert]):
                 continue
             j, _ = self.roadnet.endpoints(e)
             yield e, j
+
+    def embeddings(self, u: TVert) -> Generator[Point, None, None]:
+        for e in self.roadnet.out_edges(u):
+            yield e, 0.
+        for e in self.roadnet.in_edges(u):
+            yield e, self.roadnet.length(e)
 
     def graph_shortest_path_length(self, source: SourceVertex, target: TargetVertex) -> float:
         self._ensure(source)

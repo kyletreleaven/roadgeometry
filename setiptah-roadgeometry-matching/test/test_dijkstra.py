@@ -87,3 +87,8 @@ def test_metric(square_roadnet):
     # assert False, metric._upstream
     # assert False, metric.graph_shortest_path(2, 4)
     assert metric.distance(("E", 1.), ("dangler", .5)) == 2.5
+
+
+def test_embeddings(square_roadnet):
+    metric = RoadnetMetric(square_roadnet)
+    assert set(metric.embeddings(0)) == {("dangler", 0.), ("N", 0.), ("W", 1.)}
