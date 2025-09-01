@@ -11,6 +11,7 @@ import bintrees  # Migrate to `sortedcontainers`?
 import networkx as nx  # TODO: Migrate it out?
 import numpy as np
 
+from setiptah.basic_graph.graphs import RoadInfo
 
 """ my dependencies """
 import setiptah.roadgeometry.roadmap_basic as ROAD
@@ -81,14 +82,6 @@ class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
 
     def is_oneway(self, road: TRoad) -> bool:
         return self.edge_data[road].oneway
-
-
-@dataclass(frozen=True)
-class RoadInfo:
-    length: float
-    left: int
-    right: int
-    oneway: bool
 
 
 @dataclass(frozen=True)
