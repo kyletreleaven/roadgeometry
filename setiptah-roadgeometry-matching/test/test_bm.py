@@ -117,9 +117,10 @@ def test_roadnet_matching_int():
     roadnet_, roadnet_graph_ = MultiDiGraphRoadnet(roadnet), roadnet
     matching_ = optimal_roadnet_matching(PP_, QQ_, roadnet_)
 
-    inst, _roads, __ = StructRoadnet.from_roadnet(PP_, QQ_, roadnet_)
-    roadnet = inst
+    inst, _roads, __ = StructRoadnetMatchingInstance.normalize(PP_, QQ_, roadnet_)
+    roadnet = inst.roadnet
     # assert False, roadnet
+    assert inst.is_valid()
 
     PP, QQ = inst.P, inst.Q  # TODO: Oops? It's not a roadnet, it's an instance...
     matching = optimal_roadnet_matching(PP, QQ, roadnet)

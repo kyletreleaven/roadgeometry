@@ -2,6 +2,7 @@ from functools import cached_property
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import numpy as np
 import bintrees  # Migrate to `sortedcontainers`?
@@ -19,6 +20,8 @@ Here only used to compute individual match costs, and total matching cost (which
 """
 
 from setiptah.basic_graph.protocol import *
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -45,8 +48,8 @@ class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
             u: _NodeData(set(), set())
             for u in graph.nodes
         }
-        self.edge_data = {}
 
+        self.edge_data = {}
         for i, j, road, data in self.graph.edges(keys=True, data=True):
             self.edge_data[road] = _EdgeData(
                 road, data["length"], i, j, data.get("oneway", False)
@@ -78,12 +81,6 @@ class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
 
 
 @dataclass(frozen=True)
-class PointInfo:
-    road_index: int
-    coordinate: float
-
-
-@dataclass(frozen=True)
 class RoadInfo:
     length: float
     left: int
@@ -93,25 +90,19 @@ class RoadInfo:
 
 @dataclass(frozen=True)
 class StructRoadnet(Roadnet[int, int]):
-    """
-
-    TODO: Actually, this is a matching problem instance.
-
-    """
-    P: tuple[PointInfo, ...]
-    Q: tuple[PointInfo, ...]
+    """A network on road and vertex indices (integers)."""
     roads: tuple[RoadInfo, ...]
     n_vertices: int
 
     @classmethod
-    def from_roadnet(cls, P_, Q_, rn: Roadnet):
+    def normalize(cls, rn: Roadnet, seq_maps: bool = True):
 
         vert_map = {u: k for k, u in enumerate(rn.nodes())}
 
         road_map = {}
         roads: list[RoadInfo] = []
-        for k, road_ in enumerate(rn.edges()):
-            road_map[road_] = k
+        for r, road_ in enumerate(rn.edges()):
+            road_map[road_] = r
 
             i_, j_ = rn.endpoints(road_)
             length = rn.length(road_)
@@ -120,23 +111,13 @@ class StructRoadnet(Roadnet[int, int]):
             road_info = RoadInfo(length, vert_map[i_], vert_map[j_], oneway)
             roads.append(road_info)
 
-        def make_points(points_) -> tuple[PointInfo, ...]:
-            return tuple(
-                (road_map[r_], x)
-                for r_, x in points_
-            )
+        inst = cls(tuple(roads), len(vert_map))
 
-        P, Q = make_points(P_), make_points(Q_)
+        if seq_maps:
+            road_map = int_map_to_seq(road_map)
+            vert_map = int_map_to_seq(vert_map)
 
-        inst = cls(tuple(P), tuple(Q), tuple(roads), len(vert_map))
-
-        def invert_map(dict_):
-            result = [None] * len(dict_)
-            for i, k in dict_.items():
-                result[k] = i
-            return result
-
-        return inst, invert_map(road_map), invert_map(vert_map)
+        return inst, road_map, vert_map
 
     def create_multigraph(self):
         g = nx.MultiDiGraph()
@@ -148,11 +129,6 @@ class StructRoadnet(Roadnet[int, int]):
     def nodes(self) -> Collection[TVert]:
         return range(self.n_vertices)
 
-    @cached_property
-    def n_points(self) -> int:
-        n, = len({len(self.P), len(self.Q)})
-        return n
-
     @property
     def n_roads(self) -> int:
         return len(self.roads)
@@ -163,6 +139,7 @@ class StructRoadnet(Roadnet[int, int]):
     def is_valid(self):
         if self.n_vertices < 0:
             return False
+
         nodes = self.nodes()
 
         def road_is_valid(road: RoadInfo):
@@ -173,17 +150,6 @@ class StructRoadnet(Roadnet[int, int]):
             )
 
         if not all(road_is_valid(road) for road in self.roads):
-            return False
-
-        def point_is_valid(point: PointInfo):
-            try:
-                road_length = self.roads[point.road_index].length
-            except IndexError:
-                return False
-
-            return 0 <= point.coordinate <= road_length
-
-        if not all(point_is_valid(p) for p in (*self.P, *self.Q)):
             return False
 
         return True
@@ -197,6 +163,66 @@ class StructRoadnet(Roadnet[int, int]):
 
     def is_oneway(self, road: TRoad) -> bool:
         return self.roads[road].oneway
+
+
+def int_map_to_seq(dict_: dict[T, int]) -> list[T]:
+    result = [None] * len(dict_)
+    for i, k in dict_.items():
+        result[k] = i
+    return result
+
+
+class PointInfo(NamedTuple):
+    road_index: int
+    coordinate: float
+
+
+@dataclass(frozen=True)
+class StructRoadnetMatchingInstance:
+    P: tuple[PointInfo, ...]
+    Q: tuple[PointInfo, ...]
+    roadnet: StructRoadnet
+
+    @classmethod
+    def normalize(cls, P_, Q_, roadnet_, seq_maps: bool = True):
+        roadnet, road_map, vert_map  = StructRoadnet.normalize(roadnet_, False)
+
+        def make_points(points_) -> tuple[PointInfo, ...]:
+            return tuple(
+                PointInfo(road_map[r_], x)
+                for r_, x in points_
+            )
+
+        P, Q = make_points(P_), make_points(Q_)
+        inst = cls(P, Q, roadnet)
+
+        if seq_maps:
+            road_map = int_map_to_seq(road_map)
+            vert_map = int_map_to_seq(vert_map)
+
+        return inst, road_map, vert_map
+
+    @cached_property
+    def n_points(self) -> int:
+        n, = len({len(self.P), len(self.Q)})
+        return n
+
+    def is_valid(self):
+        if not self.roadnet.is_valid():
+            return False
+
+        def point_is_valid(point: PointInfo):
+            try:
+                road_length = self.roadnet.length(point.road_index)
+            except IndexError:
+                return False
+
+            return 0 <= point.coordinate <= road_length
+
+        if not all(point_is_valid(p) for p in (*self.P, *self.Q)):
+            return False
+
+        return True
 
 
 def ROADSBIPARTITEMATCH( P, Q, roadnet_graph: nx.MultiDiGraph, **kwargs ) :
