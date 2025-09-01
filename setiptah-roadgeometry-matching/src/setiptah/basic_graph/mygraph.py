@@ -1,8 +1,3 @@
-"""
-
-TODO: Taking a O(log n) hit for all these dictionary lookups?
-
-"""
 from typing import Dict, TypeVar, Generic, Tuple, Iterable
 
 TV = TypeVar("TV")
@@ -10,7 +5,12 @@ TE = TypeVar("TE")
 
 
 class mygraph(Generic[TV, TE]):
-    """A simple hashmap-based alternative to `networkx.MultiDiGraph`.
+    """A simplified hashmap-based alternative to `networkx.MultiDiGraph`.
+
+    Unlike `MultiDiGraph`, this DS stores both vertices and edges,
+    with adjacency lists connecting them.
+
+    Topology only. Attributes of graph objects to be stored separately.
 
     """
 
