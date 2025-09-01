@@ -1,13 +1,16 @@
-from functools import cached_property
+"""Efficient bipartite matching on road networks (metric graphs).
+
+"""
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import cached_property
 from typing import NamedTuple
 
-import numpy as np
 import bintrees  # Migrate to `sortedcontainers`?
+import networkx as nx  # TODO: Migrate it out?
+import numpy as np
 
-import networkx as nx   # TODO: Migrate it out?
 
 """ my dependencies """
 import setiptah.roadgeometry.roadmap_basic as ROAD
