@@ -1,14 +1,15 @@
-
-import math
 import itertools
+import logging
+import math
 
 import numpy as np
 
-from setiptah.basic_graph.mygraph import mygraph
 from setiptah.basic_graph.dijkstra import Dijkstra
-from setiptah.basic_graph.toposort import toposort
+from setiptah.basic_graph.mygraph import mygraph
 
-PHASE_ERROR = 10**-6        # having to mess with this is annoying me
+PHASE_ERROR = 10**-6        # TODO: Find a way to eliminate this.
+
+LOG = logging.getLogger(__name__)
 
 
 class line :
@@ -195,16 +196,15 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
         raise ex
         
     Delta = 2.**temp
-    print('Delta: %d' % Delta)
-    
-    
+    LOG.debug('Delta: %d' % Delta)
+
     flow = { e : 0. for e in network.edges() }
     Excess( excess, flow, network, supply )
     
     potential = { i : 0. for i in network.nodes() }
         
     while Delta >= epsilon :
-        print('\nnew phase: Delta=%f' % Delta)
+        LOG.debug('\nnew phase: Delta=%f' % Delta)
         
         # Delta is fresh, so we need to [re-] linearize the costs and compute residual graph 
         LinearizeCost( lincost, cost, flow, Delta, network )
@@ -212,7 +212,7 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
         ResidualGraph( rgraph, flow, capacity, Delta, network )
         #
         cert = { re : c for (re,c) in redcost.items() if re in rgraph.edges() }
-        print('reduced costs on res. graph, phase init: %s' % repr( cert ))
+        LOG.debug('reduced costs on res. graph, phase init: %s' % repr( cert ))
         
         """ Stage 1. """
         # for every arc (i,j) in the residual network G(x)
@@ -222,7 +222,7 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
             # wouldn't want to question theory
             # ... keep an eye out for a flip-flop; in theory, shouldn't happen
             if redcost[resedge] < 0. :
-                print('correcting negative red. cost on resedge %s: %f' % ( resedge, redcost[resedge] ))
+                LOG.debug('correcting negative red. cost on resedge %s: %f' % ( resedge, redcost[resedge] ))
                 
                 # no augment, just saturate!
                 flow[e] += dir * Delta
@@ -235,33 +235,33 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
                 
         # at end of each stage, verify the optimality certificate (should be empty every time)
         CERT = { re : c for (re,c) in redcost.items() if re in rgraph.edges() and c < 0. }
-        print('certificate, end stage ONE: %s' % repr( CERT ))
+        LOG.debug('certificate, end stage ONE: %s' % repr( CERT ))
         #if len( CERT ) > 0 : print "STAGE ONE CERTIFICATE CORRUPT!"
         # am considering removing this assertion, but leaving the stage two one
         # could be running into problems where the functional form is defined beyond saturation bounds
         RELAXCERT = { re : c for (re,c) in redcost.items() if re in rgraph.edges() and c < -PHASE_ERROR }
         if len( RELAXCERT ) > 0 : 
-            print(RELAXCERT)
-            print("STAGE ONE CERTIFICATE CORRUPT!")
-        print(RELAXCERT)
+            LOG.debug(RELAXCERT)
+            LOG.debug("STAGE ONE CERTIFICATE CORRUPT!")
+        LOG.debug(RELAXCERT)
         assert len( RELAXCERT ) <= 0
         
                 
         """ Stage 2. """
         # while there are imbalanced nodes
         while True :
-            print('flow: %s' % repr( flow ))
+            LOG.debug('flow: %s' % repr( flow ))
             #excess = Excess( flow, network, supply )        # last function that needs to be increment-ized
             #print 'excess: %s' % repr(excess)
             
             SS = [ i for i,ex in excess.items() if ex >= Delta ]
             TT = [ i for i,ex in excess.items() if ex <= -Delta ]
-            print('surplus nodes: %s' % repr( SS ))
-            print('deficit nodes: %s' % repr( TT ))
+            LOG.debug('surplus nodes: %s' % repr( SS ))
+            LOG.debug('deficit nodes: %s' % repr( TT ))
             if len( SS ) <= 0 or len( TT ) <= 0 : break
             
             s = SS[0] ; t = TT[0]
-            print('shall augment %s to %s' % ( repr(s), repr(t) ))
+            LOG.debug('shall augment %s to %s' % ( repr(s), repr(t) ))
             
             #print 'potentials: %s' % repr( potential )
             cert = { re : c for (re,c) in redcost.items() if re in rgraph.edges() }
@@ -290,7 +290,7 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
                 
                 raise e
                     
-            print('using path: %s' % repr( PATH ))
+            LOG.debug('using path: %s' % repr( PATH ))
             
             # augment Delta flow along the path P
             for e,dir in PATH :
@@ -310,11 +310,11 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
             
         # at end of each stage, verify the optimality certificate (should be empty every time)
         CERT = { re : c for (re,c) in redcost.items() if re in rgraph.edges() and c < 0. }
-        print('certificate, end stage TWO: %s' % repr( CERT ))
+        LOG.debug('certificate, end stage TWO: %s' % repr( CERT ))
         RELAXCERT = { re : c for (re,c) in redcost.items() if re in rgraph.edges() and c < -PHASE_ERROR }
         if len( RELAXCERT ) > 0 :
-            print(RELAXCERT)
-            print("STAGE TWO CERTIFICATE CORRUPT!")
+            LOG.debug(RELAXCERT)
+            LOG.debug("STAGE TWO CERTIFICATE CORRUPT!")
         assert len( RELAXCERT ) <= 0
                     
         # end the phase
@@ -406,16 +406,11 @@ if __name__ == '__main__' :
         return True
     
     flow = MinConvexCostFlow( g, u, supply, cf, epsilon=.001 )
-    print ( flow, FLOWCOST( flow, cf ), FEAS( flow, u, g ) )
+    LOG.debug ( flow, FLOWCOST( flow, cf ), FEAS( flow, u, g ) )
     
     flowstar = { 'b' : 10., 'd' : 10. }
-    print ( flowstar, FLOWCOST( flowstar, cf ), FEAS( flowstar, u, g ) )
+    LOG.debug ( flowstar, FLOWCOST( flowstar, cf ), FEAS( flowstar, u, g ) )
     
     
     digraph = mincostflow_nx( g, u, supply, c )
     compare = nx.min_cost_flow( digraph )
-    
-    
-    
-    
-    

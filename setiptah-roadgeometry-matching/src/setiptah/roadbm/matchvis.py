@@ -213,4 +213,4 @@ def SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax ) :
     # show T points in blue
     positions = [position(addr, roadmap, pos).tolist() for addr in T]
     X, Y = pointsToXY( positions )
-    ax.scatter( X, Y, color='b', zorder=ZPOINTS, marker='$\circ$', **options )
+    ax.scatter( X, Y, color='b', zorder=ZPOINTS, marker='$\\circ$', **options )
