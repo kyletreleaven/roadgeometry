@@ -7,6 +7,8 @@ from setiptah.basic_graph.mygraph import mygraph
 from setiptah.basic_graph.dijkstra import *
 from setiptah.roadbm import MultiDiGraphRoadnet
 
+import pytest
+
 
 def test_dijkstra():
     g = mygraph()
@@ -46,7 +48,8 @@ def test_dijkstra():
     )
 
 
-def test_metric():
+@pytest.fixture
+def square_roadnet():
 
     roadnet = nx.MultiDiGraph()
     if True:
@@ -63,7 +66,13 @@ def test_metric():
     if True:
         roadnet.add_edge(0, 4, 'dangler', length=1.)
 
-    roadnet, roadnet_graph = MultiDiGraphRoadnet(roadnet), roadnet
+    return MultiDiGraphRoadnet(roadnet)
+
+
+def test_metric(square_roadnet):
+    roadnet = square_roadnet
+    roadnet_graph = roadnet.graph
+
     # assert False, roadnet.nodes()
     # assert False, roadnet.node_data
 
