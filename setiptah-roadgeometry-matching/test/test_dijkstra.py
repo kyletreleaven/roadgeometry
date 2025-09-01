@@ -86,4 +86,4 @@ def test_metric(square_roadnet):
 
     # assert False, metric._upstream
     # assert False, metric.graph_shortest_path(2, 4)
-    assert False, metric.distance(("E", 1.), ("dangler", .5))
+    assert metric.distance(("E", 1.), ("dangler", .5)) == 2.5
