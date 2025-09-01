@@ -3,7 +3,7 @@
 TODO: _Not_ the permanent home of this protocol.
 
 """
-from typing import TypeVar, Generic, Protocol, Tuple
+from typing import TypeVar, Generic, Protocol
 from collections.abc import Collection
 
 
@@ -39,7 +39,7 @@ class Roadnet(Protocol[TRoad, TVert]):
     def is_oneway(self, road: TRoad) -> bool:
         """Get whether the road is one-way."""
 
-    class Point:
+    class Point(Protocol):
 
-        def __iter__(self) -> Tuple[TRoad, float]:
+        def __iter__(self) -> tuple[TRoad, float]:
             """Get the tuple of road and coordinate."""
