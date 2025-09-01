@@ -1,4 +1,5 @@
-from typing import Dict, TypeVar, Generic, Tuple, Iterable
+from typing import TypeVar, Generic
+from collections.abc import Iterable
 
 TV = TypeVar("TV")
 TE = TypeVar("TE")
@@ -15,9 +16,9 @@ class mygraph(Generic[TV, TE]):
     """
 
     def __init__(self) :
-        self.E: Dict[TE, Tuple[TV, TV]] = {}    # edge -> endpoints (directed)
-        self.V: Dict[TV, TE] = {}               # vertex -> out edges
-        self.W: Dict[TV, TE] = {}               # vertex -> in edges
+        self.E: dict[TE, tuple[TV, TV]] = {}    # edge -> endpoints (directed)
+        self.V: dict[TV, TE] = {}               # vertex -> out edges
+        self.W: dict[TV, TE] = {}               # vertex -> in edges
         
     def __repr__(self) :
         return '(V:%s, E:%s, W:%s)' % ( repr(self.V), repr(self.E), repr(self.W) )
@@ -64,5 +65,5 @@ class mygraph(Generic[TV, TE]):
     def has_edge(self, e: TE) -> bool:
         return e in self.E
         
-    def endpoints(self, e: TE) -> Tuple[TV, TV]:
+    def endpoints(self, e: TE) -> tuple[TV, TV]:
         return self.E[e]
