@@ -757,6 +757,20 @@ def INTERVALS( segment ) :      # very similar routine, used to build the walk g
     return res
 
 
+from ..basic_graph.dijkstra import RoadnetMetric
+
+
+@dataclass(frozen=True)
+class MatchingInstance:
+    P: tuple[Roadnet.Point, ...]
+    Q: tuple[Roadnet.Point, ...]
+    roadnet_metric: RoadnetMetric
+
+    def match_cost(self, match: tuple[int, int]) -> float:
+        i, j = match
+        return self.roadnet_metric.distance(self.P[i], self.Q[j])
+
+
 def MATCHCOSTS(matching: tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
     costs = []
     for i, j in matching:
