@@ -6,6 +6,7 @@ import networkx as nx
 from setiptah.basic_graph.mygraph import mygraph
 from setiptah.basic_graph.dijkstra import *
 from setiptah.roadbm import MultiDiGraphRoadnet
+from setiptah.basic_graph.graphs import RoadNetwork
 
 import pytest
 
@@ -92,3 +93,40 @@ def test_metric(square_roadnet):
 def test_embeddings(square_roadnet):
     metric = RoadnetMetric(square_roadnet)
     assert set(metric.embeddings(0)) == {("dangler", 0.), ("N", 0.), ("W", 1.)}
+
+
+def test_distances():
+
+    rn = RoadNetwork()
+
+    A, B = "AB"
+    rn.add_edge(A, 0, 1, 10.)
+    rn.add_edge(B, 2, 3, 10., oneway=True)
+
+    metric = RoadnetMetric(rn)
+
+    uA = A, 0.
+    vA = A, 10.
+    midA = A, 5.
+
+    assert metric.distance_on_road(uA, vA, A) == 10.
+    assert metric.distance_on_road(vA, uA, A) == 10.
+    assert metric.distance_on_road(uA, midA, A) == 5.
+
+    uB = B, 0.
+    vB = B, 10.
+    midB = B, 5.
+
+    assert metric.distance_on_road(uB, vB, B) == 10.
+    assert metric.distance_on_road(vB, uB, B) == np.inf
+    assert metric.distance_on_road(uB, midB, B) == 5.
+    assert metric.distance_on_road(midB, vB, B) == 5.
+    assert metric.distance_on_road(midB, uB, B) == np.inf
+
+    assert metric.distance_on_road(midA, midB, A) == np.inf
+
+    assert metric.distance_node_to_point(rn.endpoints(A)[0], uA) == 0
+    assert metric.distance_node_to_point(rn.endpoints(A)[1], uA) == 10.
+    assert metric.distance_node_to_point(rn.endpoints(B)[0], uB) == 0
+    assert metric.distance_node_to_point(rn.endpoints(B)[0], vB) == 10.
+    assert metric.distance_node_to_point(rn.endpoints(B)[1], uB) == np.inf
