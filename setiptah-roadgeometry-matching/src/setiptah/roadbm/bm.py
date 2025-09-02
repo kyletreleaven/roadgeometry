@@ -86,8 +86,12 @@ class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
 
 @dataclass(frozen=True)
 class StructRoadnet(Roadnet[int, int]):
-    """A network on road and vertex indices (integers)."""
-    roads: tuple[RoadInfo, ...]
+    """A network on road and vertex indices (integers).
+
+    TODO: Rename to do with "int array".
+
+    """
+    roads: tuple[RoadInfo[int], ...]
     n_vertices: int
 
     @classmethod
