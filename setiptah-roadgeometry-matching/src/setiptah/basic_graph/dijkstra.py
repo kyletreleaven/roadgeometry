@@ -72,6 +72,14 @@ class RoadnetMetric(Generic[TRoad, TVert]):
         for e in self.roadnet.in_edges(u):
             yield e, self.roadnet.length(e)
 
+    def embedding(self, u: TVert, road: TRoad) -> Point:
+        i, j = self.roadnet.endpoints(road)
+        if u == i:
+            return road, 0.
+        if u == j:
+            return road, self.roadnet.length(road)
+        raise ValueError(f"Node {u} not incident to road {road}.")
+
     def graph_shortest_path_length(self, source: SourceVertex, target: TargetVertex) -> float:
         self._ensure(source)
         return self._distance[source].get(target, np.inf)
