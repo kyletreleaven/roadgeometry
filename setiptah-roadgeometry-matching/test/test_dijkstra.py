@@ -130,3 +130,54 @@ def test_distances():
     assert metric.distance_node_to_point(rn.endpoints(B)[0], uB) == 0
     assert metric.distance_node_to_point(rn.endpoints(B)[0], vB) == 10.
     assert metric.distance_node_to_point(rn.endpoints(B)[1], uB) == np.inf
+
+
+def test_metric_node_distances():
+    rn = RoadNetwork()
+
+    rn.add_edge("N", 0, 1, 1., oneway=True)
+    rn.add_edge("E", 1, 2, 1.)
+    rn.add_edge("S", 2, 3, 1.)
+    rn.add_edge("W", 3, 0, 2.)
+    rn.add_edge("W_", 0, 3, 1., oneway=True)
+
+    rn.add_edge("D", 0, 4, 1.)
+
+    rn.add_edge("U", 5, 2, 1., oneway=True)
+
+    g = mygraph()
+    cost = {}
+
+    for u in rn.nodes():
+        g.add_node(u)
+
+    for e in rn.edges():
+        i, j = rn.endpoints(e)
+        L = rn.length(e)
+
+        e_ = e, "+"
+        g.add_edge(e_, i, j)
+        cost[e_] = L
+
+        if not rn.is_oneway(e):
+            e_ = e, "-"
+            g.add_edge(e_, j, i)
+            cost[e_] = L
+
+    dref = {
+        u: Dijkstra(g, cost, u)[0]
+        for u in rn.nodes()
+    }
+
+    metric = RoadnetMetric(rn)
+    for u in rn.nodes():
+        metric._populate_dijkstra(u)
+
+    # assert False, dref
+    assert metric._distance == dref
+
+    assert min(
+        metric.graph_shortest_path_length(u, 5)
+        for u in rn.nodes()
+        if u != 5
+    ) == np.inf
