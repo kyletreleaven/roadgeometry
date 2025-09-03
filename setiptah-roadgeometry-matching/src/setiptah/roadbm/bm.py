@@ -2,7 +2,6 @@
 
 """
 from collections import defaultdict
-from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cached_property
 from typing import NamedTuple
@@ -13,7 +12,10 @@ import numpy as np
 
 from setiptah.basic_graph.graphs import RoadInfo
 from setiptah.basic_graph.graphs import RoadNetwork
+from setiptah.basic_graph.mygraph import mygraph
 from setiptah.basic_graph.protocol import *
+from setiptah.nxopt.cvxcostflow import MinConvexCostFlow
+from ..basic_graph.dijkstra import RoadnetMetric
 
 T = TypeVar("T")
 
@@ -217,7 +219,7 @@ def optimal_roadnet_matching(P, Q, roadnet: Roadnet, **kwargs):
     imbalance = check_flow(assist, roadnet, surplus_dict)
     # Previously, this was active.
     # imbalance = []
-        
+
     try :
         assert len( imbalance ) <= 0
     except Exception as ex :
@@ -365,10 +367,6 @@ def MEASURE( segment, length, rbound=None ) :
 
 
 """ Phase II: Transformation/Solution/Verification """
-
-from setiptah.basic_graph.mygraph import mygraph
-from setiptah.nxopt.cvxcostflow import MinConvexCostFlow
-
 
 
 class costWrapper :
@@ -718,9 +716,6 @@ def INTERVALS( segment ) :      # very similar routine, used to build the walk g
         res[f].append( I )
         
     return res
-
-
-from ..basic_graph.dijkstra import RoadnetMetric
 
 
 @dataclass(frozen=True)
