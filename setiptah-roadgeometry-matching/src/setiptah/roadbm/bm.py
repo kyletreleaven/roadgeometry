@@ -23,6 +23,7 @@ Here only used to compute individual match costs, and total matching cost (which
 
 """
 
+from setiptah.basic_graph.graphs import RoadNetwork
 from setiptah.basic_graph.protocol import *
 
 T = TypeVar("T")
@@ -43,45 +44,18 @@ class _NodeData(Generic[TRoad, TVert]):
     in_edges: set[TRoad]
 
 
-class MultiDiGraphRoadnet(Roadnet[TRoad, TVert]):
+@dataclass
+class MultiDiGraphRoadnet(RoadNetwork[TVert, TRoad]):
+    graph: nx.MultiDiGraph
 
-    def __init__(self, graph: nx.MultiDiGraph):
-        self.graph = graph
+    def __post_init__(self):
+        super().__init__()
 
-        self.node_data = {
-            u: _NodeData(set(), set())
-            for u in graph.nodes
-        }
+        for i in self.graph.nodes:
+            self.add_node(i)
 
-        self.edge_data = {}
         for i, j, road, data in self.graph.edges(keys=True, data=True):
-            self.edge_data[road] = _EdgeData(
-                road, data["length"], i, j, data.get("oneway", False)
-            )
-            self.node_data[i].out_edges.add(road)
-            self.node_data[j].in_edges.add(road)
-
-    def edges(self):
-        return self.edge_data.keys()
-
-    def out_edges(self, u: TVert) -> Collection[TRoad]:
-        return self.node_data[u].out_edges
-
-    def in_edges(self, u: TVert) -> Collection[TRoad]:
-        return self.node_data[u].in_edges
-
-    def nodes(self) -> Iterable[TVert]:
-        return self.graph.nodes()
-
-    def length(self, road) -> float:
-        return self.edge_data[road].length
-
-    def endpoints(self, road: TRoad) -> tuple[TVert, TVert]:
-        data = self.edge_data[road]
-        return data.i, data.j
-
-    def is_oneway(self, road: TRoad) -> bool:
-        return self.edge_data[road].oneway
+            self.add_edge(road, i, j, data["length"], oneway=data.get("oneway", False))
 
 
 @dataclass(frozen=True)
