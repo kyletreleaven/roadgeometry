@@ -149,14 +149,16 @@ class RoadnetMetric(Generic[TRoad, TVert]):
         assert self.is_valid_point(p)
         road, x = p
 
+        options = [self.distance_on_road(p, q, road)]
+
         i, j = self.roadnet.endpoints(road)
         nodes = [i, j]
         points = [(road, 0.), (road, self.roadnet.length(road))]
 
-        options = [
+        options.extend(
             self.distance_on_road(p, p_, road) + self.distance_node_to_point(u, q)
             for u, p_ in zip(nodes, points)
-        ]
+        )
 
         return min(options)
 
