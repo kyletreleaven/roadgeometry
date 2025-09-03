@@ -12,17 +12,6 @@ import networkx as nx  # TODO: Migrate it out?
 import numpy as np
 
 from setiptah.basic_graph.graphs import RoadInfo
-
-""" my dependencies """
-import setiptah.roadgeometry.roadmap_basic as ROAD
-"""
-
-TODO: Migrate away?
-
-Here only used to compute individual match costs, and total matching cost (which we can compute directly from the flow).  
-
-"""
-
 from setiptah.basic_graph.graphs import RoadNetwork
 from setiptah.basic_graph.protocol import *
 
@@ -746,13 +735,12 @@ class MatchingInstance:
 
 
 def MATCHCOSTS(matching: tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
-    costs = []
-    for i, j in matching:
-        p = ROAD.RoadAddress( *P[i] )
-        q = ROAD.RoadAddress( *Q[j] )
-        d = ROAD.distance( roadnet, p, q, 'length' )
-        costs.append( d )
-    return costs
+    metric = RoadnetMetric(MultiDiGraphRoadnet(roadnet))
+    inst = MatchingInstance(P, Q, metric)
+    return [
+        inst.match_cost(match)
+        for match in matching
+    ]
 
 
 def ROADMATCHCOST( match, P, Q, roadnet ) :
