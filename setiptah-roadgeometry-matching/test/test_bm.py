@@ -75,25 +75,27 @@ def test_roadnet_matching():
     # assert False, match
 
     # Compare:
-    match = ROADSBIPARTITEMATCH(PP, QQ, roadnet)
+    # [x] cost computed during matching construction
+    match, cost_ctd = optimal_roadnet_matching2(PP, QQ, MultiDiGraphRoadnet(roadnet))
     assert len(match) == NUMPOINT
 
-    # 1. sum shortest path lengths,
+    # [x] sum shortest path lengths,
+    cost_sp = ROADMATCHCOST(match, PP, QQ, roadnet)
 
-    # costs = MATCHCOSTS(match, PP, QQ, roadnet)
-    cost = ROADMATCHCOST(match, PP, QQ, roadnet)
-
-    # 2. objective fn cost of flow,
+    # [x] objective fn cost of flow,
     obj_fn_dict = {
         road: OBJECTIVE_FUNC(measure)
         for road, measure in measure_dict.items()
     }  # write_objectives(PP, QQ, roadnet_frfr)
 
-    costs_ = flow_cost_per_road(assist, obj_fn_dict)
+    costs_obj = flow_cost_per_road(assist, obj_fn_dict)
+    cost_obj = sum(costs_obj.values())
 
-    # TODO: 3. cost computed during matching construction
+    # limit spread
+    costs = [cost_ctd, cost_sp, cost_obj]
+    costs_ = sorted(costs)
 
-    assert abs(cost - sum(costs_.values())) < 1e-7
+    assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
 
 
 def test_roadnet_matching_int():

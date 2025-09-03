@@ -197,6 +197,11 @@ def ROADSBIPARTITEMATCH( P, Q, roadnet_graph: nx.MultiDiGraph, **kwargs ) :
 
 
 def optimal_roadnet_matching(P, Q, roadnet: Roadnet, **kwargs):
+    matching, cost = optimal_roadnet_matching2(P, Q, roadnet, **kwargs)
+    return matching
+
+
+def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
     MATCH = []
 
     segment_dict = compute_segments( P, Q, roadnet )
@@ -232,14 +237,14 @@ def optimal_roadnet_matching(P, Q, roadnet: Roadnet, **kwargs):
     topograph = create_topograph(segment_dict, assist, roadnet)
     
     try :
-        match = TRAVERSE( topograph )
+        match, cost = TRAVERSE2(topograph)
     except Exception as ex :
         ex.assist = assist
         ex.topograph = topograph
         raise ex
     
     MATCH.extend( match )
-    return MATCH
+    return MATCH, cost
 
 
 """ ALGORITHM SUB-ROUTINES """
@@ -284,7 +289,7 @@ def SEGMENTS(P, Q, roadnet: nx.MultiDiGraph) -> dict[TRoad, OrderedPoints]:
     return compute_segments(P, Q, MultiDiGraphRoadnet(roadnet))
 
 
-def compute_segments(P, Q, roadnet: Roadnet[TRoad, TVert]) -> OrderedPoints:
+def compute_segments(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, OrderedPoints]:
     """
     returns:
     a dictionary whose keys are coordinates and whose values are local (P,Q) index queues
@@ -574,31 +579,31 @@ def TOPOGRAPH(
 def create_topograph(
         segment_dict, assist: dict[TRoad, float], roadnet: Roadnet
 ) -> nx.DiGraph:
+
     topograph = nx.DiGraph()
+
+    def add_edge(u, v, h, l):
+        if h > 0:
+            topograph.add_edge(u, v, weight=h, length=l)
+        if h < 0:
+            topograph.add_edge(v, u, weight=-h, length=l)
 
     special = dict()
     for u in roadnet.nodes():
-        # data = TwoQueues()
-        node = terminal(None)
-        special[u] = node
+        special[u] = terminal(None)
 
     for road in roadnet.edges():
         u, v = roadnet.endpoints(road)
-
         segment = segment_dict[road]
-        z = assist[road]
 
-        edges = EDGES(segment)
-        for f, intervals in edges.items():
-            h = f + z
-            for (ll, rr) in intervals:
-                if ll.q == '-': ll = special[u]
-                if rr.q == '+': rr = special[v]
-
-                if h > 0:
-                    topograph.add_edge(ll, rr, weight=h)
-                if h < 0:
-                    topograph.add_edge(rr, ll, weight=-h)
+        h = assist[road]
+        prev_node, prev_y = special[u], 0.
+        for curr_y, qs in segment.iter_items():
+            curr_node = terminal(qs)
+            add_edge(prev_node, curr_node, h, curr_y - prev_y)
+            h += len(qs.P) - len(qs.Q)
+            prev_node, prev_y = curr_node, curr_y
+        add_edge(prev_node, special[v], h, roadnet.length(road) - prev_y)
 
     return topograph
 
@@ -625,8 +630,14 @@ def CHECKTOPO( topograph ) :
     return [ u for u in topograph.nodes() if balance(u) != 0 ]
 
 
-def TRAVERSE( topograph ) :
-    match = []
+def TRAVERSE(topograph: nx.DiGraph):
+    matching, cost = TRAVERSE2(topograph)
+    return matching
+
+
+def TRAVERSE2(topograph: nx.DiGraph):
+    matching, cost = [], 0.
+
     nodes_ord = nx.topological_sort( topograph )
 
     LISTS = defaultdict(list)
@@ -643,14 +654,19 @@ def TRAVERSE( topograph ) :
             # dispatch points in T
             for j in queue.Q :
                 i = L.pop(0)
-                match.append( (i,j) )
-        
+                matching.append((i, j))
+
         for _,v, data in topograph.out_edges( u, data=True ) :
             w = data.get('weight')
-            prefix, L = L[:w], L[w:]
+
+            prefix, L = L[:w], L[w:]  # TODO: Replace with range queue.
+
             LISTS[v].extend( prefix )
+
+            l = data["length"]
+            cost += w * l
             
-    return match
+    return matching, cost
 
 
 
