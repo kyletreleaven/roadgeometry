@@ -204,7 +204,7 @@ def optimal_roadnet_matching(P, Q, roadnet: Roadnet, **kwargs):
 def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
     MATCH = []
 
-    segment_dict = compute_segments( P, Q, roadnet )
+    segment_dict = compute_segments2( P, Q, roadnet )
     surplus_dict = dict()
     measure_dict = dict()
     
@@ -286,6 +286,7 @@ respectively, at given coordinate.
 
 
 def SEGMENTS(P, Q, roadnet: nx.MultiDiGraph) -> dict[TRoad, OrderedPoints]:
+    # TODO: Return RBTree inner here?
     return compute_segments(P, Q, MultiDiGraphRoadnet(roadnet))
 
 
@@ -313,6 +314,45 @@ def compute_segments(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Ordere
     return segments
 
 
+def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, OrderedPoints]:
+    """
+
+    returns:
+    a dictionary whose keys are coordinates and whose values are local (P,Q) index queues
+
+    """
+    tree = bintrees.RBTree()
+
+    for i, p in enumerate(P):
+        key = tuple(p); _r, _y = key
+        queues = ensure_key(key, tree)
+        queues.P.append(i)
+
+    for j, q in enumerate(Q):
+        key = tuple(q); _r, _y = key
+        queues = ensure_key(key, tree)
+        queues.Q.append(j)
+
+    segments = {}
+    prev_road, segment = None, None
+    for key, qs in tree.iter_items():
+        road, y = key
+        if segment is None or road != prev_road:
+            assert road not in segments
+            assert road in roadnet.edges()
+
+            segments[road] = segment = []
+            # temporarily
+            # segments[road] = segment = bintrees.RBTree()
+
+            prev_road = road
+
+        segment.append((y, qs))
+        # segment[y] = qs
+
+    return segments
+
+
 def ONESEGMENT( S, T ) :
     roadnet = nx.MultiDiGraph()
     roadnet.add_edge(0,1, 'line' )
@@ -326,7 +366,7 @@ def ONESEGMENT( S, T ) :
     
 def PREMATCH( segment ) :
     match = []
-    for y, q in segment.iter_items() :
+    for y, q in segment:
         annih = min( len( q.P ), len( q.Q ) )
         for k in range( annih ) :
             i = q.P.pop(0)
@@ -337,11 +377,11 @@ def PREMATCH( segment ) :
 
 
 def SURPLUS(segment: OrderedPoints):
-    deltas = [ len( q.P ) - len( q.Q ) for y,q in segment.iter_items() ]
+    deltas = [len( q.P ) - len( q.Q ) for y,q in segment]
     return sum( deltas )
 
 
-def MEASURE( segment, length, rbound=None ) :
+def MEASURE(segment: "Segment", length: float, rbound=None):
     if rbound is not None :
         lbound = length
     else :
@@ -349,12 +389,15 @@ def MEASURE( segment, length, rbound=None ) :
         rbound = length
         
     # bintree instead of dict so that it is enumerated in sorted order
+    # TODO: No, replace with a double-ended vector.
     measure = bintrees.RBTree()
-    
-    posts = [ lbound ] + [ y for y,q in segment.iter_items() ] + [ rbound ]
+    posts, deltas = [lbound], [0]
+    for y, q in segment:
+        posts.append(y)
+        deltas.append(len(q.P) - len(q.Q))
+    posts.append(rbound)
+
     intervals = zip( posts[:-1], posts[1:] )
-    
-    deltas = [0] + [ len(q.P)-len(q.Q) for y,q in segment.iter_items() ]
     F = np.cumsum( deltas )
     
     for (a,b), f in zip( intervals, F ) :
@@ -569,15 +612,17 @@ def EDGES( segment ) :      # very similar routine, used to build the walk graph
 
 
 def TOPOGRAPH(
-        segment_dict, assist: dict[TRoad, float], roadnet: nx.MultiDiGraph
+        segment_dict: dict[TRoad, OrderedPoints], assist: dict[TRoad, float], roadnet: nx.MultiDiGraph
 ) -> nx.DiGraph:
     return create_topograph(
         segment_dict, assist, MultiDiGraphRoadnet(roadnet)
     )
 
 
+Segment = list[tuple[float, "TwoQueues"]]
+
 def create_topograph(
-        segment_dict, assist: dict[TRoad, float], roadnet: Roadnet
+        segment_dict: dict[TRoad, Segment], assist: dict[TRoad, float], roadnet: Roadnet
 ) -> nx.DiGraph:
 
     topograph = nx.DiGraph()
@@ -598,7 +643,7 @@ def create_topograph(
 
         h = assist[road]
         prev_node, prev_y = special[u], 0.
-        for curr_y, qs in segment.iter_items():
+        for curr_y, qs in segment:
             curr_node = terminal(qs)
             add_edge(prev_node, curr_node, h, curr_y - prev_y)
             h += len(qs.P) - len(qs.Q)

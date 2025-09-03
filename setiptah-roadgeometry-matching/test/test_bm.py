@@ -22,6 +22,7 @@ def test_roadnet_matching():
     if True:
         roadnet.add_edge(0, 4, 'dangler', length=1.)
 
+    roadnet_frfr = MultiDiGraphRoadnet(roadnet)
     sampler = roadprob.UniformDist(roadnet)
 
     NUMPOINT = 50
@@ -30,31 +31,33 @@ def test_roadnet_matching():
     QQ = [sampler.sample() for i in range(NUMPOINT)]
 
     segs = SEGMENTS(PP, QQ, roadnet)
+    segs_ = compute_segments2(PP, QQ, roadnet_frfr)
+    # assert False, segs_
 
     # prematch
     pm = set(
         m
         for road, seg in segs.items()
-        for m in PREMATCH(seg)
+        for m in PREMATCH(seg.iter_items())
     )
     # assert False, pm
 
     # surplus
     surplus_dict = {
-        road: SURPLUS(seg)
+        road: SURPLUS(seg.iter_items())
         for road, seg in segs.items()
     }
+    assert sum(surplus_dict.values()) == 0
     # assert False, surplus_dict
-
-    roadnet_frfr = MultiDiGraphRoadnet(roadnet)
 
     road_len = {
         road: roadnet_frfr.length(road)
         for road in segs
     }
+    # assert False, road_len
 
     measure_dict = {
-        road: MEASURE(seg, road_len[road])
+        road: MEASURE(seg.iter_items(), road_len[road])
         for road, seg in segs.items()
     }
     # assert False, measure_dict
@@ -65,7 +68,7 @@ def test_roadnet_matching():
     imbalance = CHECKFLOW(assist, roadnet, surplus_dict)
     assert len(imbalance) <= 0
 
-    topograph = TOPOGRAPH(segs, assist, roadnet)
+    topograph = create_topograph(segs_, assist, roadnet_frfr)
     # assert False, topograph.edges(data=True)
 
     nodes = list(nx.topological_sort( topograph ))
@@ -131,10 +134,17 @@ def test_roadnet_matching_int():
     assert inst.is_valid()
 
     PP, QQ = inst.P, inst.Q
-    matching = optimal_roadnet_matching(PP, QQ, roadnet)
+    matching, cost_constr = optimal_roadnet_matching2(PP, QQ, roadnet)
 
     # Compare their costs.
     cost_ = ROADMATCHCOST(matching_, PP_, QQ_, roadnet_graph_)
     roadnet_graph = roadnet.create_multigraph()
     cost = ROADMATCHCOST(matching, PP, QQ, roadnet_graph)
-    assert cost == cost_
+
+    within_tolerance([cost, cost_, cost_constr])
+    # assert False, cost_constr
+
+
+def within_tolerance(costs):
+    costs_ = sorted(costs)
+    assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
