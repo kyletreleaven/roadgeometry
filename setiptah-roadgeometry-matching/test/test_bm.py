@@ -1,4 +1,4 @@
-from setiptah.roadbm.bm import *
+from setiptah.roadbm import *
 
 import setiptah.roadgeometry.probability as roadprob
 
@@ -74,18 +74,24 @@ def test_roadnet_matching():
     match = TRAVERSE(topograph)
     # assert False, match
 
+    # Compare:
     match = ROADSBIPARTITEMATCH(PP, QQ, roadnet)
     assert len(match) == NUMPOINT
+
+    # 1. sum shortest path lengths,
 
     # costs = MATCHCOSTS(match, PP, QQ, roadnet)
     cost = ROADMATCHCOST(match, PP, QQ, roadnet)
 
+    # 2. objective fn cost of flow,
     obj_fn_dict = {
         road: OBJECTIVE_FUNC(measure)
         for road, measure in measure_dict.items()
     }  # write_objectives(PP, QQ, roadnet_frfr)
 
     costs_ = flow_cost_per_road(assist, obj_fn_dict)
+
+    # TODO: 3. cost computed during matching construction
 
     assert abs(cost - sum(costs_.values())) < 1e-7
 
@@ -122,7 +128,7 @@ def test_roadnet_matching_int():
     # assert False, roadnet
     assert inst.is_valid()
 
-    PP, QQ = inst.P, inst.Q  # TODO: Oops? It's not a roadnet, it's an instance...
+    PP, QQ = inst.P, inst.Q
     matching = optimal_roadnet_matching(PP, QQ, roadnet)
 
     # Compare their costs.

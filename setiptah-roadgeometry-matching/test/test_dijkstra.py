@@ -8,6 +8,8 @@ from setiptah.basic_graph.dijkstra import *
 from setiptah.roadbm import MultiDiGraphRoadnet
 from setiptah.basic_graph.graphs import RoadNetwork
 
+import setiptah.roadgeometry.roadmap_basic as ROAD
+
 import pytest
 
 
@@ -173,11 +175,59 @@ def test_metric_node_distances():
     for u in rn.nodes():
         metric._populate_dijkstra(u)
 
-    # assert False, dref
-    assert metric._distance == dref
-
     assert min(
         metric.graph_shortest_path_length(u, 5)
         for u in rn.nodes()
         if u != 5
     ) == np.inf
+
+    # compare to old distance metric
+    mg = create_multigraph(rn)
+
+    def embed(u):
+        for p in metric.embeddings(u):
+            return ROAD.RoadAddress(*p)
+
+    dref_ = {
+        u: {
+            v: ROAD.distance(mg, embed(u), embed(v), "length")
+            for v in rn.nodes()
+        }
+        for u in rn.nodes()
+    }
+
+    from setiptah.roadgeometry.astar_basic import astar_path_length
+
+    distances = [
+        metric.graph_shortest_path_length(0, 2),
+        dref[0][2],
+        # TODO: Debug!
+        # dref_[0][2],
+        # TODO: How do we integrate with astar in match cost?
+        # astar_path_length(mg, 0, 2, None, "length")
+    ]
+    assert len(set(distances)) == 1, distances
+
+    # assert False, dref
+    diff = {
+        (u, v)
+        for u in rn.nodes()
+        for v in rn.nodes()
+        if metric._distance[u].get(v, None) != dref_[u][v]
+    }
+    # assert not diff, diff
+    if True:
+        assert metric._distance == dref
+    else:
+        for u in rn.nodes():
+            assert metric._distance[u] == dref[u], u
+
+
+def create_multigraph(rn: Roadnet):
+    g = nx.MultiDiGraph()
+    g.add_nodes_from(rn.nodes())
+    for r in rn.edges():
+        i, j = rn.endpoints(r)
+        length, oneway = rn.length(r), rn.is_oneway(r)
+        g.add_edge(i, j, r, length=length, oneway=oneway)
+    return g
