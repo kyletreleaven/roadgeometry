@@ -729,7 +729,11 @@ class RoadPointSeq(Generic[TRoad]):
     def __len__(self):
         return self.end - self.start
 
-    def split(self, n: int):
+    def as_point(self):
+        assert len(self) == 1
+        return self.road, self.start
+
+    def split(self, n: int) -> tuple["RoadPointSeq", "RoadPointSeq"]:
         assert n <= len(self)
 
         if self.reverse:
@@ -760,7 +764,17 @@ class RoadPointSeq(Generic[TRoad]):
 
 PointSeqQ = deque[RoadPointSeq[TRoad]]
 
-def extend_points(point_seq: PointSeqQ[TRoad], points: RoadPointSeq[TRoad]):
+
+def num_points(rq: PointSeqQ):
+    return sum(len(r) for r in rq)
+
+
+def extend_points(ps: PointSeqQ[TRoad], qs: PointSeqQ[TRoad]):
+    for r in qs:
+        append_range(ps, r)
+
+
+def append_range(point_seq: PointSeqQ[TRoad], points: RoadPointSeq[TRoad]):
     if len(point_seq) > 0 and point_seq[-1].can_cat(points):
         point_seq[-1] = point_seq[-1].cat(points)
     else:
@@ -785,7 +799,7 @@ def take_points(point_seq: PointSeqQ[TRoad], n: int) -> PointSeqQ[TRoad]:
 
 def pop_point(point_seq: PointSeqQ[TRoad]) -> tuple[TRoad, int]:
     pseq, = take_points(point_seq, 1)
-    return (pseq.road, pseq.start)
+    return pseq.as_point()
 
 
 
@@ -809,6 +823,23 @@ class TwoQueues() :
         
     def __repr__(self) :
         return '<P:%s,Q:%s>' % ( repr(self.P), repr(self.Q) )
+
+
+def sort_points(P, Q):
+    tree = bintrees.RBTree()
+
+    for i, p in enumerate(P):
+        key = tuple(p); _r, _y = key
+        queues = ensure_key(key, tree)
+        queues.P.append(i)
+
+    for j, q in enumerate(Q):
+        key = tuple(q); _r, _y = key
+        queues = ensure_key(key, tree)
+        queues.Q.append(j)
+
+    return tree
+
 
 def ensure_key( key, tree ) :
     curr = tree.set_default( key )
