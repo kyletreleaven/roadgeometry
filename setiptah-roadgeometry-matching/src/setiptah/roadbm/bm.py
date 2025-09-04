@@ -5,7 +5,7 @@ import dataclasses
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from functools import cached_property
-from typing import NamedTuple
+from typing import NamedTuple, Optional, Callable
 
 import bintrees  # Migrate to `sortedcontainers`?
 import networkx as nx  # TODO: Migrate it out?
@@ -19,6 +19,7 @@ from setiptah.nxopt.cvxcostflow import MinConvexCostFlow
 from ..basic_graph.dijkstra import RoadnetMetric
 
 T = TypeVar("T")
+Factory = Callable[[], T]
 
 
 @dataclass(frozen=True)
@@ -304,13 +305,70 @@ def compute_segments(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Ordere
         r, y = p
         tree = segments[r]  # crash by design if r not in segments
         queues = ensure_key(y, tree)
-        queues.P.append(i)
+        queues.supply.append(i)
 
     for j, q in enumerate(Q):
         r, y = q
         tree = segments[r]
         queues = ensure_key(y, tree)
-        queues.Q.append(j)
+        queues.demand.append(j)
+
+    return segments
+
+
+@dataclass(frozen=True)
+class IndexRange:
+    start: int
+    end: int
+
+    def __post_init__(self):
+        assert self.start <= self.end
+
+    def __len__(self):
+        return self.end - self.start
+
+    def on_road(self, road: TRoad, reverse: bool = False):
+        return RoadPointSeq(road, self.start, self.end, reverse=reverse)
+
+
+@dataclass(frozen=True)
+class MySegment:
+    points: "BiPartite[list[int]]"
+    """List of integers (point indices) per side."""
+
+    events: list[tuple[float, "BiPartite[IndexRange]"]]
+    """List of events."""
+
+    @classmethod
+    def create(cls):
+        return cls(BiPartite.create_with(list), [])
+
+
+def compute_segments3(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, MySegment]:
+    segments = {}
+
+    tree = sort_points(P, Q)
+
+    prev_road, segment = None, None
+    for key, qs in tree.iter_items():
+        road, y = key
+        if segment is None or road != prev_road:
+            assert road not in segments
+            assert road in roadnet.edges()
+
+            segments[road] = segment = MySegment.create()
+
+            prev_road = road
+
+        ns = segment.points.map(len)
+        ii = BiPartite(
+            IndexRange(ns.supply, ns.supply + len(qs.supply)),
+            IndexRange(ns.demand, ns.demand + len(qs.demand)),
+        )
+        segment.events.append((y, ii))
+
+        segment.points.supply.extend(qs.supply)
+        segment.points.demand.extend(qs.demand)
 
     return segments
 
@@ -327,12 +385,12 @@ def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Order
     for i, p in enumerate(P):
         key = tuple(p); _r, _y = key
         queues = ensure_key(key, tree)
-        queues.P.append(i)
+        queues.supply.append(i)
 
     for j, q in enumerate(Q):
         key = tuple(q); _r, _y = key
         queues = ensure_key(key, tree)
-        queues.Q.append(j)
+        queues.demand.append(j)
 
     segments = {}
     prev_road, segment = None, None
@@ -368,17 +426,17 @@ def ONESEGMENT( S, T ) :
 def PREMATCH( segment ) :
     match = []
     for y, q in segment:
-        annih = min( len( q.P ), len( q.Q ) )
+        annih = min( len( q.supply ), len( q.demand ) )
         for k in range( annih ) :
-            i = q.P.pop(0)
-            j = q.Q.pop(0)
+            i = q.supply.pop(0)
+            j = q.demand.pop(0)
             match.append( (i,j) )
             
     return match
 
 
 def SURPLUS(segment: OrderedPoints):
-    deltas = [len( q.P ) - len( q.Q ) for y,q in segment]
+    deltas = [len( q.supply ) - len( q.demand ) for y,q in segment]
     return sum( deltas )
 
 
@@ -395,7 +453,7 @@ def MEASURE(segment: "Segment", length: float, rbound=None):
     posts, deltas = [lbound], [0]
     for y, q in segment:
         posts.append(y)
-        deltas.append(len(q.P) - len(q.Q))
+        deltas.append(len(q.supply) - len(q.demand))
     posts.append(rbound)
 
     intervals = zip( posts[:-1], posts[1:] )
@@ -602,7 +660,7 @@ def EDGES( segment ) :      # very similar routine, used to build the walk graph
     posts = [ terminal(q) for q in posts ]
     intervals = zip( posts[:-1], posts[1:] )
     
-    deltas = [0] + [ len(q.P)-len(q.Q) for y,q in segment.iter_items() ]
+    deltas = [0] + [ len(q.supply)-len(q.demand) for y,q in segment.iter_items() ]
     F = np.cumsum( deltas )
     
     for I, f in zip( intervals, F ) :
@@ -620,7 +678,41 @@ def TOPOGRAPH(
     )
 
 
-Segment = list[tuple[float, "TwoQueues"]]
+Segment = list[tuple[float, "BiPartite[list[int]]"]]
+
+def create_topograph2(
+        segment_dict: dict[TRoad, MySegment], assist: dict[TRoad, float], roadnet: Roadnet
+) -> nx.DiGraph:
+
+    topograph = nx.DiGraph()
+
+    def add_edge(u, v, h, l, r):
+        if h > 0:
+            topograph.add_edge(u, v, weight=h, length=l, road=r, reverse=False)
+        if h < 0:
+            topograph.add_edge(v, u, weight=-h, length=l, road=r, reverse=True)
+
+    special = dict()
+    for u in roadnet.nodes():
+        special[u] = terminal(None)
+
+    for road in roadnet.edges():
+        u, v = roadnet.endpoints(road)
+
+        # TODO: Copy to prevent consumption?
+        events = segment_dict[road].events
+
+        h = assist[road]
+        prev_node, prev_y = special[u], 0.
+        for curr_y, contents in events:
+            curr_node = terminal(contents)
+            add_edge(prev_node, curr_node, h, curr_y - prev_y, road)
+            h += len(contents.supply) - len(contents.demand)
+            prev_node, prev_y = curr_node, curr_y
+        add_edge(prev_node, special[v], h, roadnet.length(road) - prev_y, road)
+
+    return topograph
+
 
 def create_topograph(
         segment_dict: dict[TRoad, Segment], assist: dict[TRoad, float], roadnet: Roadnet
@@ -647,7 +739,7 @@ def create_topograph(
         for curr_y, qs in segment:
             curr_node = terminal(qs)
             add_edge(prev_node, curr_node, h, curr_y - prev_y)
-            h += len(qs.P) - len(qs.Q)
+            h += len(qs.supply) - len(qs.demand)
             prev_node, prev_y = curr_node, curr_y
         add_edge(prev_node, special[v], h, roadnet.length(road) - prev_y)
 
@@ -661,7 +753,7 @@ def CHECKTOPO( topograph ) :
         if q is None :
             b = 0
         else :
-            b = len( q.P ) - len( q.Q )
+            b = len( q.supply ) - len( q.demand )
             
         # plus input
         for e in topograph.in_edges( u ) :
@@ -684,7 +776,7 @@ def TRAVERSE(topograph: nx.DiGraph):
 def TRAVERSE2(topograph: nx.DiGraph):
     matching, cost = [], 0.
 
-    nodes_ord = nx.topological_sort( topograph )
+    nodes_ord = nx.topological_sort(topograph)
 
     LISTS = defaultdict(list)
 
@@ -693,27 +785,93 @@ def TRAVERSE2(topograph: nx.DiGraph):
         LISTS.pop(u)  # not needed anymore
 
         queue = u.q
-        if queue is not None :
+        if queue is not None:
             # collect points from S
-            L.extend( queue.P )
-            
+            L.extend(queue.supply)
+
             # dispatch points in T
-            for j in queue.Q :
+            for j in queue.demand:
                 i = L.pop(0)
                 matching.append((i, j))
 
-        for _,v, data in topograph.out_edges( u, data=True ) :
+        for _, v, data in topograph.out_edges(u, data=True):
             w = data.get('weight')
 
             prefix, L = L[:w], L[w:]  # TODO: Replace with range queue.
 
-            LISTS[v].extend( prefix )
+            LISTS[v].extend(prefix)
 
             l = data["length"]
             cost += w * l
-            
+
     return matching, cost
 
+
+def TRAVERSE3(topograph: nx.DiGraph):
+    matching, cost = [], 0.
+
+    nodes_ord = nx.topological_sort( topograph )
+
+    node_imports: dict[TVert, PointSeqQ[TRoad]] = defaultdict(deque)
+
+    for u in nodes_ord:
+        urq = node_imports[u]
+        ulocal: Optional[BiPartite[IndexRange]] = u.q
+
+        for _, v, data in topograph.out_edges(u, data=True):
+            road, reverse = data["road"], data["reverse"]
+            l, w = data["length"], data["weight"]
+
+            cost += w * l  # count our chickens
+
+            vrq = node_imports[v]
+            vlocal: Optional[BiPartite[IndexRange]] = v.q
+
+            # Send order: local RQ, local supply
+            # Target order: dest demand, dest RQ
+
+            # Promote local supply as needed. There _must_ be `w` available for edge.
+            w_ = num_points(urq)
+            if w_ < w:
+                promote, rem = ulocal.supply.on_road(road, reverse=reverse).split(w - w_)
+                append_range(urq, promote)
+                ulocal.supply = IndexRange(rem.start, rem.end)
+
+            sending = take_points(urq, w)
+
+            # Distribute...
+
+            # Match with demand at destination first.
+            n_local_demand = (len(vlocal.demand) if vlocal is not None else 0)
+            w_ = min(n_local_demand, w)
+            for _ in range(w_):
+                p = pop_point(sending)
+                q_, rem = vlocal.demand.on_road(road, reverse=reverse).split(1)
+                matching.append((p, q_.as_point()))
+                vlocal.demand = IndexRange(rem.start, rem.end)
+
+            # Remainder to destination RQ.
+            extend_points(vrq, sending)
+
+    # Finally, match local demand: from RQ first, then local supply.
+    demand, ulocal.demand = ulocal.demand, None
+    while len(urq) > 0:
+        p = pop_point(urq)
+        q_, rem = demand.on_road(road, reverse=reverse).split(1)
+        demand = IndexRange(rem.start, rem.end)
+        matching.append((p, q_.as_point()))
+
+    supply, ulocal.supply = ulocal.supply, None
+    while len(supply) > 0:
+        p_, rem = supply.on_road(road, reverse=reverse).split(1)
+        supply = IndexRange(rem.start, rem.end)
+
+        q_, rem = demand.on_road(road, reverse=reverse).split(1)
+        demand = IndexRange(rem.start, rem.end)
+
+        matching.append((p_.as_point(), q_.as_point()))
+
+    return matching, cost
 
 
 @dataclass(frozen=True)
@@ -816,13 +974,29 @@ def ensure_road( road, data ) :
     if curr is None : data[road] = bintrees.RBTree()
     return data[road]
 
-class TwoQueues() :
-    def __init__(self) :
-        self.P = []
-        self.Q = []
-        
+
+@dataclass
+class BiPartite(Generic[T]):
+    supply: T
+    demand: T
+
     def __repr__(self) :
-        return '<P:%s,Q:%s>' % ( repr(self.P), repr(self.Q) )
+        return f"<S:{self.supply},D:{self.demand}>"
+
+    @classmethod
+    def create_with(cls, factory: Factory[T]):
+        return cls(factory(), factory())
+
+    @classmethod
+    def factory(cls, factory: Factory[T]) -> Factory["BiPartite[T]"]:
+
+        def fn():
+            return cls.create_with(factory)
+
+        return fn
+
+    def map(self, fn):
+        return self.__class__(fn(self.supply), fn(self.demand))
 
 
 def sort_points(P, Q):
@@ -831,19 +1005,19 @@ def sort_points(P, Q):
     for i, p in enumerate(P):
         key = tuple(p); _r, _y = key
         queues = ensure_key(key, tree)
-        queues.P.append(i)
+        queues.supply.append(i)
 
     for j, q in enumerate(Q):
         key = tuple(q); _r, _y = key
         queues = ensure_key(key, tree)
-        queues.Q.append(j)
+        queues.demand.append(j)
 
     return tree
 
 
 def ensure_key( key, tree ) :
     curr = tree.set_default( key )
-    if curr is None : tree[key] = TwoQueues()
+    if curr is None : tree[key] = BiPartite.create_with(list)
     return tree[key]
 
 class LineData :
@@ -872,7 +1046,7 @@ def INTERVALS( segment ) :      # very similar routine, used to build the walk g
     posts = [ '-' ] + [ y for y,q in segment.iter_items() ] + [ '+' ]
     intervals = zip( posts[:-1], posts[1:] )
     
-    deltas = [0] + [ len(q.P)-len(q.Q) for y,q in segment.iter_items() ]
+    deltas = [0] + [ len(q.supply)-len(q.demand) for y,q in segment.iter_items() ]
     F = np.cumsum( deltas )
     
     for I, f in zip( intervals, F ) :

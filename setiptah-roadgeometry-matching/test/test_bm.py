@@ -1,8 +1,7 @@
-from setiptah.roadbm import *
+import networkx as nx
 
 import setiptah.roadgeometry.probability as roadprob
-
-import networkx as nx
+from setiptah.roadbm import *
 
 
 def test_roadnet_matching():
@@ -31,7 +30,7 @@ def test_roadnet_matching():
     QQ = [sampler.sample() for i in range(NUMPOINT)]
 
     segs = SEGMENTS(PP, QQ, roadnet)
-    segs_ = compute_segments2(PP, QQ, roadnet_frfr)
+    segs_: dict[TRoad, MySegment] = compute_segments3(PP, QQ, roadnet_frfr)
     # assert False, segs_
 
     # prematch
@@ -68,19 +67,30 @@ def test_roadnet_matching():
     imbalance = CHECKFLOW(assist, roadnet, surplus_dict)
     assert len(imbalance) <= 0
 
-    topograph = create_topograph(segs_, assist, roadnet_frfr)
+    topograph = create_topograph2(segs_, assist, roadnet_frfr)
     # assert False, topograph.edges(data=True)
 
     nodes = list(nx.topological_sort( topograph ))
     # assert False, (len(nodes), nodes)
 
-    match = TRAVERSE(topograph)
-    # assert False, match
+    match_ref, cost_ctd_ = TRAVERSE3(topograph)
+    # assert False, match_ref
+    match_ = [
+        (segs_[road1].points.supply[i1], segs_[road2].points.demand[i2])
+        for (road1, i1), (road2, i2) in match_ref
+    ]
+    # assert False, match_
+    cost_sp_ = ROADMATCHCOST(match_, PP, QQ, roadnet)
 
     # Compare:
     # [x] cost computed during matching construction
     match, cost_ctd = optimal_roadnet_matching2(PP, QQ, MultiDiGraphRoadnet(roadnet))
     assert len(match) == NUMPOINT
+
+    assert True, (
+        (cost_ctd_, cost_ctd),
+        (match, match_),
+    )
 
     # [x] sum shortest path lengths,
     cost_sp = ROADMATCHCOST(match, PP, QQ, roadnet)
@@ -95,7 +105,7 @@ def test_roadnet_matching():
     cost_obj = sum(costs_obj.values())
 
     # limit spread
-    costs = [cost_ctd, cost_sp, cost_obj]
+    costs = [cost_ctd, cost_sp, cost_obj, cost_ctd_, cost_sp_]
     costs_ = sorted(costs)
 
     assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
@@ -150,6 +160,24 @@ def within_tolerance(costs):
     assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
 
 
+class TestBiPartite:
+
+    def test_construction(self):
+
+        bp = BiPartite.create_with(list)
+        bp.supply.extend(range(10))
+        assert bp.supply == list(range(10))
+        assert bp.demand == []
+
+    def test_factory(self):
+
+        f = BiPartite.factory(int)
+        bp = f()
+        bp.supply += 4
+        assert bp.supply == 4
+        assert bp.demand == 0
+
+
 class TestRoadPointSeq:
 
     def test_cat(self):
@@ -186,13 +214,17 @@ class TestRoadPointSeq:
     def test_deque_ops(self):
 
         q = deque()
-        extend_points(q, RoadPointSeq("A", 0, 4))
-        extend_points(q, RoadPointSeq("A", 4, 7))
-        extend_points(q, RoadPointSeq("A", 8, 10))  # skip one
+        append_range(q, RoadPointSeq("A", 0, 4))
+        extend_points(q, [
+            RoadPointSeq("A", 4, 7),
+            RoadPointSeq("A", 8, 10)  # skip one
+        ])
 
-        extend_points(q, RoadPointSeq("B", 5, 8, reverse=True))
-        extend_points(q, RoadPointSeq("B", 3, 5, reverse=True))
-        extend_points(q, RoadPointSeq("B", 0, 2, reverse=True))
+        extend_points(q, [
+            RoadPointSeq("B", 5, 8, reverse=True),
+            RoadPointSeq("B", 3, 5, reverse=True),
+            RoadPointSeq("B", 0, 2, reverse=True)
+        ])
 
         assert list(q) == [
             RoadPointSeq("A", 0, 7),

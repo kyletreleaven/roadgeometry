@@ -86,8 +86,10 @@ def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
         def traverse() :
             yield 0., VERTEX, u     # location, type, label
             for y, queue in segments[road].iter_items() :
-                for s in queue.P : yield y, POINT_IN_S, s
-                for t in queue.Q : yield y, POINT_IN_T, t
+                for s in queue.supply:
+                    yield y, POINT_IN_S, s
+                for t in queue.demand:
+                    yield y, POINT_IN_T, t
             yield width, VERTEX, v
             
         ITER = traverse()
@@ -137,8 +139,10 @@ def SHOWMATCH( match, S, T, roadmap, pos, length_attr='length', ax=None,
         def traverse() :
             yield 0., VERTEX, u     # location, type, label
             for y, queue in segments[road].iter_items() :
-                for s in queue.P : yield y, POINT_IN_S, s
-                for t in queue.Q : yield y, POINT_IN_T, t
+                for s in queue.supply:
+                    yield y, POINT_IN_S, s
+                for t in queue.demand:
+                    yield y, POINT_IN_T, t
             yield width, VERTEX, v
             
         ITER = traverse()
