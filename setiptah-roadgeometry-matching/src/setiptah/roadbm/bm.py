@@ -5,7 +5,7 @@ import dataclasses
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from functools import cached_property
-from typing import NamedTuple, Optional, Callable
+from typing import NamedTuple, Optional, Callable, Sized
 
 import bintrees  # Migrate to `sortedcontainers`?
 import networkx as nx  # TODO: Migrate it out?
@@ -178,6 +178,11 @@ class StructRoadnetMatchingInstance:
 
 
 def optimal_roadnet_matching(P, Q, roadnet: Roadnet, **kwargs):
+    """
+
+    TODO: Do we need this?
+
+    """
     matching, cost = optimal_roadnet_matching2(P, Q, roadnet, **kwargs)
     return matching
 
@@ -201,7 +206,7 @@ def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
 
     assist = compute_optimal_flow(roadnet, surplus_dict, measure_dict)
 
-    # TODO: Is this needed, e.g., to check feasibility?
+    # TODO: Create unit test to detect infeasibility...
     imbalance = check_flow(assist, roadnet, surplus_dict)
     # Previously, this was active.
     # imbalance = []
@@ -234,6 +239,8 @@ def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
 
 """ Phase I: Transcription """
 
+Segment = list[tuple[float, "BiPartite[list[int]]"]]
+
 
 @dataclass(frozen=True)
 class IndexRange:
@@ -256,7 +263,11 @@ class MySegment:
     """List of integers (point indices) per side."""
 
     events: list[tuple[float, "BiPartite[IndexRange]"]]
-    """List of events."""
+    """List of events.
+    
+    TODO: Is it better to separate these?
+    
+    """
 
     @classmethod
     def create(cls):
@@ -331,7 +342,7 @@ def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Order
     return segments
 
     
-def PREMATCH( segment ) :
+def PREMATCH(segment: Segment) -> list[tuple[int, int]]:
     match = []
     for y, q in segment:
         annih = min( len( q.supply ), len( q.demand ) )
@@ -343,7 +354,7 @@ def PREMATCH( segment ) :
     return match
 
 
-def SURPLUS(segment: OrderedPoints):
+def SURPLUS(segment: "BiPartite[Sized]") -> int:
     deltas = [len( q.supply ) - len( q.demand ) for y,q in segment]
     return sum( deltas )
 
@@ -354,9 +365,10 @@ def MEASURE(segment: "Segment", length: float, rbound=None):
     else :
         lbound = 0.
         rbound = length
-        
+
     # bintree instead of dict so that it is enumerated in sorted order
     # TODO: No, replace with a double-ended vector.
+
     measure = bintrees.RBTree()
     posts, deltas = [lbound], [0]
     for y, q in segment:
@@ -565,8 +577,6 @@ def EDGES( segment ) :      # very similar routine, used to build the walk graph
     return edges
 
 
-Segment = list[tuple[float, "BiPartite[list[int]]"]]
-
 def create_topograph2(
         segment_dict: dict[TRoad, MySegment], assist: dict[TRoad, float], roadnet: Roadnet
 ) -> nx.DiGraph:
@@ -655,12 +665,15 @@ def CHECKTOPO( topograph ) :
     return [ u for u in topograph.nodes() if balance(u) != 0 ]
 
 
-def TRAVERSE(topograph: nx.DiGraph):
-    matching, cost = TRAVERSE2(topograph)
-    return matching
-
-
 def TRAVERSE2(topograph: nx.DiGraph):
+    """
+
+    This version of graph traversal passes lists around,
+    and so does _not_ have O(1) push/pop.
+
+    It is, however, conceptually much simpler.
+
+    """
     matching, cost = [], 0.
 
     nodes_ord = nx.topological_sort(topograph)
@@ -684,7 +697,7 @@ def TRAVERSE2(topograph: nx.DiGraph):
         for _, v, data in topograph.out_edges(u, data=True):
             w = data.get('weight')
 
-            prefix, L = L[:w], L[w:]  # TODO: Replace with range queue.
+            prefix, L = L[:w], L[w:]
 
             LISTS[v].extend(prefix)
 
@@ -695,6 +708,16 @@ def TRAVERSE2(topograph: nx.DiGraph):
 
 
 def TRAVERSE3(topograph: nx.DiGraph):
+    """
+
+    This version of graph traversal passes around "index range queues".
+
+    An index range queue can represent certain collections of points
+    (i.e., a collection of either supply or demand points
+    having contiguous indices on a given road)
+    in O(1) space for O(1) push/pop operations per range in the queue.
+
+    """
     matching, cost = [], 0.
 
     nodes_ord = nx.topological_sort( topograph )

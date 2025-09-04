@@ -61,7 +61,7 @@ def BIPARTITEMATCH_ROADS_CONGESTED( S, T, roadmap, congestion_dict ) :
  
     # will need a more informative TRAVERSE method    
     try :
-        match = roadbm.TRAVERSE( topograph )
+        match, _cost = roadbm.TRAVERSE2( topograph )
     except Exception as ex :
         ex.assist = assist
         ex.topograph = topograph
