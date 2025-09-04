@@ -303,24 +303,14 @@ def compute_segments3(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, MySeg
     return segments
 
 
-def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, OrderedPoints]:
+def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segment]:
     """
 
-    returns:
-    a dictionary whose keys are coordinates and whose values are local (P,Q) index queues
+    Returns:
+        a dictionary of segment data structures for each road
 
     """
-    tree = bintrees.RBTree()
-
-    for i, p in enumerate(P):
-        key = tuple(p); _r, _y = key
-        queues = ensure_key(key, tree)
-        queues.supply.append(i)
-
-    for j, q in enumerate(Q):
-        key = tuple(q); _r, _y = key
-        queues = ensure_key(key, tree)
-        queues.demand.append(j)
+    tree = sort_points(P, Q)
 
     segments = {}
     prev_road, segment = None, None
@@ -331,13 +321,10 @@ def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Order
             assert road in roadnet.edges()
 
             segments[road] = segment = []
-            # temporarily
-            # segments[road] = segment = bintrees.RBTree()
 
             prev_road = road
 
         segment.append((y, qs))
-        # segment[y] = qs
 
     return segments
 
