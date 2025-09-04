@@ -716,6 +716,77 @@ def TRAVERSE2(topograph: nx.DiGraph):
 
 
 
+@dataclass(frozen=True)
+class RoadPointSeq(Generic[TRoad]):
+    road: TRoad
+    start: int
+    end: int
+    reverse: bool = False
+
+    def __post_init__(self):
+        assert self.start <= self.end
+
+    def __len__(self):
+        return self.end - self.start
+
+    def split(self, n: int):
+        assert n <= len(self)
+
+        if self.reverse:
+            rem = dataclasses.replace(self, end=self.end - n)
+            taken = dataclasses.replace(self, start=self.end - n)
+        else:
+            taken = dataclasses.replace(self, end=self.start + n)
+            rem = dataclasses.replace(self, start=self.start + n)
+
+        return taken, rem
+
+    def can_cat(self, other: "RoadPointSeq[TRoad]") -> bool:
+        if other.road != self.road:
+            return False
+
+        if self.reverse:
+            return other.reverse and other.end == self.start
+        else:
+            return not other.reverse and other.start == self.end
+
+    def cat(self, other):
+        assert self.can_cat(other)
+        if self.reverse:
+            return dataclasses.replace(self, start=other.start)
+        else:
+            return dataclasses.replace(self, end=other.end)
+
+
+PointSeqQ = deque[RoadPointSeq[TRoad]]
+
+def extend_points(point_seq: PointSeqQ[TRoad], points: RoadPointSeq[TRoad]):
+    if len(point_seq) > 0 and point_seq[-1].can_cat(points):
+        point_seq[-1] = point_seq[-1].cat(points)
+    else:
+        point_seq.append(points)
+
+
+def take_points(point_seq: PointSeqQ[TRoad], n: int) -> PointSeqQ[TRoad]:
+    assert n <= sum(len(r) for r in point_seq)
+
+    out = deque()
+    while n > 0:
+        front = point_seq.popleft()
+        n_ = min(n, len(front))
+        taken, rem = front.split(n_)
+        out.append(taken)
+        if len(rem) > 0:
+            point_seq.appendleft(rem)  # TODO: Optimize?
+        n -= n_
+
+    return out
+
+
+def pop_point(point_seq: PointSeqQ[TRoad]) -> tuple[TRoad, int]:
+    pseq, = take_points(point_seq, 1)
+    return (pseq.road, pseq.start)
+
 
 
 
@@ -810,54 +881,3 @@ def flow_cost_per_road(flow: dict[TRoad, float], obj_dict):
         road: obj_dict[road](x)
         for road, x in flow.items()
     }
-
-
-@dataclass
-class RoadPointSeq(Generic[TRoad]):
-    road: TRoad
-    start: int
-    end: int
-
-    def __post_init__(self):
-        assert self.start <= self.end
-
-    @classmethod
-    def empty(cls, road: TRoad):
-        return cls(road, 0, 0)
-
-    def __len__(self):
-        return self.end - self.start
-
-    def grow(self, n: int = 1):
-        self.end += n
-
-    def take(self, n: int):
-        assert n <= len(self)
-        result = dataclasses.replace(self, end=self.start + n)
-        self.start += n
-        return result
-
-
-def add_points(point_seq: deque[RoadPointSeq[TRoad]], road: TRoad, n: int):
-    if len(point_seq) > 0:
-        last = point_seq[-1]
-        if last.road == road:
-            last.grow(n)
-            return
-
-    point_seq.append(RoadPointSeq(road, 0, n))
-
-
-def take_points(point_seq: deque[RoadPointSeq[TRoad]], n: int):
-    assert n <= sum(len(r) for r in point_seq)
-
-    out = deque()
-    while n > 0:
-        front = point_seq[0]
-        n_ = min(n, len(front))
-        out.append(front.take(n_))
-        if len(front) <= 0:
-            point_seq.popleft()
-        n -= n_
-
-    return out

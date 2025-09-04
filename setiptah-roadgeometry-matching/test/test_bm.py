@@ -152,31 +152,67 @@ def within_tolerance(costs):
 
 class TestRoadPointSeq:
 
-    def test_split(self):
+    def test_cat(self):
 
-        seq = RoadPointSeq.empty("road")
-        assert len(seq) == 0
+        a = RoadPointSeq("A", 2, 10)
+        a, b = a.split(4)
+        b, c = b.split(2)
 
-        seq.grow()
-        assert len(seq) == 1
+        assert a == RoadPointSeq("A", 2, 6)
+        assert b == RoadPointSeq("A", 6, 8)
+        assert c == RoadPointSeq("A", 8, 10)
 
-        seq.grow(10)
-        assert len(seq) == 11
+        assert a.can_cat(b)
+        assert not a.can_cat(c)
+        assert b.can_cat(c)
 
-        left = seq.take(4)
-        assert left == RoadPointSeq("road", 0, 4)
-        assert seq == RoadPointSeq("road", 4, 11)
+        assert a.cat(b) == RoadPointSeq("A", 2, 8)
+        assert b.cat(c) == RoadPointSeq("A", 6, 10)
 
-    def test_add_points(self):
+        d = RoadPointSeq("B", 0, 7, reverse=True)
+        d, e = d.split(3)
+        e, f = e.split(2)
+
+        assert d == RoadPointSeq("B", 4, 7, reverse=True)
+        assert e == RoadPointSeq("B", 2, 4, reverse=True)
+        assert f == RoadPointSeq("B", 0, 2, reverse=True)
+
+        assert d.can_cat(e)
+        assert d.cat(e) == RoadPointSeq("B", 2, 7, reverse=True)
+        assert not d.can_cat(f)
+
+        assert not RoadPointSeq("A", 0, 4).can_cat(RoadPointSeq("B", 4, 6))
+
+    def test_deque_ops(self):
+
         q = deque()
-        add_points(q, "A", 2)
-        add_points(q, "A", 3)
+        extend_points(q, RoadPointSeq("A", 0, 4))
+        extend_points(q, RoadPointSeq("A", 4, 7))
+        extend_points(q, RoadPointSeq("A", 8, 10))  # skip one
 
-        t1 = take_points(q, 4)
+        extend_points(q, RoadPointSeq("B", 5, 8, reverse=True))
+        extend_points(q, RoadPointSeq("B", 3, 5, reverse=True))
+        extend_points(q, RoadPointSeq("B", 0, 2, reverse=True))
 
-        add_points(q, "B", 7)
-        t2 = take_points(q, 3)
+        assert list(q) == [
+            RoadPointSeq("A", 0, 7),
+            RoadPointSeq("A", 8, 10),
+            RoadPointSeq("B", 3, 8, reverse=True),
+            RoadPointSeq("B", 0, 2, reverse=True),
+        ]
 
-        assert list(t1) == [RoadPointSeq("A", 0, 4)]
-        assert list(t2) == [RoadPointSeq("A", 4, 5),  RoadPointSeq("B", 0, 2)]
-        assert list(q) == [RoadPointSeq("B", 2, 7)]
+        q1 = take_points(q, 12)
+
+        assert list(q1) == [
+            RoadPointSeq("A", 0, 7),
+            RoadPointSeq("A", 8, 10),
+            RoadPointSeq("B", 5, 8, reverse=True),
+        ]
+
+        assert list(q) == [
+            RoadPointSeq("B", 3, 5, reverse=True),
+            RoadPointSeq("B", 0, 2, reverse=True),
+        ]
+
+        p = pop_point(q)
+        assert p == ("B", 4)
