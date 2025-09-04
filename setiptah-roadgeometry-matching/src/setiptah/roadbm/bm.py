@@ -303,6 +303,23 @@ def compute_segments3(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, MySeg
     return segments
 
 
+def create_point_map(segment_dict: dict[TRoad, Segment]) -> dict[TRoad, MySegment]:
+    out = {}
+    for road, seg_in in segment_dict.items():
+        out[road] = seg_out = MySegment.create()
+        for y, qs in seg_in:
+            ns = seg_out.points.map(len)
+            ii = BiPartite(
+                IndexRange(ns.supply, ns.supply + len(qs.supply)),
+                IndexRange(ns.demand, ns.demand + len(qs.demand)),
+            )
+            seg_out.events.append((y, ii))
+            seg_out.points.supply.extend(qs.supply)
+            seg_out.points.demand.extend(qs.demand)
+
+    return out
+
+
 def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segment]:
     """
 

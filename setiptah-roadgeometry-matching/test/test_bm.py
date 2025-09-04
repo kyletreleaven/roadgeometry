@@ -249,3 +249,27 @@ class TestRoadPointSeq:
 
         p = pop_point(q)
         assert p == ("B", 4)
+
+
+def test_create_point_map():
+
+    roadnet = nx.MultiDiGraph()
+    roadnet.add_edge(0, 1, 'N', length=1.)
+    roadnet.add_edge(1, 2, 'E', length=1.)
+    roadnet.add_edge(2, 3, 'S', length=1.)
+    roadnet.add_edge(3, 0, 'W', length=1.)
+    roadnet.add_edge(0, 4, 'dangler', length=1.)
+
+    roadnet_frfr = MultiDiGraphRoadnet(roadnet)
+    sampler = roadprob.UniformDist(roadnet)
+
+    NUMPOINT = 50
+
+    PP = [sampler.sample() for i in range(NUMPOINT)]
+    QQ = [sampler.sample() for i in range(NUMPOINT)]
+
+    pm = compute_segments3(PP, QQ, roadnet_frfr)
+    segs_ = compute_segments2(PP, QQ, roadnet_frfr)
+    pm_ = create_point_map(segs_)
+
+    assert pm_ == pm
