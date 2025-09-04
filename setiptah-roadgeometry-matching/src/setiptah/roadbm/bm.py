@@ -1,7 +1,8 @@
 """Efficient bipartite matching on road networks (metric graphs).
 
 """
-from collections import defaultdict
+import dataclasses
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from functools import cached_property
 from typing import NamedTuple
@@ -809,3 +810,54 @@ def flow_cost_per_road(flow: dict[TRoad, float], obj_dict):
         road: obj_dict[road](x)
         for road, x in flow.items()
     }
+
+
+@dataclass
+class RoadPointSeq(Generic[TRoad]):
+    road: TRoad
+    start: int
+    end: int
+
+    def __post_init__(self):
+        assert self.start <= self.end
+
+    @classmethod
+    def empty(cls, road: TRoad):
+        return cls(road, 0, 0)
+
+    def __len__(self):
+        return self.end - self.start
+
+    def grow(self, n: int = 1):
+        self.end += n
+
+    def take(self, n: int):
+        assert n <= len(self)
+        result = dataclasses.replace(self, end=self.start + n)
+        self.start += n
+        return result
+
+
+def add_points(point_seq: deque[RoadPointSeq[TRoad]], road: TRoad, n: int):
+    if len(point_seq) > 0:
+        last = point_seq[-1]
+        if last.road == road:
+            last.grow(n)
+            return
+
+    point_seq.append(RoadPointSeq(road, 0, n))
+
+
+def take_points(point_seq: deque[RoadPointSeq[TRoad]], n: int):
+    assert n <= sum(len(r) for r in point_seq)
+
+    out = deque()
+    while n > 0:
+        front = point_seq[0]
+        n_ = min(n, len(front))
+        out.append(front.take(n_))
+        if len(front) <= 0:
+            point_seq.popleft()
+        n -= n_
+
+    return out

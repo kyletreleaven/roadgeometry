@@ -148,3 +148,35 @@ def test_roadnet_matching_int():
 def within_tolerance(costs):
     costs_ = sorted(costs)
     assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
+
+
+class TestRoadPointSeq:
+
+    def test_split(self):
+
+        seq = RoadPointSeq.empty("road")
+        assert len(seq) == 0
+
+        seq.grow()
+        assert len(seq) == 1
+
+        seq.grow(10)
+        assert len(seq) == 11
+
+        left = seq.take(4)
+        assert left == RoadPointSeq("road", 0, 4)
+        assert seq == RoadPointSeq("road", 4, 11)
+
+    def test_add_points(self):
+        q = deque()
+        add_points(q, "A", 2)
+        add_points(q, "A", 3)
+
+        t1 = take_points(q, 4)
+
+        add_points(q, "B", 7)
+        t2 = take_points(q, 3)
+
+        assert list(t1) == [RoadPointSeq("A", 0, 4)]
+        assert list(t2) == [RoadPointSeq("A", 4, 5),  RoadPointSeq("B", 0, 2)]
+        assert list(q) == [RoadPointSeq("B", 2, 7)]
