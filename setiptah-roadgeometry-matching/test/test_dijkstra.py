@@ -5,7 +5,7 @@ import networkx as nx
 
 from setiptah.basic_graph.mygraph import mygraph
 from setiptah.basic_graph.dijkstra import *
-from setiptah.roadbm import MultiDiGraphRoadnet
+from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
 from setiptah.basic_graph.graphs import RoadNetwork
 
 import setiptah.roadgeometry.roadmap_basic as ROAD

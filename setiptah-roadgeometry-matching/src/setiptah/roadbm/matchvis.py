@@ -3,6 +3,7 @@ import networkx as nx
 
 from setiptah.roadbm import bm as roadbm
 from setiptah.roadbm.matchvis_util import position, VERTEX, POINT_IN_S, POINT_IN_T
+from setiptah.roadbm.nx_legacy import SEGMENTS
 
 """ my dependencies """
 
@@ -128,7 +129,7 @@ def SHOWMATCH( match, S, T, roadmap, pos, length_attr='length', ax=None,
     
     """ The hard part is getting the edges with proper thickness """
     # sort points onto segments
-    segments = roadbm.SEGMENTS( S, T, roadmap )
+    segments = SEGMENTS( S, T, roadmap )
     
     # make a path graph
     graph = nx.Graph()

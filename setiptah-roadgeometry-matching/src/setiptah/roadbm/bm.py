@@ -12,7 +12,6 @@ import networkx as nx  # TODO: Migrate it out?
 import numpy as np
 
 from setiptah.basic_graph.graphs import RoadInfo
-from setiptah.basic_graph.graphs import RoadNetwork
 from setiptah.basic_graph.mygraph import mygraph
 from setiptah.basic_graph.protocol import *
 from setiptah.nxopt.cvxcostflow import MinConvexCostFlow
@@ -35,20 +34,6 @@ class _EdgeData(Generic[TRoad, TVert]):
 class _NodeData(Generic[TRoad, TVert]):
     out_edges: set[TRoad]
     in_edges: set[TRoad]
-
-
-@dataclass
-class MultiDiGraphRoadnet(RoadNetwork[TVert, TRoad]):
-    graph: nx.MultiDiGraph
-
-    def __post_init__(self):
-        super().__init__()
-
-        for i in self.graph.nodes:
-            self.add_node(i)
-
-        for i, j, road, data in self.graph.edges(keys=True, data=True):
-            self.add_edge(road, i, j, data["length"], oneway=data.get("oneway", False))
 
 
 @dataclass(frozen=True)
@@ -192,12 +177,6 @@ class StructRoadnetMatchingInstance:
         return True
 
 
-def ROADSBIPARTITEMATCH( P, Q, roadnet_graph: nx.MultiDiGraph, **kwargs ) :
-    return optimal_roadnet_matching(
-        P, Q, MultiDiGraphRoadnet(roadnet_graph), **kwargs
-    )
-
-
 def optimal_roadnet_matching(P, Q, roadnet: Roadnet, **kwargs):
     matching, cost = optimal_roadnet_matching2(P, Q, roadnet, **kwargs)
     return matching
@@ -254,66 +233,6 @@ def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
 
 
 """ Phase I: Transcription """
-
-
-def WRITEOBJECTIVES(P, Q, roadnet_graph: nx.MultiDiGraph):
-    return write_objectives(P, Q, MultiDiGraphRoadnet(roadnet_graph))
-
-
-def write_objectives(P, Q, roadnet: Roadnet):
-    segment_dict = compute_segments(P, Q, roadnet)
-    surplus_dict = dict()
-    objective_dict = dict()
-    
-    for road, segment in segment_dict.items():
-        match = PREMATCH( segment )
-
-        surplus_dict[road] = SURPLUS( segment )
-
-        measure = MEASURE( segment, roadnet.length(road))
-        objective_dict[road] = OBJECTIVE( measure )
-
-    return objective_dict
-
-
-OrderedPoints = bintrees.RBTree
-"""
-
-A collection data structure for bipartite points on a road.
-The keys are numeric coordinates (e.g., float), with
-a `TwoQueues`---a pair of "queues" (AKA lists)---containing points of the two types,
-respectively, at given coordinate.
-
-"""
-
-
-def SEGMENTS(P, Q, roadnet: nx.MultiDiGraph) -> dict[TRoad, OrderedPoints]:
-    # TODO: Return RBTree inner here?
-    return compute_segments(P, Q, MultiDiGraphRoadnet(roadnet))
-
-
-def compute_segments(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, OrderedPoints]:
-    """
-    returns:
-    a dictionary whose keys are coordinates and whose values are local (P,Q) index queues
-    """
-    segments = dict()
-    for road in roadnet.edges():
-        ensure_road(road, segments)  # these, and only these, roads are allowed
-
-    for i, p in enumerate(P):
-        r, y = p
-        tree = segments[r]  # crash by design if r not in segments
-        queues = ensure_key(y, tree)
-        queues.supply.append(i)
-
-    for j, q in enumerate(Q):
-        r, y = q
-        tree = segments[r]
-        queues = ensure_key(y, tree)
-        queues.demand.append(j)
-
-    return segments
 
 
 @dataclass(frozen=True)
@@ -410,17 +329,6 @@ def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Order
         # segment[y] = qs
 
     return segments
-
-
-def ONESEGMENT( S, T ) :
-    roadnet = nx.MultiDiGraph()
-    roadnet.add_edge(0,1, 'line' )
-    
-    SS = ( ('line',s) for s in S )
-    TT = ( ('line',t) for t in T )
-    
-    segments = SEGMENTS( SS, TT, roadnet )
-    return segments['line']
 
     
 def PREMATCH( segment ) :
@@ -546,17 +454,12 @@ def OBJECTIVE_FUNC( measure ) :
     return costWrapper( OBJECTIVE(measure) )
 
 
-def SOLVER( roadnet, surplus, measure_dict ) :
-    return compute_optimal_flow(MultiDiGraphRoadnet(roadnet), surplus, measure_dict)
-
-
 def compute_optimal_flow(
         roadnet: Roadnet[TRoad, TVert],
         surplus: dict[TVert, float],
         measure_dict: bintrees.RBTree,  # float -> float
 ) -> dict[TRoad, float]:
     network = mygraph()
-    capacity = {}  # TODO: Was this for something?
     supply = { i : 0. for i in roadnet.nodes() }
     cost = {}   # functions
     #
@@ -628,14 +531,6 @@ def compute_optimal_flow(
     return flow
 
 
-def CHECKFLOW(
-        flow: dict[TRoad, float],
-        roadnet: nx.MultiDiGraph,
-        surplus: dict[TVert, float]
-) -> dict[TVert, float]:
-    return check_flow(flow, MultiDiGraphRoadnet(roadnet), surplus)
-
-
 def check_flow(
         flow: dict[TRoad, float],
         roadnet: Roadnet[TRoad, TVert],
@@ -668,14 +563,6 @@ def EDGES( segment ) :      # very similar routine, used to build the walk graph
         edges[f].append( I )
         
     return edges
-
-
-def TOPOGRAPH(
-        segment_dict: dict[TRoad, OrderedPoints], assist: dict[TRoad, float], roadnet: nx.MultiDiGraph
-) -> nx.DiGraph:
-    return create_topograph(
-        segment_dict, assist, MultiDiGraphRoadnet(roadnet)
-    )
 
 
 Segment = list[tuple[float, "BiPartite[list[int]]"]]
@@ -1065,20 +952,6 @@ class MatchingInstance:
     def match_cost(self, match: tuple[int, int]) -> float:
         i, j = match
         return self.roadnet_metric.distance(self.P[i], self.Q[j])
-
-
-def MATCHCOSTS(matching: tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
-    metric = RoadnetMetric(MultiDiGraphRoadnet(roadnet))
-    inst = MatchingInstance(P, Q, metric)
-    return [
-        inst.match_cost(match)
-        for match in matching
-    ]
-
-
-def ROADMATCHCOST( match, P, Q, roadnet ) :
-    costs = MATCHCOSTS( match, P, Q, roadnet )
-    return sum( costs )
 
 
 def flow_cost_per_road(flow: dict[TRoad, float], obj_dict):
