@@ -128,3 +128,9 @@ def MATCHCOSTS(matching: tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
 def ROADMATCHCOST( match, P, Q, roadnet ) :
     costs = MATCHCOSTS( match, P, Q, roadnet )
     return sum( costs )
+
+
+def ensure_road( road, data ) :
+    curr = data.setdefault( road )
+    if curr is None : data[road] = bintrees.RBTree()
+    return data[road]

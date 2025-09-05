@@ -336,6 +336,7 @@ def PREMATCH(segment: Segment) -> list[tuple[int, int]]:
     for y, q in segment:
         annih = min( len( q.supply ), len( q.demand ) )
         for k in range( annih ) :
+            # TODO: Shoot, do these need to be deques?
             i = q.supply.pop(0)
             j = q.demand.pop(0)
             match.append( (i,j) )
@@ -549,23 +550,6 @@ def check_flow(
 """ Phase III: Matching Construction """
 
 
-def EDGES( segment ) :      # very similar routine, used to build the walk graph
-    edges = dict()
-    
-    posts = [ '-' ] + [ q for y,q in segment.iter_items() ] + [ '+' ]
-    posts = [ terminal(q) for q in posts ]
-    intervals = zip( posts[:-1], posts[1:] )
-    
-    deltas = [0] + [ len(q.supply)-len(q.demand) for y,q in segment.iter_items() ]
-    F = np.cumsum( deltas )
-    
-    for I, f in zip( intervals, F ) :
-        edges.setdefault( f, [] )
-        edges[f].append( I )
-        
-    return edges
-
-
 def create_topograph2(
         segment_dict: dict[TRoad, MySegment], assist: dict[TRoad, float], roadnet: Roadnet
 ) -> nx.DiGraph:
@@ -633,6 +617,11 @@ def create_topograph(
 
 
 def CHECKTOPO( topograph ) :
+    """
+
+    TODO: Good to test me.
+
+    """
     def balance( u ) :
         # starting balance
         q = u.q
@@ -868,11 +857,6 @@ def pop_point(point_seq: PointSeqQ[TRoad]) -> tuple[TRoad, int]:
 
 """ Misc. Algorithm Utilities """
 
-def ensure_road( road, data ) :
-    curr = data.setdefault( road )
-    if curr is None : data[road] = bintrees.RBTree()
-    return data[road]
-
 
 @dataclass
 class BiPartite(Generic[T]):
@@ -937,22 +921,6 @@ class terminal :    # simple node type for TRAVERSE
 
     def __repr__(self):
         return f"terminal({self.q})"
-
-
-def INTERVALS( segment ) :      # very similar routine, used to build the walk graph
-    res = dict()
-    
-    posts = [ '-' ] + [ y for y,q in segment.iter_items() ] + [ '+' ]
-    intervals = zip( posts[:-1], posts[1:] )
-    
-    deltas = [0] + [ len(q.supply)-len(q.demand) for y,q in segment.iter_items() ]
-    F = np.cumsum( deltas )
-    
-    for I, f in zip( intervals, F ) :
-        res.setdefault( f, [] )
-        res[f].append( I )
-        
-    return res
 
 
 @dataclass(frozen=True)

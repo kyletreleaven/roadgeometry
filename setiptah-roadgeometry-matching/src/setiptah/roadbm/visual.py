@@ -14,6 +14,22 @@ import setiptah.roadgeometry.astar_basic as ASTAR
 import setiptah.roadbm.bm as roadbm
 
 
+def INTERVALS(segment):  # very similar routine, used to build the walk graph
+    res = dict()
+
+    posts = ['-'] + [y for y, q in segment.iter_items()] + ['+']
+    intervals = zip(posts[:-1], posts[1:])
+
+    deltas = [0] + [len(q.supply) - len(q.demand) for y, q in segment.iter_items()]
+    F = np.cumsum(deltas)
+
+    for I, f in zip(intervals, F):
+        res.setdefault(f, [])
+        res[f].append(I)
+
+    return res
+
+
 def texline( x1,y1, x2,y2, style=None ) :
     data = { 'x1' : x1, 'x2' : x2, 'y1' : y1, 'y2' : y2 }
     if style is None :
