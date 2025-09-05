@@ -5,7 +5,6 @@ import numpy as np
 import networkx as nx
 
 # this may cause trouble
-from utility import enum, Immutable, slidingpairs, setchoose2
 
 import scipy as sp
 import scipy.optimize
@@ -19,7 +18,7 @@ from matplotlib.colors import colorConverter
 #from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import axes3d, art3d
 
-import roadmap_basic as ROAD
+import setiptah.roadgeometry.roadmap_basic as ROAD
 
 
 def fitArc2Segment( pt1, pt2, arclen, below=False ) :
@@ -34,7 +33,7 @@ def fitArc2Segment( pt1, pt2, arclen, below=False ) :
     # dEuc = 2 R sin( Theta/2 )
     # sinc(x) = sin(pi*x) / (pi*x)
     func = lambda theta : np.sinc( theta / ( 2*np.pi ) ) - dEuc/arclen
-    theta = sp.optimize.bisection( func, 0., 2*np.pi )
+    theta = sp.optimize.bisect( func, 0., 2*np.pi )
     R = arclen / theta
     
     # before rotation and translation
@@ -354,26 +353,7 @@ class RoadShape(object) :
             d = 2. * dEuc
             self.lnet.get_edge_data(i,j,key)['weight'] = d
             
-            
-        def testfit(self) :
-            pt1 = np.random.rand(2)
-            pt2 = np.random.rand(2)
-            dEuc = np.linalg.norm( pt2-pt1 )
-            d = ( 1. + np.random.rand() ) * dEuc
-            center, R, theta1, theta2 = fitArc2Segment( pt1, pt2, d )
 
-            plt.figure()
-            xdata = [ pt1[0], pt2[0] ]
-            ydata = [ pt1[1], pt2[1] ]
-            plt.scatter(xdata,ydata)
-            ax = plt.gca()
-            circ = mpl.patches.Circle( center, R, linestyle='--' )
-            ax.add_patch(circ)
-            arc = mpl.patches.Arc( center, R, R, 0., theta2, theta1 )
-            ax.add_patch(arc)
-            ax.set_aspect('equal')
-            
-            
         def display(self) :
             plt.figure()
             self.ax = plt.gca()
