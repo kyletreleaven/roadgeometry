@@ -307,18 +307,15 @@ def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segme
     """
     tree = sort_points(P, Q)
 
-    segments = {}
+    segments = {road: [] for road in roadnet.edges()}
+
     prev_road, segment = None, None
     for key, qs in tree.iter_items():
         road, y = key
         if segment is None or road != prev_road:
-            assert road not in segments
-            assert road in roadnet.edges()
-
-            segments[road] = segment = []
-
+            assert road in roadnet.edges(), (road, roadnet.edges())
+            segment = segments[road]
             prev_road = road
-
         segment.append((y, qs))
 
     return segments

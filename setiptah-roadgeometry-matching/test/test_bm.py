@@ -273,3 +273,12 @@ def test_create_point_map():
     pm_ = create_point_map(segs_)
 
     assert pm_ == pm
+
+
+def test_segment_pointless_road():
+
+    rn = RoadNetwork()
+    rn.add_edge("R", 0, 1, 1.)
+
+    segment_dict = compute_segments2([], [], rn)
+    assert "R" in segment_dict
