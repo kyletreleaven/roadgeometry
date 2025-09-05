@@ -26,9 +26,9 @@ class priorityDictionary(dict):
             while 1:
                 smallChild = 2*insertionPoint+1
                 if smallChild+1 < len(heap) and \
-                        heap[smallChild] > heap[smallChild+1]:
+                        heap[smallChild][0] > heap[smallChild+1][0]:
                     smallChild += 1
-                if smallChild >= len(heap) or lastItem <= heap[smallChild]:
+                if smallChild >= len(heap) or lastItem[0] <= heap[smallChild][0]:
                     heap[insertionPoint] = lastItem
                     break
                 heap[insertionPoint] = heap[smallChild]
@@ -52,15 +52,19 @@ too large, to avoid memory leakage.'''
         heap = self.__heap
         if len(heap) > 2 * len(self):
             self.__heap = [(v,k) for k,v in self.items()]
-            self.__heap.sort()  # builtin sort likely faster than O(n) heapify
+            self.__heap.sort(key=lambda pair: pair[0])  # builtin sort likely faster than O(n) heapify
         else:
             newPair = (val,key)
             insertionPoint = len(heap)
             heap.append(None)
-            while insertionPoint > 0 and \
-                    newPair < heap[(insertionPoint-1)//2]:
-                heap[insertionPoint] = heap[(insertionPoint-1)//2]
-                insertionPoint = (insertionPoint-1)//2
+            while insertionPoint > 0:
+                parent_idx = (insertionPoint - 1) // 2
+                parent_val, _ = parent = heap[parent_idx]
+                if val < parent_val:
+                    heap[insertionPoint] = parent
+                    insertionPoint = parent_idx
+                else:
+                    break
             heap[insertionPoint] = newPair
 	
     def setdefault(self,key,val):
