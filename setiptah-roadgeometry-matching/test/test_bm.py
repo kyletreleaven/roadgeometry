@@ -149,7 +149,7 @@ def test_roadnet_matching_int():
 
     # Compare their costs.
     cost_ = ROADMATCHCOST(matching_, PP_, QQ_, roadnet_graph_)
-    roadnet_graph = roadnet.create_multigraph()
+    roadnet_graph = create_multigraph(roadnet)
     cost = ROADMATCHCOST(matching, PP, QQ, roadnet_graph)
 
     within_tolerance([cost, cost_, cost_constr])

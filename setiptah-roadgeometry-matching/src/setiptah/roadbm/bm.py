@@ -56,13 +56,6 @@ class StructRoadnet(Roadnet[int, int]):
 
         return inst, road_map, vert_map
 
-    def create_multigraph(self):
-        g = nx.MultiDiGraph()
-        g.add_nodes_from(self.nodes())
-        for k, road_info in enumerate(self.roads):
-            g.add_edge(road_info.left, road_info.right, k, length=road_info.length, oneway=road_info.oneway)
-        return g
-
     def nodes(self) -> Collection[TVert]:
         return range(self.n_vertices)
 

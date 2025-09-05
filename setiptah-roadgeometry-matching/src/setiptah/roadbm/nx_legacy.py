@@ -134,3 +134,12 @@ def ensure_road( road, data ) :
     curr = data.setdefault( road )
     if curr is None : data[road] = bintrees.RBTree()
     return data[road]
+
+
+def create_multigraph(roadnet: Roadnet):
+    g = nx.MultiDiGraph()
+    g.add_nodes_from(roadnet.nodes())
+    for road in roadnet.edges():
+        i, j = roadnet.endpoints(road)
+        g.add_edge(i, j, road, length=roadnet.length(road), oneway=roadnet.is_oneway(road))
+    return g
