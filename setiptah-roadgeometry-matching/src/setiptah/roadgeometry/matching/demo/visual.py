@@ -1,5 +1,3 @@
-
-
 import itertools
 
 import numpy as np
@@ -7,11 +5,24 @@ import bintrees
 
 import networkx as nx
 
+from setiptah.roadbm import BiPartite
+
 """ my dependencies """
 import setiptah.roadgeometry.roadmap_basic as ROAD
 import setiptah.roadgeometry.astar_basic as ASTAR
 
-import setiptah.roadbm.bm as roadbm
+import setiptah.roadbm.nx_legacy as roadbm
+
+
+def ONESEGMENT(S, T):
+    roadnet = nx.MultiDiGraph()
+    roadnet.add_edge(0, 1, 'line', length=1.)
+
+    SS = (('line', s) for s in S)
+    TT = (('line', t) for t in T)
+
+    segments = roadbm.SEGMENTS(SS, TT, roadnet)
+    return segments['line']
 
 
 def INTERVALS(segment):  # very similar routine, used to build the walk graph
@@ -59,8 +70,8 @@ def heightFunctionTex( S, T, ymin, ymax, z=None, steps=None ) :
     str = ''
     
     # compute necessary data
-    segment = roadbm.ONESEGMENT( S, T )
-    intervals = roadbm.INTERVALS( segment )
+    segment = ONESEGMENT( S, T )
+    intervals = INTERVALS( segment )
     
     # draw the axis
     # horizontal
@@ -87,7 +98,7 @@ def heightFunctionTex( S, T, ymin, ymax, z=None, steps=None ) :
     # place the X's and O's
     str += texhline( zplus, ymin, ymax, style='dashed' )
     for y, item in segment.items() :
-        phases = [ (item.P, '${\\color{red}\\times}$' ), (item.Q, '${\\color{blue}\\circ}$') ]
+        phases = [(item.supply, '${\\color{red}\\times}$' ), (item.demand, '${\\color{blue}\\circ}$') ]
         for Y, mark in phases :
             for i in Y : str += "\\draw (%f,%f) node {%s} ;\n" % ( y, zplus, mark )
             
@@ -132,8 +143,10 @@ def heightFunctionTex( S, T, ymin, ymax, z=None, steps=None ) :
 
 
 def discreteCostTex( S, T, ymin, ymax, zmin, zmax, zplus=None ) :
-    segment = roadbm.ONESEGMENT( S, T )
-    meas = roadbm.MEASURE( segment, ymin, ymax )
+    segment = ONESEGMENT( S, T )
+
+    # assert False, segment
+    meas = roadbm.MEASURE(segment.iter_items(), ymin, ymax )
     obj = roadbm.OBJECTIVE( meas )
     Cf = roadbm.costWrapper( obj )
     
@@ -196,7 +209,7 @@ def costFunctionTex( S, T, ymin, ymax, z=None ) :
         zplus = z
         
     """ C to tikz """
-    segment = roadbm.ONESEGMENT( S, T )
+    segment = ONESEGMENT( S, T )
     meas = roadbm.MEASURE( segment, ymin, ymax )
     obj = roadbm.OBJECTIVE( meas )
     Cf = roadbm.costWrapper( obj )
@@ -254,60 +267,45 @@ def costFunctionTex( S, T, ymin, ymax, z=None ) :
     
     str += "\\end{tikzpicture}\n"
     return str
-    
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-if __name__ == '__main__' :
+def main():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument( '--z', type=float, default=0 )
-    parser.add_argument( '--Hout', type=str, default='Hout.tex' )
-    parser.add_argument( '--Cout', type=str, default='Cout.tex' )
+    parser.add_argument('--z', type=float, default=0)
+    parser.add_argument('--Hout', type=str, default='Hout.tex')
+    parser.add_argument('--Cout', type=str, default='Cout.tex')
+
     args = parser.parse_args()
-    
-    
+
+    Ctex, Htex = get_tex(args.z)
+
+    with open(args.Cout, 'w') as f:
+        f.write(Ctex)
+
+    with open(args.Hout, "w") as f:
+        f.write(Htex)
+
+
+def get_tex(z):
+
     YMIN = -4.
     YMAX = 4.
     WIDTH = YMAX - YMIN
-    if False :
+    if False:
         zr = 0
-        X = [ YMIN + WIDTH * np.random.rand() for i in xrange(5) ]
-        O = [ YMIN + WIDTH * np.random.rand() for i in xrange(3) ]
-    else :
+        X = [YMIN + WIDTH * np.random.rand() for i in xrange(5)]
+        O = [YMIN + WIDTH * np.random.rand() for i in xrange(3)]
+    else:
         zr = 5.75
-        #X = [ -3.5, 2, 2.75 ]
-        #O = [ -3., -2., 1., 2.25, 3. ]
-        X = [ -2.5, 2, ]
-        O = [ -2., -1., 1., 3. ]
-        
-        
-    str = heightFunctionTex( X, O, YMIN, YMAX, args.z )
-    f = open( args.Hout, 'w' )
-    f.write( str )
-    f.close()
-    
-    #str = costFunctionTex( X, O, YMIN, YMAX, args.z )
-    str = discreteCostTex( X, O, YMIN, YMAX, -4, 4, args.z )
-    f = open( args.Cout, 'w' )
-    f.write( str )
-    f.close()
+        # X = [ -3.5, 2, 2.75 ]
+        # O = [ -3., -2., 1., 2.25, 3. ]
+        X = [-2.5, 2, ]
+        O = [-2., -1., 1., 3.]
 
-    
+    return heightFunctionTex(X, O, YMIN, YMAX, z), discreteCostTex(X, O, YMIN, YMAX, -4, 4, z)
 
 
-
-
+if __name__ == '__main__' :
+    main()

@@ -87,17 +87,6 @@ def compute_segments(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Ordere
     return segments
 
 
-def ONESEGMENT(S, T):
-    roadnet = nx.MultiDiGraph()
-    roadnet.add_edge(0, 1, 'line')
-
-    SS = (('line', s) for s in S)
-    TT = (('line', t) for t in T)
-
-    segments = SEGMENTS(SS, TT, roadnet)
-    return segments['line']
-
-
 def CHECKFLOW(
         flow: dict[TRoad, float],
         roadnet: nx.MultiDiGraph,
