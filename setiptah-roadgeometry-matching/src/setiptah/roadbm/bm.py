@@ -22,21 +22,6 @@ Factory = Callable[[], T]
 
 
 @dataclass(frozen=True)
-class _EdgeData(Generic[TRoad, TVert]):
-    edge: TRoad
-    length: float
-    i: TVert
-    j: TVert
-    oneway: bool
-
-
-@dataclass(frozen=True)
-class _NodeData(Generic[TRoad, TVert]):
-    out_edges: set[TRoad]
-    in_edges: set[TRoad]
-
-
-@dataclass(frozen=True)
 class StructRoadnet(Roadnet[int, int]):
     """A network on road and vertex indices (integers).
 
