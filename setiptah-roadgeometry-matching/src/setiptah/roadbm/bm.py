@@ -155,14 +155,23 @@ class StructRoadnetMatchingInstance:
         return True
 
 
-def optimal_roadnet_matching(P, Q, roadnet: Roadnet, **kwargs):
+def optimal_roadnet_matching(P, Q, roadnet: Roadnet, assist_only: bool = False, **kwargs):
     """
 
     TODO: Do we need this?
 
     """
-    matching, cost = optimal_roadnet_matching2(P, Q, roadnet, **kwargs)
-    return matching
+    result = optimal_roadnet_matching2(P, Q, roadnet, assist_only=assist_only, **kwargs)
+
+    if assist_only:
+        return result
+
+    else:
+        try:
+            matching, cost = result
+        except:
+            assert False, result
+        return matching
 
 
 def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
