@@ -8,6 +8,8 @@ from setiptah.basic_graph.graphs import RoadNetwork
 @dataclass
 class MultiDiGraphRoadnet(RoadNetwork[TVert, TRoad]):
     graph: nx.MultiDiGraph
+    length_attr: str = "length"
+    oneway_attr: str = "oneway"
 
     def __post_init__(self):
         super().__init__()
@@ -16,7 +18,7 @@ class MultiDiGraphRoadnet(RoadNetwork[TVert, TRoad]):
             self.add_node(i)
 
         for i, j, road, data in self.graph.edges(keys=True, data=True):
-            self.add_edge(road, i, j, data["length"], oneway=data.get("oneway", False))
+            self.add_edge(road, i, j, data[self.length_attr], oneway=data.get(self.oneway_attr, False))
 
 
 def ROADSBIPARTITEMATCH( P, Q, roadnet_graph: nx.MultiDiGraph, **kwargs ) :
