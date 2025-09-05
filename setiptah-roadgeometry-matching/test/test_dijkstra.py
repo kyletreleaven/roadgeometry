@@ -231,3 +231,46 @@ def create_multigraph(rn: Roadnet):
         length, oneway = rn.length(r), rn.is_oneway(r)
         g.add_edge(i, j, r, length=length, oneway=oneway)
     return g
+
+
+class TestRoadnetMetric:
+
+    def test_shortest_path_on_road(self, square_roadnet):
+        metric = RoadnetMetric(square_roadnet)
+        assert metric.shortest_path_on_road(("E", .1), ("E", .5), "E") == [RoadSegment("E", .1, .5)]
+
+    def test_shortest_path_node_to_point(self, square_roadnet):
+        metric = RoadnetMetric(square_roadnet)
+        path = metric.shortest_path_node_to_point(4, ("E", .5))
+        assert path == [
+            RoadSegment(road='dangler', start=1.0, end=0.0),
+            RoadSegment(road='N', start=0.0, end=1.0),
+            RoadSegment(road='E', start=0.0, end=0.5)
+        ]
+
+    def test_shortest_path(self, square_roadnet):
+        metric = RoadnetMetric(square_roadnet)
+
+        path = metric.shortest_path(("N", .5), ("E", .5))
+        assert path == [
+            RoadSegment(road='N', start=0.5, end=1.0), RoadSegment(road='E', start=0.0, end=0.5)
+        ]
+
+    def test_shortest_path_infeasible(self):
+        rn = RoadNetwork()
+        rn.add_edge("A", 0, 1, 1.)
+        rn.add_edge("B", 2, 3, 1.)
+        metric = RoadnetMetric(rn)
+
+        assert metric.shortest_path(("A", .5), ("B", .5)) is None
+        assert metric.distance(("A", .5), ("B", .5)) == np.inf
+
+        assert metric.shortest_path_node_to_point(0, ("B", .5)) is None
+
+    def test_embedding_error(self):
+        rn = RoadNetwork()
+        rn.add_edge("A", 0, 1, 1)
+        rn.add_edge("B", 1, 2, 1)
+        metric = RoadnetMetric(rn)
+        with pytest.raises(ValueError):
+            metric.embedding(0, "B")
