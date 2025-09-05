@@ -96,24 +96,12 @@ def ONESEGMENT(S, T):
     return segments['line']
 
 
-def SOLVER( roadnet, surplus, measure_dict ) :
-    return compute_optimal_flow(MultiDiGraphRoadnet(roadnet), surplus, measure_dict)
-
-
 def CHECKFLOW(
         flow: dict[TRoad, float],
         roadnet: nx.MultiDiGraph,
         surplus: dict[TVert, float]
 ) -> dict[TVert, float]:
     return check_flow(flow, MultiDiGraphRoadnet(roadnet), surplus)
-
-
-def TOPOGRAPH(
-        segment_dict: dict[TRoad, OrderedPoints], assist: dict[TRoad, float], roadnet: nx.MultiDiGraph
-) -> nx.DiGraph:
-    return create_topograph(
-        segment_dict, assist, MultiDiGraphRoadnet(roadnet)
-    )
 
 
 def MATCHCOSTS(matching: tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
