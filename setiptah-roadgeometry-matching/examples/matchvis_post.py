@@ -1,19 +1,11 @@
 #!/usr/bin/env python
 
-import itertools
-
-import numpy as np
 import bintrees
-
 import networkx as nx
-
-""" my dependencies """
-#import setiptah.roadgeometry.roadmap_basic as ROAD
-#import setiptah.roadgeometry.astar_basic as ASTAR
-#import setiptah.roadbm.bm as roadbm
+import numpy as np
 
 import matplotlib.pyplot as plt
-from setiptah.roadbm.matchvis import drawRoadmap, SHOWMATCH
+from setiptah.roadbm.matchvis import SHOWMATCH
 
 
 
@@ -77,8 +69,8 @@ if __name__ == '__main__' :
     bad_match = list(zip( range(M), order ))
     
     """ obtain the optimal matching """
-    import setiptah.roadbm.bm as roadbm
-    opt_match = roadbm.ROADSBIPARTITEMATCH( SS, TT, roadmap )
+    from setiptah.roadbm import nx_legacy
+    opt_match = nx_legacy.ROADSBIPARTITEMATCH( SS, TT, roadmap )
     
     
     """ Now, do all the plotting! """
