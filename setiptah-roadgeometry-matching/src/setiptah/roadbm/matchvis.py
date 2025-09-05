@@ -88,7 +88,7 @@ def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
             yield width, VERTEX, v
             
         ITER = traverse()
-        prev = prev(ITER)
+        prev = next(ITER)
         z = assist[road]    # start road assistance +0
         for y2, type2, label2 in ITER :
             y1, type1, label1 = prev
