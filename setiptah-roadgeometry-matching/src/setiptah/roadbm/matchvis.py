@@ -1,7 +1,6 @@
 import numpy as np
 import networkx as nx
 
-from setiptah.roadbm import bm as roadbm
 from setiptah.roadbm.matchvis_util import position, VERTEX, POINT_IN_S, POINT_IN_T
 from setiptah.roadbm.nx_legacy import SEGMENTS
 
@@ -56,11 +55,6 @@ def drawRoadmap( roadmap: nx.DiGraph, pos, ax=None, **kwargs ) :
     return ax
 
 
-def SCORE_GRAPH( match, S, T, roadmap, pos, length_attr='length' ) :
-    # directionless version of INTERVAL GRAPH
-    pass
-
-
 def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
                 ax=None, **kwargs ) :
     """
@@ -76,7 +70,7 @@ def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
     
     """ The hard part is getting the edges with proper thickness """
     # sort points onto segments
-    segments = roadbm.SEGMENTS( S, T, roadmap )
+    segments = SEGMENTS( S, T, roadmap )
     
     # initialize a path graph
     graph = nx.Graph()
