@@ -207,9 +207,14 @@ class RoadnetMetric(Generic[TRoad, TVert]):
             @property
             def path(self):
                 _, path_ = self._result
-                if path_ is None:
+
+                if path_ is None:  # infeasible
                     return
-                u, v = path_
+
+                try:
+                    u, v = path_
+                except ValueError:  # path on one road
+                    return path_
 
                 road1, start1 = self.p
                 _, end1 = metric.embedding(u, road1)

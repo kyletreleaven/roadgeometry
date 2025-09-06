@@ -134,6 +134,18 @@ def test_distances():
     assert metric.distance_node_to_point(rn.endpoints(B)[1], uB) == np.inf
 
 
+def test_shortest_path():
+    rn = RoadNetwork()
+    rn.add_edge("R", 0, 1, length=10.)
+
+    metric = RoadnetMetric(rn)
+
+    p = ("R", 1)
+    q = ("R", 9)
+
+    assert metric.shortest_path(p, q) == [RoadSegment("R", 1, 9)]
+
+
 def test_metric_node_distances():
     rn = RoadNetwork()
 
