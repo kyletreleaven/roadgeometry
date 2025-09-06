@@ -45,9 +45,6 @@ def sampleroadnet( n=10, p=.3, n_oneway=0 ) :
     return roadnet
 
 
-
-""" convenient sampling utility for the unit test below, might as well be a package-export, though """
-
 def sample_onroad( road, roadnet, length='length' ) :
     """ samples uniformly from the given road """
     _, road_data = ROAD.obtain_edge( roadnet, road, True )
@@ -98,7 +95,7 @@ class UniformDist :
             
         self.roadnet = roadnet
         self.road_sampler = WeightedSet( weight_dict )
-        
+
     def sample(self) :
         road = self.road_sampler.sample()
         L = ROAD.get_road_data( road, self.roadnet ).get( 'length', 1 )
@@ -106,17 +103,11 @@ class UniformDist :
         return ROAD.RoadAddress( road, y )
 
 
-
-
-def sampleaddress( roadnet, length='length' ) :
+def sampleaddress(roadnet: nx.MultiDiGraph, length: str = "length") -> ROAD.RoadAddress:
     """
     quick sampling function,, roads are elements chosen with equal probability;
     not in proportion to road length; for that see UniformDist
     """
-    _,__,road = random.choice( roadnet.edges( keys=True ) )
-    return sample_onroad( road, roadnet, length )
-
-
-
-
-
+    roads = [road for _, __, road in roadnet.edges(keys=True)]
+    road = random.choice(roads)
+    return sample_onroad(road, roadnet, length)
