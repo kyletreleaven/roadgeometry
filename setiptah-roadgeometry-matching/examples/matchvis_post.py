@@ -46,7 +46,12 @@ if __name__ == '__main__' :
     """ construct roads from Delaunay adjacencies """
     import setiptah.roadgeometry.generation as mapgen
     roadmap = mapgen.DelaunayRoadMap( interchanges )
-            
+
+    import random
+    for u, v, road, data in roadmap.edges(keys=True, data=True):
+        if random.random() < .2:
+            data["oneway"] = True
+
     """ ...and build positions dictionary """
     pos = { k : point for k, point in enumerate( interchanges ) }
     

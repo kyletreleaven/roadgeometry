@@ -40,13 +40,20 @@ def drawRoadmap( roadmap: nx.DiGraph, pos, ax=None, **kwargs ) :
     nx.draw_networkx_nodes( skeleton, pos, ax=ax
                             # , zorder=ZNODES
                             )
+    style = [
+        ("solid" if data.get("oneway", False) else "dotted")
+        for _, __, data in roadmap.edges(data=True)
+    ]
     nx.draw_networkx_edges( skeleton, pos=pos, ax=ax,
                             # zorder=ZEDGES,
                             **kwargs,
+                            # style=style,
                             )
     
-    road_labels = { (u,v) : road + '\n'     # the endline is to raise the label
-                   for u,v,road in roadmap.edges( keys=True ) }
+    road_labels = {
+        (u,v) : road + (" (directed)" if data.get("oneway", False) else "") + '\n'     # the endline is to raise the label
+        for u, v, road, data in roadmap.edges(keys=True, data=True)
+    }
     nx.draw_networkx_edge_labels( skeleton, pos=pos, ax=ax, 
                                   edge_labels=road_labels,
                                   # zorder=ZLABELS
@@ -71,7 +78,7 @@ def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
     """ The hard part is getting the edges with proper thickness """
     # sort points onto segments
     segments = SEGMENTS( S, T, roadmap )
-    
+
     # initialize a path graph
     graph = nx.Graph()
     
