@@ -208,8 +208,6 @@ def test_metric_node_distances():
         for u in rn.nodes()
     }
 
-    from setiptah.roadgeometry.astar_basic import astar_path_length
-
     distances = [
         metric.graph_shortest_path_length(0, 2),
         dref[0][2],

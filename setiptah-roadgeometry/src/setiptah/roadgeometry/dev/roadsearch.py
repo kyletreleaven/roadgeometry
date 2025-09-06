@@ -196,11 +196,3 @@ if __name__ == '__main__' :
     testpoints = [ roadprob.sampleaddress( roadnet ) for i in range(samples) ]
     answers = [ sidebyside( q ) for q in testpoints ]
     error = [ ROAD.distance( roadnet, p, q, 'length' ) for p, q in answers ]
-
-
-
-
-
-
-
-

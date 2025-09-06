@@ -1,15 +1,8 @@
 import itertools
 
-import numpy as np
 import bintrees
-
 import networkx as nx
-
-from setiptah.roadbm import BiPartite
-
-""" my dependencies """
-import setiptah.roadgeometry.roadmap_basic as ROAD
-import setiptah.roadgeometry.astar_basic as ASTAR
+import numpy as np
 
 import setiptah.roadbm.nx_legacy as roadbm
 

@@ -208,19 +208,3 @@ def add_verbose_path( graph, *seq ) :
     edges = zip( i_seq, j_seq, key_seq )
     for i,j,key in edges :
         graph.add_edge( i,j,key )
-
-
-
-
-if __name__ == '__main__' :
-    digraph = nx.MultiDiGraph()
-    
-    add_verbose_path( digraph, 0, 'S', 1, 'W', 2, 'N', 3 )
-    digraph.add_edge( 3, 0, 'E', oneway=True )
-    
-    path = astar_path( digraph, 0, 3 )
-    
-    
-    
-    
-    
