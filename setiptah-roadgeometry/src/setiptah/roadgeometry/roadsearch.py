@@ -1,4 +1,3 @@
-
 # python standard
 import heapq
 import itertools
@@ -11,7 +10,7 @@ import networkx as nx
 import bintrees
 
 # dev
-import roadmap_basic as ROAD
+from . import roadmap_basic as ROAD
 
 
 def my_isaddress( addr ) :
@@ -151,48 +150,16 @@ class PointSet :
         res = []
         
         # expand out-going edges
-        for _, __, road, road_data in roadnet.out_edges_iter( node, keys=True, data=True ) :
+        for _, __, road, road_data in roadnet.out_edges( node, keys=True, data=True ) :
             addr = ROAD.RoadAddress( road, 0. )
             subres = self._expand_address( addr, roadnet, length )
             res.extend( subres )
             
         # expand in-coming edges
-        for _, __, road, road_data in roadnet.in_edges_iter( node, keys=True, data=True ) :
+        for _, __, road, road_data in roadnet.in_edges( node, keys=True, data=True ) :
             roadlen = road_data.get( length, 1 )
             addr = ROAD.RoadAddress( road, roadlen )
             subres = self._expand_address( addr, roadnet, length )
             res.extend( subres )
             
         return res
-
-
-
-
-if __name__ == '__main__' :
-    import roadgeometry.probability as roadprob
-    
-    roadnet = roadprob.sampleroadnet()
-    
-    n = 100
-    points = [ roadprob.sampleaddress( roadnet ) for i in range(n) ]
-    
-    pset = PointSet()
-    
-    for p in points :
-        pset.insert( p )
-        
-        
-    def find_nearest( addr ) :
-        dist_to = lambda q : ROAD.distance( roadnet, addr, q, 'length' )
-        trips = [ ( dist_to(q), q ) for q in points ]
-        return min( trips )[1]
-        
-    def sidebyside( addr ) :
-        by_pset = pset.find_nearest( addr, roadnet )
-        by_naive = find_nearest( addr )
-        return by_pset, by_naive
-    
-    samples = 100
-    testpoints = [ roadprob.sampleaddress( roadnet ) for i in range(samples) ]
-    answers = [ sidebyside( q ) for q in testpoints ]
-    error = [ ROAD.distance( roadnet, p, q, 'length' ) for p, q in answers ]
