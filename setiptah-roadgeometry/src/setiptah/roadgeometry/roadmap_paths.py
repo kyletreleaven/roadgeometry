@@ -1,19 +1,17 @@
+import logging
+from dataclasses import dataclass
+from typing import Any
 
-
-import itertools
-import random
+import networkx as nx
 import numpy as np
 
-import networkx as nx       # it's time for better control
-#import bintrees
+from . import astar_basic
+from .roadmap_basic import RoadAddress
+from .roadmap_basic import check_point, obtain_edge
 
-import astar_basic
-from roadmap_basic import RoadAddress
-from roadmap_basic import check_point, obtain_edge
+LOG = logging.getLogger(__name__)
 
-
-__author__ = "Kyle Treleaven <ktreleav@mit.edu>"
-#__all__ = [ 'RoadAddress', 'distance' ]
+__author__ = "Kyle Treleaven <ktreleav@gmail.com>"
 
 """
 Notes on the Roadmap format:
@@ -30,12 +28,12 @@ However, one-way roads are handled, and should be indicated with a key:value pai
 Class defs --- for paths
 """
 
-class RoadSegment(object) :
-    def __init__(self, road, first, second ) :
-        self.road = road
-        self.first = first
-        self.second = second
-        
+@dataclass(frozen=True, repr=False)
+class RoadSegment(object):
+    road: Any
+    first: float
+    second: float
+
     def __repr__(self) :
         return '(%s,[%s,%s])' % ( repr(self.road), repr(self.first), repr(self.second) )
     
@@ -87,7 +85,7 @@ def pathEvaluate( path, x ) :
         if x <= B : break
         A = B
     if x > B :
-        print x, B
+        LOG.debug(x, B)
         raise Exception('query distance longer than path')      # only happens when B == path length
     
     segment = path[i]
@@ -122,9 +120,29 @@ def pathFromAStar( astar_path, roadmap, length_attr ) :
 
 """ Shortest Path Functions """
 
-def minpath( p, q, roadmap, length_attr='length' ) :
+def minpath(
+        p: RoadAddress, q: RoadAddress, roadmap: nx.MultiDiGraph, length_attr: str = "length"
+):
     """ returns one of the min length paths between two points on a Roadmap """
     # some convenient static variables
+
+    from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
+    from setiptah.basic_graph.dijkstra import RoadnetMetric
+
+    p_ = p.road, p.coord
+    q_ = q.road, q.coord
+
+    metric = RoadnetMetric(MultiDiGraphRoadnet(roadmap, length_attr=length_attr))
+    # assert False, metric._shortest_path(p_, q_)._result
+
+    path_ = metric.shortest_path(p_, q_)
+
+    return [RoadSegment(seg.road, seg.start, seg.end) for seg in path_]
+
+
+
+
+
     if not hasattr( minpath, 'STATICS' ) :
         minpath.STATICS = True
         minpath.first = RoadAddress(None,None)
@@ -266,26 +284,26 @@ if __name__ == '__main__' :
     
     # give me a summary of the road network
     for u,v,road, data in roadmap.edges( keys=True, data=True ) :
-        print '%s: %s -> %s ; length=%f' % ( road, repr(u), repr(v), data.get('length',1) )
+        LOG.debug('%s: %s -> %s ; length=%f' % ( road, repr(u), repr(v), data.get('length',1) ))
         
-    print '...going from %s to %s' % ( repr(p), repr(q) )
+    LOG.debug('...going from %s to %s' % ( repr(p), repr(q) ))
     frwd = minpath( p, q, roadmap )
     frwdL = pathLength( frwd )
     frwdLRef = distance( roadmap, p, q, 'length' )
-    print frwd
-    print 'FRWD LENGTH: %f; survey says: %f' % ( frwdL, frwdLRef )
+    LOG.debug(frwd)
+    LOG.debug('FRWD LENGTH: %f; survey says: %f' % ( frwdL, frwdLRef ))
     
     
     bkwd = minpath( q, p, roadmap )
     bkwdL = pathLength( bkwd )
     bkwdLRef = distance( roadmap, q, p, 'length' )
     
-    print 'BKWD LENGTH: %f; survey says: %f' % ( bkwdL, bkwdLRef )
+    LOG.debug('BKWD LENGTH: %f; survey says: %f' % ( bkwdL, bkwdLRef ))
     
     if np.abs( frwdL - frwdLRef ) > 10**-10 or np.abs( bkwdL - bkwdLRef ) > 10**-10 :
-        print 'ALERT!!! NOT AGREE WITH REF'
+        LOG.debug('ALERT!!! NOT AGREE WITH REF')
     else :
-        print 'cool as a cucumber'
+        LOG.debug('cool as a cucumber')
         
         
         
