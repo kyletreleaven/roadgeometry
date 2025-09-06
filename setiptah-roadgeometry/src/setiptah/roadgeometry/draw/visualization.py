@@ -22,7 +22,14 @@ import setiptah.roadgeometry.roadmap_basic as ROAD
 
 
 def fitArc2Segment( pt1, pt2, arclen, below=False ) :
-    """ provides center, radius, and theta1->theta2 (in CCW direction!) """
+    """
+
+    Produce an arc of sufficient length between two points.
+    Provides center, radius, and theta1 -> theta2 (in CCW direction!)
+    If `below`, then the arc is positioned below the segment (clockwise direction)
+    instead.
+
+    """
     pt1 = np.array(pt1)
     pt2 = np.array(pt2)
     diff = pt2 - pt1
@@ -71,7 +78,6 @@ def fitArcThruSpacing( pt1, pt2, ht ) :
     return fitArc2Segment( pt1, pt2, arclen, below = not ht_positive )
 
 
-
 def angleconvert_zerototwopi( theta ) :
     circum = 2 * np.pi
     return theta % circum
@@ -89,6 +95,7 @@ def angle_interpolate_ccw( t1, t2, x, reverse=False ) :
         delta = angleconvert_zerototwopi( t1 - t2 )
         theta = t1 - x * delta
     return angleconvert_minuspitopi( theta )
+
 
 def angle_interpolate_shortest( t1, t2, x ) :
     delta = angleconvert_zerototwopi( t2 - t1 )
@@ -419,10 +426,3 @@ def art_convert3d( art, z=0.0, zdir='z' ) :
     else : raise Exception('not a valid type of art')
     
     return new_art
-
-
-
-
-
-
-
