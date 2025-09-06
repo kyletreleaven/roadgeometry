@@ -121,7 +121,7 @@ def astar_path( digraph, source, target, heuristic=None, weight='weight'):
         explored[curnode] = predec
         
         # need to go through edges in order of length, in case multi-edges
-        iters = [ digraph.out_edges_iter, digraph.in_edges_iter ]
+        iters = [digraph.out_edges, digraph.in_edges]
         iters = [ iter( curnode, keys=True, data=True ) for iter in iters ]
         iter = itertools.chain( *iters )
         EDGES = [ ( data.get(weight,1), i,j,key,data ) for i,j,key,data in iter ]

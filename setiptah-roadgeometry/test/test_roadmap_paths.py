@@ -1,11 +1,6 @@
 import networkx as nx
 
 from setiptah.roadgeometry.roadmap_paths import *
-from setiptah.roadgeometry.roadmap_basic import RoadAddress
-
-import logging
-
-import pytest
 
 LOG = logging.getLogger(__name__)
 
@@ -22,7 +17,6 @@ def test_minpath():
     assert minpath(p, q, g) == [RoadSegment("R", 1, 9)]
 
 
-@pytest.mark.skip
 def test_pathlen():
     from setiptah.roadgeometry.roadmap_basic import distance
 
@@ -76,7 +70,7 @@ def test_pathlen():
 def test_canned():
     import networkx as nx
 
-    from setiptah.roadgeometry.roadmap_basic import distance
+    from setiptah.roadgeometry.roadmap_basic import distance, RoadAddress
     from setiptah.roadgeometry.roadmap_paths import minpath
 
     rn = nx.MultiDiGraph()
@@ -112,4 +106,12 @@ def test_canned():
     frwdL = pathLength(frwd)
     frwdLRef = distance(rn, p, q, 'length')
 
-    assert frwdLRef < np.inf
+    assert np.abs(frwdL - frwdLRef) < 10 ** -10
+
+    from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
+    from setiptah.basic_graph.dijkstra import RoadnetMetric
+    metric = RoadnetMetric(MultiDiGraphRoadnet(rn))
+    _, (u, v) = metric._shortest_path(p, q)._result
+
+    from setiptah.roadgeometry.legacy.astar_basic import astar_path_length
+    astar_path_length(rn, u, v, None, weight="length")

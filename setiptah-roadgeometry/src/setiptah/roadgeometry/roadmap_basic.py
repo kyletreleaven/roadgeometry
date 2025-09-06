@@ -200,7 +200,7 @@ def distance_node_to_point( digraph, u, q, weight='weight' ) :
     for v, p in zip( nodes, points ) :
         try :
             dist = astar_basic.astar_path_length( digraph, u, v, None, weight=weight )
-        except :
+        except nx.NetworkXNoPath:
             continue
         
         dist += distance_on_road( digraph, road, p, q, weight=weight )
