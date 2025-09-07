@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 
 """ my dependencies """
-from setiptah.roadbm import matchvis_util
+from setiptah.roadgeometry.matching.draw import matchvis_util
 
 import matplotlib.pyplot as plt
 
@@ -388,7 +388,7 @@ class App:
                   ]
 
         """ obtain the optimal matching """
-        import setiptah.roadbm.nx_legacy as roadbm
+        import setiptah.roadgeometry.matching.nx_legacy as roadbm
 
         opt_match = roadbm.ROADSBIPARTITEMATCH(SS, TT, roadmap)
 

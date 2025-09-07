@@ -1,8 +1,7 @@
-import numpy as np
 import networkx as nx
 
-from setiptah.roadbm.matchvis_util import position, VERTEX, POINT_IN_S, POINT_IN_T
-from setiptah.roadbm.nx_legacy import SEGMENTS
+from .matchvis_util import position, VERTEX, POINT_IN_S, POINT_IN_T
+from setiptah.roadgeometry.matching.nx_legacy import SEGMENTS
 
 """ my dependencies """
 

@@ -8,7 +8,7 @@ TODOs:
 - [ ] compute total cost
 
 """
-from setiptah.basic_graph.graphs import RoadNetwork, SetReadOnlyView
+from setiptah.roadgeometry.graphs import RoadNetwork, SetReadOnlyView
 
 import pytest
 

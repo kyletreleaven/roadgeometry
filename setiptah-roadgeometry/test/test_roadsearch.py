@@ -1,5 +1,5 @@
-from setiptah.basic_graph.dijkstra import RoadnetMetric
-from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
+from setiptah.roadgeometry.dijkstra import RoadnetMetric
+from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
 from setiptah.roadgeometry.roadsearch import *
 import setiptah.roadgeometry.probability as roadprob
 

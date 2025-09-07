@@ -1,7 +1,9 @@
 import networkx as nx
 
-from setiptah.basic_graph.mygraph import mygraph
-from setiptah.basic_graph.toposort import toposort
+import setiptah.roadgeometry.matching.util
+
+from setiptah.roadgeometry.matching.util.mygraph import mygraph
+from setiptah.roadgeometry.matching.util.toposort import toposort
 
 
 def test_toposort():

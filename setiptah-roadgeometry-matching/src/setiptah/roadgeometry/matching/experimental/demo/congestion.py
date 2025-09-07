@@ -2,7 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 from setiptah.roadgeometry.matching.experimental.congestion import *
-from setiptah.roadbm.nx_legacy import *
+from setiptah.roadgeometry.matching.nx_legacy import *
 
 from setiptah.roadgeometry.legacy import roadmap_basic as ROAD
 
@@ -110,7 +110,7 @@ def congestion_demo():
 
     assist = BIPARTITEMATCH_ROADS_CONGESTED(S, T, roadmap, rho_dict)
 
-    import setiptah.roadbm.matchvis as matchvis
+    import setiptah.roadgeometry.matching.draw.matchvis as matchvis
 
     plt.figure()
     plt.title('Congestion Optimal')

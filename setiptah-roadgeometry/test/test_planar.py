@@ -1,5 +1,5 @@
-from setiptah.basic_graph.dijkstra import RoadnetMetric, RoadSegment
-from setiptah.basic_graph.planar import PlanarRoadnet
+from setiptah.roadgeometry.dijkstra import RoadnetMetric, RoadSegment
+from setiptah.roadgeometry.planar import PlanarRoadnet
 
 import pytest
 

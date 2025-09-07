@@ -4,8 +4,7 @@ import math
 
 import numpy as np
 
-from setiptah.basic_graph.dijkstra import Dijkstra
-from setiptah.basic_graph.mygraph import mygraph
+from setiptah.roadgeometry.matching.util.mygraph import mygraph, Dijkstra
 
 PHASE_ERROR = 10**-6        # TODO: Find a way to eliminate this.
 

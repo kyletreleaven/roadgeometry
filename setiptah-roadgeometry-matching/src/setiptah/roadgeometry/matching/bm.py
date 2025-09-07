@@ -11,11 +11,11 @@ import bintrees  # Migrate to `sortedcontainers`?
 import networkx as nx  # TODO: Migrate it out?
 import numpy as np
 
-from setiptah.basic_graph.graphs import RoadInfo
-from setiptah.basic_graph.mygraph import mygraph
-from setiptah.basic_graph.protocol import *
-from setiptah.nxopt.cvxcostflow import MinConvexCostFlow
-from ..basic_graph.dijkstra import RoadnetMetric
+from setiptah.roadgeometry.graphs import RoadInfo
+from setiptah.roadgeometry.matching.util.mygraph import mygraph
+from setiptah.roadgeometry.protocol import *
+from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
+from setiptah.roadgeometry.dijkstra import RoadnetMetric
 
 T = TypeVar("T")
 Factory = Callable[[], T]

@@ -1,8 +1,7 @@
 import networkx as nx
 
 import setiptah.roadgeometry.probability as roadprob
-from setiptah.roadbm import *
-from setiptah.roadbm.nx_legacy import *
+from setiptah.roadgeometry.matching.nx_legacy import *
 
 
 def test_roadnet_matching():

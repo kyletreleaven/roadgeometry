@@ -3,8 +3,8 @@ from typing import TypeVar, Generic, Optional
 
 import numpy as np
 
-from setiptah.basic_graph.dijkstra import RoadnetMetric
-from setiptah.basic_graph.graphs import RoadNetwork, TV, TE
+from setiptah.roadgeometry.dijkstra import RoadnetMetric
+from setiptah.roadgeometry.graphs import RoadNetwork, TV, TE
 
 TVert = TypeVar("TV")
 TRoad = TypeVar("TE")

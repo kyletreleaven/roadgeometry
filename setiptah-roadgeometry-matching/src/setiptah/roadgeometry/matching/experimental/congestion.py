@@ -3,8 +3,8 @@ import networkx as nx
 import numpy as np
 import scipy.signal as sig
 
-import setiptah.roadbm as roadbm
-from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet, CHECKFLOW
+import setiptah.roadgeometry.matching as roadbm
+from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet, CHECKFLOW
 
 
 def BIPARTITEMATCH_ROADS_CONGESTED( S, T, roadmap, congestion_dict ) :
@@ -67,8 +67,8 @@ def BIPARTITEMATCH_ROADS_CONGESTED( S, T, roadmap, congestion_dict ) :
 
 
 def SOLVER(roadnet: nx.MultiDiGraph, surplus, measure_dict, congestion_dict):
-    from setiptah.nxopt.cvxcostflow import MinConvexCostFlow
-    from setiptah.basic_graph.mygraph import mygraph
+    from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
+    from setiptah.roadgeometry.matching.util.mygraph import mygraph
     
     # a rather crucial measure of the problem's complexity;
     # see bm.SOLVER for relevant commentary

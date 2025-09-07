@@ -4,9 +4,11 @@ import networkx as nx
 import pytest
 
 import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
-from setiptah.basic_graph.dijkstra import *
-from setiptah.basic_graph.graphs import RoadNetwork
-from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
+from setiptah.roadgeometry.dijkstra import RoadnetMetric, RoadSegment
+from setiptah.roadgeometry.graphs import RoadNetwork
+from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
+from setiptah.roadgeometry.matching.util.mygraph import *
+from setiptah.roadgeometry.protocol import Roadnet
 
 
 def test_dijkstra():

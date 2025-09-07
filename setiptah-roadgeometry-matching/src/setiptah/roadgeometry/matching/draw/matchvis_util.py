@@ -4,7 +4,7 @@ import networkx as nx
 
 import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
 
-from setiptah.roadbm import nx_legacy as roadbm
+from setiptah.roadgeometry.matching import nx_legacy as roadbm
 
 VERTEX = 'v'
 POINT_IN_S = 'S'

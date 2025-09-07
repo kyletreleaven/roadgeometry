@@ -106,8 +106,8 @@ def test_canned():
 
     assert np.abs(frwdL - frwdLRef) < 10 ** -10
 
-    from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
-    from setiptah.basic_graph.dijkstra import RoadnetMetric
+    from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
+    from setiptah.roadgeometry.dijkstra import RoadnetMetric
     metric = RoadnetMetric(MultiDiGraphRoadnet(rn))
     _, (u, v) = metric._shortest_path(p, q)._result
 

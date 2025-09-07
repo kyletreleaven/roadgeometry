@@ -2,7 +2,7 @@ import networkx as nx
 import bintrees
 
 from .bm import *
-from setiptah.basic_graph.graphs import RoadNetwork
+from setiptah.roadgeometry.graphs import RoadNetwork
 
 
 @dataclass

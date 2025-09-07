@@ -84,8 +84,8 @@ def minpath(
 ):
     """ returns one of the min length paths between two points on a Roadmap """
 
-    from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
-    from setiptah.basic_graph.dijkstra import RoadnetMetric
+    from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
+    from setiptah.roadgeometry.dijkstra import RoadnetMetric
     metric = RoadnetMetric(MultiDiGraphRoadnet(roadmap, length_attr=length_attr))
 
     p_ = p.road, p.coord

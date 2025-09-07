@@ -4,7 +4,7 @@ import bintrees
 import networkx as nx
 import numpy as np
 
-import setiptah.roadbm.nx_legacy as roadbm
+import setiptah.roadgeometry.matching.nx_legacy as roadbm
 
 
 def ONESEGMENT(S, T):

@@ -4,8 +4,8 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from setiptah.basic_graph.mygraph import mygraph
-from setiptah.nxopt.cvxcostflow import MinConvexCostFlow
+from setiptah.roadgeometry.matching.util.mygraph import mygraph
+from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
 
 LOG = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ import bintrees
 import networkx as nx
 
 import matplotlib.pyplot as plt
-from setiptah.roadbm.matchvis import SHOWMATCH
+from setiptah.roadgeometry.matching.draw.matchvis import SHOWMATCH
 
 
 def test_showmatch():
