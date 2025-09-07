@@ -3,7 +3,9 @@ from dataclasses import dataclass
 from typing import TypeVar, Generic
 
 from . import protocol
+from .protocol import Roadnet
 
+T = TypeVar("T")
 TV = TypeVar("TV")
 TE = TypeVar("TE")
 
@@ -104,3 +106,82 @@ class RoadNetwork(protocol.Roadnet[TV, TE]):
 
     def is_oneway(self, edge: TE) -> bool:
         return self._edges[edge].oneway
+
+
+@dataclass(frozen=True)
+class IntRoadnet(Roadnet[int, int]):
+    """A network on road and vertex indices (integers).
+
+    """
+    roads: tuple[RoadInfo[int], ...]
+    n_vertices: int
+
+    @classmethod
+    def normalize(cls, rn: Roadnet, seq_maps: bool = True):
+
+        vert_map = {u: k for k, u in enumerate(rn.nodes())}
+
+        road_map = {}
+        roads: list[RoadInfo] = []
+        for r, road_ in enumerate(rn.edges()):
+            road_map[road_] = r
+
+            i_, j_ = rn.endpoints(road_)
+            length = rn.length(road_)
+            oneway = rn.is_oneway(road_)
+
+            road_info = RoadInfo(length, vert_map[i_], vert_map[j_], oneway)
+            roads.append(road_info)
+
+        inst = cls(tuple(roads), len(vert_map))
+
+        if seq_maps:
+            road_map = int_map_to_seq(road_map)
+            vert_map = int_map_to_seq(vert_map)
+
+        return inst, road_map, vert_map
+
+    def nodes(self) -> Collection[TV]:
+        return range(self.n_vertices)
+
+    @property
+    def n_roads(self) -> int:
+        return len(self.roads)
+
+    def edges(self) -> Collection[TE]:
+        return range(self.n_roads)
+
+    def is_valid(self):
+        if self.n_vertices < 0:
+            return False
+
+        nodes = self.nodes()
+
+        def road_is_valid(road: RoadInfo):
+            return (
+                road.length > 0.
+                and road.left in nodes
+                and road.right in nodes
+            )
+
+        if not all(road_is_valid(road) for road in self.roads):
+            return False
+
+        return True
+
+    def length(self, road: int) -> float:
+        return self.roads[road].length
+
+    def endpoints(self, road: int) -> tuple[int, int]:
+        road_info = self.roads[road]
+        return road_info.left, road_info.right
+
+    def is_oneway(self, road: TE) -> bool:
+        return self.roads[road].oneway
+
+
+def int_map_to_seq(dict_: dict[T, int]) -> list[T]:
+    result = [None] * len(dict_)
+    for i, k in dict_.items():
+        result[k] = i
+    return result

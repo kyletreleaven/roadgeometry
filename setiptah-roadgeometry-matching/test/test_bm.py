@@ -138,7 +138,7 @@ def test_roadnet_matching_int():
     roadnet_, roadnet_graph_ = MultiDiGraphRoadnet(roadnet), roadnet
     matching_ = optimal_roadnet_matching(PP_, QQ_, roadnet_)
 
-    inst, _roads, __ = StructRoadnetMatchingInstance.normalize(PP_, QQ_, roadnet_)
+    inst, _roads, __ = RoadnetMatchingInstance.normalize(PP_, QQ_, roadnet_)
     roadnet = inst.roadnet
     # assert False, roadnet
     assert inst.is_valid()
