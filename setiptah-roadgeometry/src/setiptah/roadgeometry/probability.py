@@ -10,7 +10,7 @@ import networkx as nx
 import bintrees     # --- weird warnings?
 
 # dev
-from . import roadmap_basic as ROAD
+from .legacy import roadmap_basic as ROAD
 
 
 def sampleroadnet( n=10, p=.3, n_oneway=0 ) :

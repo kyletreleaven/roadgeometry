@@ -1,6 +1,8 @@
 import networkx as nx
 
-from setiptah.roadgeometry.roadmap_paths import *
+from setiptah.roadgeometry.legacy import roadmap_basic as ROAD
+from setiptah.roadgeometry.legacy.roadmap_basic import RoadAddress
+from setiptah.roadgeometry.legacy.roadmap_paths import *
 
 LOG = logging.getLogger(__name__)
 
@@ -18,8 +20,6 @@ def test_minpath():
 
 
 def test_pathlen():
-    from setiptah.roadgeometry.roadmap_basic import distance
-
     import setiptah.roadgeometry.probability as roadprob
 
     roadmap = roadprob.sampleroadnet()
@@ -29,7 +29,7 @@ def test_pathlen():
 
     frwd = minpath(p, q, roadmap)
     frwdL = pathLength(frwd)
-    frwdLRef = distance(roadmap, p, q, 'length')
+    frwdLRef = ROAD.distance(roadmap, p, q, 'length')
 
     if np.abs(frwdL - frwdLRef) < 10 ** -10:
         pass
@@ -68,10 +68,8 @@ def test_pathlen():
 
 
 def test_canned():
-    import networkx as nx
 
-    from setiptah.roadgeometry.roadmap_basic import distance, RoadAddress
-    from setiptah.roadgeometry.roadmap_paths import minpath
+    from setiptah.roadgeometry.legacy.roadmap_paths import minpath
 
     rn = nx.MultiDiGraph()
     rn.add_node(0)
@@ -104,7 +102,7 @@ def test_canned():
 
     frwd = minpath(p, q, rn)
     frwdL = pathLength(frwd)
-    frwdLRef = distance(rn, p, q, 'length')
+    frwdLRef = ROAD.distance(rn, p, q, 'length')
 
     assert np.abs(frwdL - frwdLRef) < 10 ** -10
 

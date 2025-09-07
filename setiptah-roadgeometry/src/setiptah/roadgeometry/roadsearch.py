@@ -10,7 +10,7 @@ import networkx as nx
 import bintrees
 
 # dev
-from . import roadmap_basic as ROAD
+from .legacy import roadmap_basic as ROAD
 
 
 def my_isaddress( addr ) :

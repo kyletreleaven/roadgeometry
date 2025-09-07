@@ -18,7 +18,7 @@ from matplotlib.colors import colorConverter
 #from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import axes3d, art3d
 
-import setiptah.roadgeometry.roadmap_basic as ROAD
+import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
 
 
 def fitArc2Segment( pt1, pt2, arclen, below=False ) :

@@ -2,7 +2,7 @@
 """
 import networkx as nx
 
-import setiptah.roadgeometry.roadmap_basic as ROAD
+import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
 
 from setiptah.roadbm import nx_legacy as roadbm
 

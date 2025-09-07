@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from setiptah.roadgeometry.matching.experimental.congestion import *
 from setiptah.roadbm.nx_legacy import *
 
-from setiptah.roadgeometry import roadmap_basic as ROAD
+from setiptah.roadgeometry.legacy import roadmap_basic as ROAD
 
 
 def congestion_demo():

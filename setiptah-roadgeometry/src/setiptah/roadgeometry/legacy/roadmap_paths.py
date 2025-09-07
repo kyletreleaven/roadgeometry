@@ -16,8 +16,7 @@ from typing import Any
 import networkx as nx
 import numpy as np
 
-from .roadmap_basic import RoadAddress
-from .roadmap_basic import check_point
+from .roadmap_basic import RoadAddress, check_point
 
 LOG = logging.getLogger(__name__)
 

@@ -1,12 +1,9 @@
-
-
 import itertools
-import random
+
+import networkx as nx  # it's time for better control
 import numpy as np
 
-import networkx as nx       # it's time for better control
-
-from .legacy import astar_basic
+from . import astar_basic
 
 __author__ = "Kyle Treleaven <ktreleav@mit.edu>"
 __all__ = [ 'RoadAddress', 'distance' ]

@@ -1,16 +1,12 @@
 import itertools
 
-import numpy as np
 import networkx as nx
-
-from setiptah.basic_graph.mygraph import mygraph
-from setiptah.basic_graph.dijkstra import *
-from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
-from setiptah.basic_graph.graphs import RoadNetwork
-
-import setiptah.roadgeometry.roadmap_basic as ROAD
-
 import pytest
+
+import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
+from setiptah.basic_graph.dijkstra import *
+from setiptah.basic_graph.graphs import RoadNetwork
+from setiptah.roadbm.nx_legacy import MultiDiGraphRoadnet
 
 
 def test_dijkstra():
