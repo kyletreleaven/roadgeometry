@@ -4,7 +4,7 @@ import networkx as nx
 
 import setiptah.roadgeometry.roadmap_basic as ROAD
 
-from setiptah.roadbm import bm as roadbm
+from setiptah.roadbm import nx_legacy as roadbm
 
 VERTEX = 'v'
 POINT_IN_S = 'S'
@@ -27,21 +27,21 @@ def INTERVAL_GRAPH( match, S, T, roadmap, pos, length_attr='length' ) :
         def traverse() :
             yield 0., VERTEX, u     # location, type, label
             for y, queue in segments[road].iter_items() :
-                for s in queue.P : yield y, POINT_IN_S, s
-                for t in queue.Q : yield y, POINT_IN_T, t
+                for s in queue.supply: yield y, POINT_IN_S, s
+                for t in queue.demand: yield y, POINT_IN_T, t
             yield length, VERTEX, v
 
         # bigram enumeration and edge insertion
         ITER = traverse()
-        next = ITER.next()
+        prev = next(ITER)
         for y2, type2, label2 in ITER:
-            y1, type1, label1 = next
+            y1, type1, label1 = prev
 
             # insert edge into score graph *and* skeleton graph
             digraph.add_edge( (type1,label1), (type2,label2), score=0 )
             skeleton.add_edge( (type1,label1), (type2,label2), length=y2-y1 )
 
-            next = y2, type2, label2
+            prev = y2, type2, label2
 
     # for each match in the matching
     for i, j in match :
@@ -102,4 +102,3 @@ def position(address, roadmap, pos, length_attr='length'):
     x = pos[u]
     vec = pos[v] - x
     return x + vec * coord / width
-
