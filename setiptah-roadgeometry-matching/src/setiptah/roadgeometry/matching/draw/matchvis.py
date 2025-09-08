@@ -1,12 +1,12 @@
-import networkx as nx
-
-from .matchvis_util import position, VERTEX, POINT_IN_S, POINT_IN_T
-from setiptah.roadgeometry.matching.nx_legacy import SEGMENTS
-
-""" my dependencies """
+from typing import Union
 
 import matplotlib.pyplot as plt
+import networkx as nx
 
+from setiptah.roadgeometry.draw import draw_planar_roadnet
+from setiptah.roadgeometry.matching.nx_legacy import SEGMENTS
+from setiptah.roadgeometry.legacy.conversion import multigraph_to_planar
+from .matchvis_util import position, VERTEX, POINT_IN_S, POINT_IN_T
 
 """ CONSTANTS """
 
@@ -19,11 +19,6 @@ ZTRAILS = 4
 ZPOINTS = 5
 
 
-
-
-""" convenience functions """
-
-
 def pointsToXY( points ) :
     """ split a list of (x,y) coordinates into X and Y; usually for plotting """
     X = [ x for x,y in points ]
@@ -31,34 +26,9 @@ def pointsToXY( points ) :
     return X, Y
 
 
-def drawRoadmap( roadmap: nx.DiGraph, pos, ax=None, **kwargs ) :
-    if ax is None : ax = plt.gca()
-    
-    # draw the skeleton (undirected)
-    skeleton = roadmap.to_undirected()
-    nx.draw_networkx_nodes( skeleton, pos, ax=ax
-                            # , zorder=ZNODES
-                            )
-    style = [
-        ("solid" if data.get("oneway", False) else "dotted")
-        for _, __, data in roadmap.edges(data=True)
-    ]
-    nx.draw_networkx_edges( skeleton, pos=pos, ax=ax,
-                            # zorder=ZEDGES,
-                            **kwargs,
-                            # style=style,
-                            )
-    
-    road_labels = {
-        (u,v) : road + (" (directed)" if data.get("oneway", False) else "") + '\n'     # the endline is to raise the label
-        for u, v, road, data in roadmap.edges(keys=True, data=True)
-    }
-    nx.draw_networkx_edge_labels( skeleton, pos=pos, ax=ax, 
-                                  edge_labels=road_labels,
-                                  # zorder=ZLABELS
-                                  )
-    
-    return ax
+def drawRoadmap(roadmap: Union[nx.DiGraph, nx.MultiDiGraph], pos, ax=None, **kwargs):
+    planar = multigraph_to_planar(roadmap, pos)
+    return draw_planar_roadnet(planar, ax=ax, **kwargs)
 
 
 def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',

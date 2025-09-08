@@ -1,3 +1,8 @@
+"""
+
+TODO: DEBUG: I've noticed some matches go _against_ traffic on one-way roads.
+
+"""
 import random
 import numpy as np
 import bintrees

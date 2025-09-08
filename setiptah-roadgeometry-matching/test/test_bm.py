@@ -1,6 +1,7 @@
 import networkx as nx
 
 import setiptah.roadgeometry.probability as roadprob
+from setiptah.roadgeometry.legacy.conversion import create_multigraph
 from setiptah.roadgeometry.matching.nx_legacy import *
 
 

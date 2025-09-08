@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 
 import matplotlib.pyplot as plt
-from setiptah.roadbm.matchvis import SHOWMATCH
+from setiptah.roadgeometry.matching.draw.matchvis import SHOWMATCH
 
 
 
@@ -74,7 +74,7 @@ if __name__ == '__main__' :
     bad_match = list(zip( range(M), order ))
     
     """ obtain the optimal matching """
-    from setiptah.roadbm import nx_legacy
+    from setiptah.roadgeometry.matching import nx_legacy
     opt_match = nx_legacy.ROADSBIPARTITEMATCH( SS, TT, roadmap )
     
     
