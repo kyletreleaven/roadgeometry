@@ -110,6 +110,9 @@ def test_roadnet_matching():
 
     assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
 
+    # TODO: Test vs. a third-party implementation on distance matrix; e.g.,
+    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html
+
 
 def test_roadnet_matching_int():
 
