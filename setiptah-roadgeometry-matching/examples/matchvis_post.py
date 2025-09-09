@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 
 import matplotlib.pyplot as plt
-from setiptah.roadgeometry.matching.draw.matchvis import SHOWMATCH
+from setiptah.roadgeometry.matching.draw.matchvis import SHOWMATCH, show_match
 
 
 
@@ -78,24 +78,7 @@ if __name__ == '__main__' :
     opt_match = nx_legacy.ROADSBIPARTITEMATCH( SS, TT, roadmap )
     
     
-    """ Now, do all the plotting! """
-    if False :
-        # just points
-        plt.figure()
-        nx.draw_networkx_nodes( graph, pos=pos )
-        plt.gca().set_aspect('equal')
-        
-        # the Delaunay-induced network
-        plt.figure()
-        drawRoadmap( roadmap, pos )
-        plt.gca().set_aspect('equal')
-        
-        # network + points, no matches
-        plt.figure()
-        SHOWMATCH( [], SS, TT, roadmap, pos=pos, edge_color='k', alpha=1. )
-        
-        
-    """ try to do an animation """
+    """Animated plot."""
     from matplotlib.widgets import Slider, Button, RadioButtons
     
     fig = plt.figure()
@@ -137,7 +120,8 @@ if __name__ == '__main__' :
         
         lims = mainax.axis()
         mainax.clear()
-        SHOWMATCH( pltmatch, SSS, TTT, roadmap, pos=pos, ax=mainax )
+        # SHOWMATCH(pltmatch, SSS, TTT, roadmap, pos=pos, ax=mainax)
+        show_match(pltmatch, SSS, TTT, roadmap, pos=pos, ax=mainax)
         
         global lims_flag
         if lims_flag :
