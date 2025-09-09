@@ -4,9 +4,11 @@ import matplotlib.pyplot as plt
 import networkx as nx
 
 from setiptah.roadgeometry.draw import draw_planar_roadnet
-from setiptah.roadgeometry.matching.nx_legacy import SEGMENTS
 from setiptah.roadgeometry.legacy.conversion import multigraph_to_planar
+from setiptah.roadgeometry.matching.nx_legacy import compute_segments
+from setiptah.roadgeometry.protocol import Roadnet
 from .matchvis_util import position, VERTEX, POINT_IN_S, POINT_IN_T
+from .. import BiPartite
 
 """ CONSTANTS """
 
@@ -26,62 +28,65 @@ def pointsToXY( points ) :
     return X, Y
 
 
-def drawRoadmap(roadmap: Union[nx.DiGraph, nx.MultiDiGraph], pos, ax=None, **kwargs):
-    planar = multigraph_to_planar(roadmap, pos)
-    return draw_planar_roadnet(planar, ax=ax, **kwargs)
-
-
-def SHOWTRAILS( S, T, assist, roadmap, pos, length_attr='length',
-                ax=None, **kwargs ) :
+def SHOWTRAILS( S, T, assist, roadmap, pos, ax=None, **kwargs):
     """
     visualize a matching on a roadmap:
     """
+    roadnet = multigraph_to_planar(roadmap, pos)
     
     # draw the roadmap
     if ax is None : ax = plt.gca()
     options = { 'edge_color' : 'g', 'alpha' : .15 }     # lightly, though...
     options.update( kwargs )                            # but let overrides
-    drawRoadmap( roadmap, pos, ax=ax, **options )
+
+    draw_planar_roadnet(roadnet, ax=ax, **options)
+
     ax.set_aspect('equal')  # i just really like equal aspect...
-    
+
+    interval_graph = flow_to_interval_graph(assist, S, T, roadnet)
+
+    SHOW_THICKNESS_GRAPH(interval_graph, S, T, roadmap, pos, ax)
+
+
+def flow_to_interval_graph(flow, S, T, roadnet: Roadnet):
+
     """ The hard part is getting the edges with proper thickness """
     # sort points onto segments
-    segments = SEGMENTS( S, T, roadmap )
+    segments = compute_segments(S, T, roadnet)
 
     # initialize a path graph
     graph = nx.Graph()
-    
-    for u, v, road, data in roadmap.edges( keys=True, data=True ) :
-        width = data.get( length_attr, 1 )
-        
-        def traverse() :
-            yield 0., VERTEX, u     # location, type, label
-            for y, queue in segments[road].iter_items() :
-                for s in queue.supply:
-                    yield y, POINT_IN_S, s
-                for t in queue.demand:
-                    yield y, POINT_IN_T, t
-            yield width, VERTEX, v
-            
-        ITER = traverse()
-        prev = next(ITER)
-        z = assist[road]    # start road assistance +0
-        for y2, type2, label2 in ITER :
+
+    for road in roadnet.edges():
+        u, v = roadnet.endpoints(road)
+        it = iterate_segment(segments[road], u, v, roadnet.length(road))
+        prev = next(it)
+        z = flow[road]  # start road assistance +0
+        for y2, type2, label2 in it:
             y1, type1, label1 = prev
-            graph.add_edge( (type1,label1), (type2,label2), weight=y2-y1, score=abs(z) )
+            graph.add_edge((type1, label1), (type2, label2), weight=y2 - y1, score=abs(z))
             if type2 == POINT_IN_S:
                 z += 1
             elif type2 == POINT_IN_T:
-                z -= 1 
-            
+                z -= 1
+
             prev = y2, type2, label2
-            
-                        
-    SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax )
+
+    return graph
 
 
-def SHOWMATCH( match, S, T, roadmap, pos, length_attr='length', ax=None,
-               **kwargs ) :
+def iterate_segment(segment, u, v, length: float):
+    yield 0., VERTEX, u
+    for y, q in segment.iter_items():
+        q: BiPartite[list]
+        for s in q.supply:
+            yield y, POINT_IN_S, s
+        for t in q.demand:
+            yield y, POINT_IN_T, t
+        yield length, VERTEX, v
+
+
+def SHOWMATCH(match, S, T, roadmap, pos, ax=None, **kwargs):
     """
     visualize a matching on a roadmap:
     imagine depositing one uniform trail of ink,
@@ -89,50 +94,49 @@ def SHOWMATCH( match, S, T, roadmap, pos, length_attr='length', ax=None,
     on the shortest path between the endpoints of the match;
     segments of the network more often covered will obtain more ink
     """
-    
+    roadnet = multigraph_to_planar(roadmap, pos)
+
     # draw the roadmap
     if ax is None : ax = plt.gca()
     options = { 'edge_color' : 'g', 'alpha' : .15 }     # lightly, though...
     options.update( kwargs )                            # but let overrides
-    drawRoadmap( roadmap, pos, ax=ax, **options )
+
+    draw_planar_roadnet(roadnet, ax=ax, **options)
+
     ax.set_aspect('equal')  # i just like equal aspect...
-    
+
+    interval_graph = matching_to_interval_graph(match, S, T, roadnet)
+
+    SHOW_THICKNESS_GRAPH(interval_graph, S, T, roadmap, pos, ax)
+
+
+def matching_to_interval_graph(matching, S, T, roadnet):
     """ The hard part is getting the edges with proper thickness """
     # sort points onto segments
-    segments = SEGMENTS( S, T, roadmap )
-    
+    segments = compute_segments(S, T, roadnet)
+
     # make a path graph
     graph = nx.Graph()
-    
-    for u, v, road, data in roadmap.edges( keys=True, data=True ) :
-        width = data.get( length_attr, 1 )
-        
-        def traverse() :
-            yield 0., VERTEX, u     # location, type, label
-            for y, queue in segments[road].iter_items() :
-                for s in queue.supply:
-                    yield y, POINT_IN_S, s
-                for t in queue.demand:
-                    yield y, POINT_IN_T, t
-            yield width, VERTEX, v
-            
-        ITER = traverse()
-        prev = next(ITER)
-        for y2, type2, label2 in ITER :
+
+    for road in roadnet.edges():
+        u, v = roadnet.endpoints(road)
+        it = iterate_segment(segments[road], u, v, roadnet.length(road))
+        prev = next(it)
+        for y2, type2, label2 in it:
             y1, type1, label1 = prev
-            graph.add_edge( (type1,label1), (type2,label2), weight=y2-y1, score=0 )
+            graph.add_edge((type1, label1), (type2, label2), weight=y2 - y1, score=0)
             prev = y2, type2, label2
-            
+
     # add unit weight to shortest paths
-    for i, j in match :
-        path = nx.shortest_path(graph, (POINT_IN_S, i), (POINT_IN_T, j),
-                                weight='weight')
-        
-        for ii, jj in zip( path[:-1], path[1:] ) :
-            data = graph.get_edge_data( ii, jj )
+    for i, j in matching:
+        # TODO: Pretty sure the oneway bug is here.
+        path = nx.shortest_path(graph, (POINT_IN_S, i), (POINT_IN_T, j), weight='weight')
+
+        for ii, jj in zip(path[:-1], path[1:]):
+            data = graph.get_edge_data(ii, jj)
             data['score'] += 1
 
-    SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax )
+    return graph
 
 
 def SHOW_THICKNESS_GRAPH( graph, S, T, roadmap, pos, ax ) :            
