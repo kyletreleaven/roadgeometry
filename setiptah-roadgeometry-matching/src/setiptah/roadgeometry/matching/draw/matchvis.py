@@ -83,7 +83,7 @@ def iterate_segment(segment, u, v, length: float):
             yield y, POINT_IN_S, s
         for t in q.demand:
             yield y, POINT_IN_T, t
-        yield length, VERTEX, v
+    yield length, VERTEX, v
 
 
 def SHOWMATCH(match, S, T, roadmap, pos, ax=None, **kwargs):
