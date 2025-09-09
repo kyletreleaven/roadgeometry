@@ -6,9 +6,9 @@ import pytest
 import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
 from setiptah.roadgeometry.dijkstra import RoadnetMetric, RoadSegment
 from setiptah.roadgeometry.graphs import RoadNetwork
+from setiptah.roadgeometry.legacy.conversion import create_multigraph
 from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
 from setiptah.roadgeometry.matching.util.mygraph import *
-from setiptah.roadgeometry.protocol import Roadnet
 
 
 def test_dijkstra():
@@ -229,16 +229,6 @@ def test_metric_node_distances():
     else:
         for u in rn.nodes():
             assert metric._distance[u] == dref[u], u
-
-
-def create_multigraph(rn: Roadnet):
-    g = nx.MultiDiGraph()
-    g.add_nodes_from(rn.nodes())
-    for r in rn.edges():
-        i, j = rn.endpoints(r)
-        length, oneway = rn.length(r), rn.is_oneway(r)
-        g.add_edge(i, j, r, length=length, oneway=oneway)
-    return g
 
 
 class TestRoadnetMetric:
