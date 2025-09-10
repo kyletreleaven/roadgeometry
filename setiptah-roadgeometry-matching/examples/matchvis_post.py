@@ -5,6 +5,9 @@ import networkx as nx
 import numpy as np
 
 import matplotlib.pyplot as plt
+
+from setiptah.roadgeometry.legacy.conversion import multigraph_to_planar
+from setiptah.roadgeometry.matching import optimal_roadnet_matching2
 from setiptah.roadgeometry.matching.draw.matchvis import show_matching
 
 
@@ -47,6 +50,7 @@ if __name__ == '__main__' :
     import setiptah.roadgeometry.generation as mapgen
     roadmap = mapgen.DelaunayRoadMap( interchanges )
 
+    # let some roads be one-way
     import random
     for u, v, road, data in roadmap.edges(keys=True, data=True):
         if random.random() < .2:
@@ -54,8 +58,9 @@ if __name__ == '__main__' :
 
     """ ...and build positions dictionary """
     pos = { k : point for k, point in enumerate( interchanges ) }
-    
-    
+
+    roadnet_planar = multigraph_to_planar(roadmap, pos, "oneway")
+
     """ now, obtain two sets of points """
     M = args.points
     
@@ -74,10 +79,8 @@ if __name__ == '__main__' :
     bad_match = list(zip( range(M), order ))
     
     """ obtain the optimal matching """
-    from setiptah.roadgeometry.matching import nx_legacy
-    opt_match = nx_legacy.ROADSBIPARTITEMATCH( SS, TT, roadmap )
-    
-    
+    opt_match, _ = optimal_roadnet_matching2(SS, TT, roadnet_planar)
+
     """Animated plot."""
     from matplotlib.widgets import Slider, Button, RadioButtons
     

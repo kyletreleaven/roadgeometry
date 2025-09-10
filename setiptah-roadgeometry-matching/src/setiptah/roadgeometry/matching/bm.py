@@ -374,6 +374,22 @@ def OBJECTIVE_FUNC( measure ) :
     return costWrapper( OBJECTIVE(measure) )
 
 
+def write_objectives(P, Q, roadnet: Roadnet):
+    segment_dict = compute_segments2(P, Q, roadnet)
+    surplus_dict = dict()
+    objective_dict = dict()
+
+    for road, segment in segment_dict.items():
+        _match = PREMATCH(segment)
+
+        surplus_dict[road] = SURPLUS(segment)
+
+        measure = MEASURE(segment, roadnet.length(road))
+        objective_dict[road] = OBJECTIVE(measure)
+
+    return objective_dict
+
+
 def compute_optimal_flow(
         roadnet: Roadnet[TRoad, TVert],
         surplus: dict[TVert, float],
@@ -535,7 +551,7 @@ def create_topograph(
 def CHECKTOPO( topograph ) :
     """
 
-    TODO: Good to test me.
+    TODO: Good to test me?
 
     """
     def balance( u ) :

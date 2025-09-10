@@ -293,3 +293,17 @@ def test_segment_pointless_road():
 
     segment_dict = compute_segments2([], [], rn)
     assert "R" in segment_dict
+
+
+def test_objectives():
+
+    rn = RoadNetwork()
+    rn.add_edge("R", 0, 1, 10.)
+
+    objs = write_objectives([("R", 2.)], [("R", 8.)], rn)
+
+    obj_fn = costWrapper(objs["R"])
+
+    xs = -5, -.5, 1
+    cs = [obj_fn(x) for x in xs]
+    assert cs == [44., 5., 16.]

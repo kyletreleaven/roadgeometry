@@ -1,3 +1,11 @@
+"""
+
+def ROADSBIPARTITEMATCH( P, Q, roadnet_graph: nx.MultiDiGraph, **kwargs ) :
+    return optimal_roadnet_matching(
+        P, Q, MultiDiGraphRoadnet(roadnet_graph), **kwargs
+    )
+
+"""
 import bintrees
 import networkx as nx
 
@@ -21,12 +29,6 @@ class MultiDiGraphRoadnet(RoadNetwork[TVert, TRoad]):
             self.add_edge(road, i, j, data[self.length_attr], oneway=data.get(self.oneway_attr, False))
 
 
-def ROADSBIPARTITEMATCH( P, Q, roadnet_graph: nx.MultiDiGraph, **kwargs ) :
-    return optimal_roadnet_matching(
-        P, Q, MultiDiGraphRoadnet(roadnet_graph), **kwargs
-    )
-
-
 OrderedPoints = bintrees.RBTree
 """
 
@@ -40,35 +42,21 @@ respectively, at given coordinate.
 
 def SEGMENTS(P, Q, roadnet: nx.MultiDiGraph) -> dict[TRoad, OrderedPoints]:
     # TODO: Return RBTree inner here?
-    return compute_segments(P, Q, MultiDiGraphRoadnet(roadnet))
+    return compute_segments_legacy(P, Q, MultiDiGraphRoadnet(roadnet))
 
 
-def WRITEOBJECTIVES(P, Q, roadnet_graph: nx.MultiDiGraph):
-    return write_objectives(P, Q, MultiDiGraphRoadnet(roadnet_graph))
-
-
-def write_objectives(P, Q, roadnet: Roadnet):
-    segment_dict = compute_segments(P, Q, roadnet)
-    surplus_dict = dict()
-    objective_dict = dict()
-
-    for road, segment in segment_dict.items():
-        match = PREMATCH(segment)
-
-        surplus_dict[road] = SURPLUS(segment)
-
-        measure = MEASURE(segment, roadnet.length(road))
-        objective_dict[road] = OBJECTIVE(measure)
-
-    return objective_dict
-
-
-def compute_segments(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, OrderedPoints]:
+def compute_segments_legacy(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, OrderedPoints]:
     """
     returns:
     a dictionary whose keys are coordinates and whose values are local (P,Q) index queues
     """
     segments = dict()
+
+    def ensure_road(road, data):
+        curr = data.setdefault(road)
+        if curr is None: data[road] = bintrees.RBTree()
+        return data[road]
+
     for road in roadnet.edges():
         ensure_road(road, segments)  # these, and only these, roads are allowed
 
@@ -107,9 +95,3 @@ def MATCHCOSTS(matching: tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
 def ROADMATCHCOST( match, P, Q, roadnet ) :
     costs = MATCHCOSTS( match, P, Q, roadnet )
     return sum( costs )
-
-
-def ensure_road( road, data ) :
-    curr = data.setdefault( road )
-    if curr is None : data[road] = bintrees.RBTree()
-    return data[road]

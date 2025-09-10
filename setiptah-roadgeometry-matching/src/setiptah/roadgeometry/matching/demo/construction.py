@@ -2,10 +2,110 @@ import bintrees
 import networkx as nx
 import numpy as np
 
+from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
+
 """ my dependencies """
-from setiptah.roadgeometry.matching.draw import matchvis_util
+from setiptah.roadgeometry.matching import nx_legacy as roadbm, optimal_roadnet_matching2
+import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
 
 import matplotlib.pyplot as plt
+
+VERTEX = 'v'
+POINT_IN_S = 'S'
+POINT_IN_T = 'T'
+
+
+def INTERVAL_GRAPH( match, S, T, roadmap, pos, length_attr='length' ) :
+    # start a "path graph" --- damn, has to be undirected...
+    digraph = nx.DiGraph()
+    skeleton = nx.Graph()
+
+    # sort points onto segments
+    segments = roadbm.SEGMENTS( S, T, roadmap)
+
+    for u, v, road, data in roadmap.edges( keys=True, data=True ) :
+        # store coordinate of the r^+ endpoint for later use
+        length = data.get( length_attr, 1 )
+
+        # enumerates the points on segment in a specific order
+        def traverse() :
+            yield 0., VERTEX, u     # location, type, label
+            for y, queue in segments[road].iter_items() :
+                for s in queue.supply: yield y, POINT_IN_S, s
+                for t in queue.demand: yield y, POINT_IN_T, t
+            yield length, VERTEX, v
+
+        # bigram enumeration and edge insertion
+        ITER = traverse()
+        prev = next(ITER)
+        for y2, type2, label2 in ITER:
+            y1, type1, label1 = prev
+
+            # insert edge into score graph *and* skeleton graph
+            digraph.add_edge( (type1,label1), (type2,label2), score=0 )
+            skeleton.add_edge( (type1,label1), (type2,label2), length=y2-y1 )
+
+            prev = y2, type2, label2
+
+    # for each match in the matching
+    for i, j in match :
+        # find shortest path on the *skeleton* graph, i.e., ignoring direction
+        path = nx.shortest_path( skeleton, (POINT_IN_S,i), (POINT_IN_T,j),
+                                 weight='length' )
+
+        # direct unit score along shortest path
+        for ii, jj in zip( path[:-1], path[1:] ) :
+            # path traverses edge in the forward direction
+            if digraph.has_edge( ii, jj ) :
+                data = digraph.get_edge_data( ii, jj )
+                data['score'] += 1
+
+            # otherwise, path traverses edge in the backward direction
+            elif digraph.has_edge( jj, ii ) :
+                data = digraph.get_edge_data( jj, ii )
+                data['score'] -= 1
+
+                # then, reverse edge if it has negative score (only need to check if minus)
+                score = data['score']
+                if score < 0 :
+                    digraph.remove_edge( jj, ii )
+                    digraph.add_edge( ii, jj, score = -score )
+
+            else:
+                raise Exception('edge not found')
+
+    def vertpos(u) : return pos[u]
+    def pos_from_S(u) : return position( S[u], roadmap, pos )
+    def pos_from_T(u) : return position( T[u], roadmap, pos )
+    switch = { VERTEX : vertpos,
+              POINT_IN_S : pos_from_S,
+              POINT_IN_T : pos_from_T }
+
+    other_pos = {}
+    for uu in digraph.nodes() :
+        typeu, labelu = uu
+        other_pos[uu] = switch[typeu]( labelu )
+
+    return digraph, other_pos
+
+
+def position(address, roadmap, pos, length_attr='length'):
+    """
+    get the Euclidean position of a street address,
+    given roadmap and dictionary of vertex positions
+    """
+    road, coord = address
+    coord = float(coord)
+
+    u, v, key = ROAD.obtain_edge(roadmap, road)
+    assert key == road
+    data = ROAD.get_road_data(road, roadmap)
+    width = data.get( length_attr, 1 )
+
+    #ROAD.get_edge_data( )
+    x = pos[u]
+    vec = pos[v] - x
+    return x + vec * coord / width
 
 
 def SANITIZE(I_graph):
@@ -28,13 +128,13 @@ def INITIALIZE_BAGS(I_graph):
 
         data.update(S=[], T=[])
 
-        if typei == matchvis_util.VERTEX:
+        if typei == VERTEX:
             continue
 
-        elif typei == matchvis_util.POINT_IN_S:
+        elif typei == POINT_IN_S:
             data['S'].append(labeli)
 
-        elif typei == matchvis_util.POINT_IN_T:
+        elif typei == POINT_IN_T:
             data['T'].append(labeli)
 
         else:
@@ -121,15 +221,15 @@ def DISPLAY_STATE(I_graph, pos, active_node=None):
         if i == active_node:
             active.append(i)
 
-        elif typei == matchvis_util.VERTEX:
+        elif typei == VERTEX:
             interchanges.append(i)
             interchange_labels[i] = labeli
 
-        elif typei == matchvis_util.POINT_IN_S:
+        elif typei == POINT_IN_S:
             # data.update( S = [ labeli ], T = [] )
             other.append(i)
 
-        elif typei == matchvis_util.POINT_IN_T:
+        elif typei == POINT_IN_T:
             # data.update( S = [], T = [ labeli ] )
             other.append(i)
 
@@ -231,15 +331,15 @@ def DISPLAY_STATE_TIKZ(I_graph, pos, MATCH=None, active_node=None):
         if i == active_node:
             active.append(i)
 
-        elif typei == matchvis_util.VERTEX:
+        elif typei == VERTEX:
             interchanges.append(i)
             interchange_labels[i] = labeli
 
-        elif typei == matchvis_util.POINT_IN_S:
+        elif typei == POINT_IN_S:
             # data.update( S = [ labeli ], T = [] )
             other.append(i)
 
-        elif typei == matchvis_util.POINT_IN_T:
+        elif typei == POINT_IN_T:
             # data.update( S = [], T = [ labeli ] )
             other.append(i)
 
@@ -388,12 +488,11 @@ class App:
                   ]
 
         """ obtain the optimal matching """
-        import setiptah.roadgeometry.matching.nx_legacy as roadbm
-
-        opt_match = roadbm.ROADSBIPARTITEMATCH(SS, TT, roadmap)
+        roadnet = MultiDiGraphRoadnet(roadmap)
+        opt_match, _ = optimal_roadnet_matching2(SS, TT, roadnet)
 
         """ obtain an interval graph from the matching """
-        I_graph, I_pos = matchvis_util.INTERVAL_GRAPH(opt_match, SS, TT, roadmap, pos)
+        I_graph, I_pos = INTERVAL_GRAPH(opt_match, SS, TT, roadmap, pos)
 
         # Iterate.
         SANITIZE(I_graph)
