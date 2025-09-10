@@ -198,12 +198,12 @@ def show_match(matching, S, T, roadmap, pos, ax=None, **kwargs):
 
     ax.set_aspect('equal')  # i just like equal aspect...
 
-    interval_graph, weights = matching_to_interval_graph2(matching, S, T, roadnet)
+    interval_metric, weights = matching_to_interval_graph2(matching, S, T, roadnet)
 
-    show_thickness_graph(interval_graph, weights, S, T, roadnet, pos, ax)
+    show_thickness_graph(interval_metric.roadnet, weights, S, T, roadnet, pos, ax)
 
 
-def show_thickness_graph(interval_metric, weights, S, T, roadnet: Roadnet, pos, ax):
+def show_thickness_graph(interval_network, weights, S, T, roadnet: Roadnet, pos, ax):
 
     def singleton(factory):
         return factory()
@@ -217,7 +217,7 @@ def show_thickness_graph(interval_metric, weights, S, T, roadnet: Roadnet, pos, 
             elif isinstance(item, PointNode):
                 return point_embedding(item.point, roadnet, pos)
 
-    show_trails(weights, interval_metric.roadnet, pos_, ax)
+    show_trails(weights, interval_network, pos_, ax)
 
     def embedding_fn(p):
         return point_embedding(p, roadnet, pos)
