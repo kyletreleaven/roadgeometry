@@ -164,6 +164,14 @@ def within_tolerance(costs):
     assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
 
 
+def test_match_empty():
+    rn = RoadNetwork()
+    rn.add_edge("A", 0, 1, 10)
+    match, cost = optimal_roadnet_matching2([], [], rn)
+    assert match == []
+    assert cost == 0.
+
+
 class TestBiPartite:
 
     def test_construction(self):

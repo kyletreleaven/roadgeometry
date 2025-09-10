@@ -432,10 +432,8 @@ def compute_optimal_flow(
         a new matching instance realizing the same measure network can be constructed
         on just U' points in each set
     """
-    # safe-ish...
-    #U = sum([ len(m) + 1 for m in measure_dict.values() ])
-    # below is almost certainly just as good a bound, but I'm a scaredy-cat
-    U = sum([ len(m) - 1 for m in measure_dict.values() ])
+    # should be fairly tight. the +1 at the end is to accommodate an empty matching.
+    U = sum(len(m) - 1 for m in measure_dict.values()) + 1
     
     f = MinConvexCostFlow( network, {}, supply, cost, U )
     
