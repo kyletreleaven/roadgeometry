@@ -5,6 +5,7 @@ import numpy as np
 
 from setiptah.roadgeometry.dijkstra import RoadnetMetric
 from setiptah.roadgeometry.graphs import RoadNetwork, TV, TE
+from setiptah.roadgeometry.protocol import Roadnet
 
 TVert = TypeVar("TV")
 TRoad = TypeVar("TE")
@@ -22,6 +23,15 @@ class PlanarRoadnet(RoadNetwork[TRoad, TVert]):
     def __init__(self):
         super().__init__()
         self.pos = {}
+
+    @classmethod
+    def embed_topology(cls, roadnet: Roadnet, pos):
+        planar = cls()
+        for u in roadnet.nodes():
+            planar.add_node(u, pos[u])
+        for edge in roadnet.edges():
+            planar.add_edge(edge, *roadnet.endpoints(edge), oneway=roadnet.is_oneway(edge))
+        return planar
 
     def add_node(self, i: TV, pos: Optional[tuple[float, float]] = None):
         if pos is None:

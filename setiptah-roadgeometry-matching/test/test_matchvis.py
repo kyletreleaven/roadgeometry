@@ -10,12 +10,12 @@ import pytest
 from setiptah.roadgeometry.dijkstra import RoadnetMetric
 from setiptah.roadgeometry.graphs import RoadNetwork
 from setiptah.roadgeometry.matching.draw.matchvis import (
-    matching_to_flow, create_path_network, VertexNode, PointNode, show_match
+    matching_to_flow, create_path_network, VertexNode, PointNode, show_matching
 )
 from setiptah.roadgeometry.planar import PlanarRoadnet
 
 
-@pytest.mark.parametrize("show_match_impl", [show_match])
+@pytest.mark.parametrize("show_match_impl", [show_matching])
 def test_showmatch(show_match_impl):
     """Test the match plotting logic and matplotlib+networkx apis."""
 

@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 
 import matplotlib.pyplot as plt
-from setiptah.roadgeometry.matching.draw.matchvis import show_match
+from setiptah.roadgeometry.matching.draw.matchvis import show_matching
 
 
 
@@ -120,7 +120,7 @@ if __name__ == '__main__' :
         
         lims = mainax.axis()
         mainax.clear()
-        show_match(pltmatch, SSS, TTT, roadmap, pos=pos, ax=mainax)
+        show_matching(pltmatch, SSS, TTT, roadmap, pos=pos, ax=mainax)
         
         global lims_flag
         if lims_flag :

@@ -1,17 +1,18 @@
 from collections.abc import Iterable
 from numbers import Number
-from typing import Dict
+from typing import Dict, Collection
 from typing import TypeVar, Generic
 
 import numpy as np
 
+from setiptah.roadgeometry.protocol import Topology
 from setiptah.roadgeometry.util.priodict import *
 
 TV = TypeVar("TV")
 TE = TypeVar("TE")
 
 
-class mygraph(Generic[TV, TE]):
+class mygraph(Topology[TV, TE]):
     """A simplified hashmap-based alternative to `networkx.MultiDiGraph`.
 
     Unlike `MultiDiGraph`, this DS stores both vertices and edges,
@@ -65,7 +66,7 @@ class mygraph(Generic[TV, TE]):
     def has_node(self, i: TV) -> bool:
         return i in self.V
     
-    def edges(self) -> Iterable[TE]:
+    def edges(self) -> Collection[TE]:
         return self.E.keys()
     
     def has_edge(self, e: TE) -> bool:

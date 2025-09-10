@@ -111,14 +111,15 @@ def congestion_demo():
     assist = BIPARTITEMATCH_ROADS_CONGESTED(S, T, roadmap, rho_dict)
 
     import setiptah.roadgeometry.matching.draw.matchvis as matchvis
+    roadnet = MultiDiGraphRoadnet(roadmap)
 
     plt.figure()
     plt.title('Congestion Optimal')
-    matchvis.SHOWTRAILS(S, T, assist, roadmap, pos)
+    matchvis.show_flow(assist, S, T, roadnet, pos)
 
     plt.figure()
     plt.title('Pure Path-length Optimal')
-    matchvis.SHOWTRAILS(S, T, assist_nocongestion, roadmap, pos)
+    matchvis.show_flow(assist_nocongestion, S, T, roadnet, pos)
 
     if False:
         segment_dict = roadbm.SEGMENTS(S, T, roadmap)
