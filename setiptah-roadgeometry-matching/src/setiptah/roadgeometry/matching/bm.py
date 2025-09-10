@@ -235,7 +235,7 @@ def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segme
     """
     tree = sort_points(P, Q)
 
-    segments = {road: [] for road in roadnet.edges()}
+    segments = {road: deque() for road in roadnet.edges()}
 
     prev_road, segment = None, None
     for key, qs in tree.iter_items():
@@ -254,7 +254,7 @@ def PREMATCH(segment: Segment) -> list[tuple[int, int]]:
     for y, q in segment:
         annih = min( len( q.supply ), len( q.demand ) )
         for k in range( annih ) :
-            # TODO: Shoot, do these need to be deques?
+            # This is why we start with deque
             i = q.supply.pop(0)
             j = q.demand.pop(0)
             match.append( (i,j) )
@@ -607,6 +607,9 @@ def TRAVERSE2(topograph: nx.DiGraph):
         for _, v, data in topograph.out_edges(u, data=True):
             w = data.get('weight')
 
+            # If L was a deque, it is no longer.
+            # Also, the split can take O(n) time.
+            # TODO: Enter traversing with range queues...
             prefix, L = L[:w], L[w:]
 
             LISTS[v].extend(prefix)
