@@ -91,30 +91,6 @@ def iterate_segment(segment, u, v, length: float):
     yield length, VERTEX, v
 
 
-def SHOWMATCH(matching, S, T, roadmap, pos, ax=None, **kwargs):
-    """
-    visualize a matching on a roadmap:
-    imagine depositing one uniform trail of ink,
-    for each match in the matching,
-    on the shortest path between the endpoints of the match;
-    segments of the network more often covered will obtain more ink
-    """
-    roadnet = multigraph_to_planar(roadmap, pos)
-
-    # draw the roadmap
-    if ax is None : ax = plt.gca()
-    options = { 'edge_color' : 'g', 'alpha' : .15 }     # lightly, though...
-    options.update( kwargs )                            # but let overrides
-
-    draw_planar_roadnet(roadnet, ax=ax, **options)
-
-    ax.set_aspect('equal')  # i just like equal aspect...
-
-    interval_graph = matching_to_interval_graph(matching, S, T, roadnet)
-
-    SHOW_THICKNESS_GRAPH(interval_graph, S, T, roadmap, pos, ax)
-
-
 def matching_to_interval_graph(matching, S, T, roadnet: Roadnet):
     """ The hard part is getting the edges with proper thickness """
     # sort points onto segments
