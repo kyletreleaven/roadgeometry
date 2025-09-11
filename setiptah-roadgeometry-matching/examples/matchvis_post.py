@@ -79,7 +79,7 @@ if __name__ == '__main__' :
     bad_match = list(zip( range(M), order ))
     
     """ obtain the optimal matching """
-    opt_match, _ = optimal_roadnet_matching2(SS, TT, roadnet_planar)
+    opt_match = RoadnetMatchingProblem(SS, TT, roadnet_planar).compute_optimal(MatchingResult.MATCHING)
 
     """Animated plot."""
     from matplotlib.widgets import Slider, Button, RadioButtons
