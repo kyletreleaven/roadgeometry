@@ -6,11 +6,10 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-from setiptah.roadgeometry.legacy.conversion import multigraph_to_planar
-from setiptah.roadgeometry.matching import optimal_roadnet_matching2
+from setiptah.roadgeometry.formats import from_networkx
+from setiptah.roadgeometry.matching import RoadnetMatchingProblem, MatchingResult
 from setiptah.roadgeometry.matching.draw.matchvis import show_matching
-
-
+from setiptah.roadgeometry.planar import PlanarRoadnet
 
 if __name__ == '__main__' :
     plt.close('all')
@@ -59,7 +58,10 @@ if __name__ == '__main__' :
     """ ...and build positions dictionary """
     pos = { k : point for k, point in enumerate( interchanges ) }
 
-    roadnet_planar = multigraph_to_planar(roadmap, pos, "oneway")
+    roadnet_planar = PlanarRoadnet.embed_topology(
+        from_networkx(roadmap, oneway_attr="oneway"),
+        pos
+    )
 
     """ now, obtain two sets of points """
     M = args.points

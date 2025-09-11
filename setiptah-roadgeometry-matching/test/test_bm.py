@@ -1,7 +1,7 @@
 import networkx as nx
 
 import setiptah.roadgeometry.probability as roadprob
-from setiptah.roadgeometry.legacy.conversion import create_multigraph
+from setiptah.roadgeometry.formats import to_networkx
 from setiptah.roadgeometry.matching.nx_legacy import *
 
 
@@ -151,7 +151,7 @@ def test_roadnet_matching_int():
     PP, QQ = inst.P, inst.Q
     matching2, cost_ctd2 = RoadnetMatchingProblem(PP, QQ, roadnet).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
 
-    roadnet_graph = create_multigraph(roadnet)
+    roadnet_graph = to_networkx(roadnet)
     cost_sp2 = ROADMATCHCOST(matching2, PP, QQ, roadnet_graph)
 
     # Compare their costs.

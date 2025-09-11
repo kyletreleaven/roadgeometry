@@ -1,14 +1,8 @@
-"""
+import json
 
-TODOs:
-- [x] build a network
-- [ ] sample a matching problem instance
-- [ ] compute optimal matching
-- [ ] compute corr. shortest paths
-- [ ] compute total cost
-
-"""
+from setiptah.roadgeometry.formats import GraphSchema
 from setiptah.roadgeometry.graphs import RoadNetwork, SetReadOnlyView
+import networkx as nx
 
 import pytest
 
@@ -19,6 +13,53 @@ def roadnet():
     rn.add_edge("edge1", 0, 1, 1.0)
     rn.add_edge("edge2", 1, 0, 2.0, oneway=True)
     return rn
+
+
+from networkx.readwrite import json_graph
+
+
+def write_node_link_data(g, f):
+    data = json_graph.node_link_data(g, edges="edges")
+    json.dump(data, f)
+
+
+def read_node_link_data(f):
+    data = json.load(f)
+    return json_graph.node_link_graph(data, edges="edges")
+
+
+@pytest.mark.parametrize("write_fn, read_fn", [
+    # (nx.nx_pydot.write_dot, nx.nx_pydot.read_dot),
+    # (nx.write_graphml, nx.read_graphml),
+    # (nx.write_gml, nx.read_gml)
+    (write_node_link_data, read_node_link_data)
+])
+def test_json_graph(write_fn, read_fn, roadnet, tmp_path):
+
+    schema = GraphSchema(edge_attr="name")
+    g = schema.to_networkx(roadnet)
+
+    if False:
+        import io
+        buf = io.StringIO()
+        # buf = io.BytesIO()
+
+        # nx.nx_pydot.write_dot(g, buf)
+        write_fn(g, buf)
+
+        assert False, buf.getvalue()
+
+    path = tmp_path / "g.dot"
+    with path.open("w") as f:
+        write_fn(g, f)
+    with path.open("r") as f:
+        g_ = read_fn(f)
+
+    # g_ = nx.relabel_nodes(g_, int)
+    roadnet_ = schema.from_networkx(g_)
+
+    assert roadnet_.nodes() == roadnet.nodes()
+    assert roadnet_._edges == roadnet._edges
 
 
 class TestSetReadOnlyView:

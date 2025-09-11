@@ -9,8 +9,8 @@ import numpy as np
 
 from setiptah.roadgeometry.dijkstra import RoadSegment, RoadnetMetric
 from setiptah.roadgeometry.draw import draw_planar_roadnet
+from setiptah.roadgeometry.formats import from_networkx
 from setiptah.roadgeometry.graphs import RoadNetwork
-from setiptah.roadgeometry.legacy.conversion import multigraph_to_planar
 from setiptah.roadgeometry.matching import bm, mygraph
 from setiptah.roadgeometry.protocol import Roadnet, Topology
 from setiptah.roadgeometry.planar import PlanarRoadnet
@@ -73,7 +73,8 @@ def segment_is_backwards(segment: RoadSegment):
 
 
 def show_matching(matching, S, T, roadmap, pos, ax=None, **kwargs):
-    roadnet = multigraph_to_planar(roadmap, pos)
+    roadnet_ = from_networkx(roadmap)
+    roadnet = PlanarRoadnet.embed_topology(roadnet_, pos)
 
     # draw the roadmap
     if ax is None : ax = plt.gca()

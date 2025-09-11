@@ -3,8 +3,8 @@ import pytest
 
 import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
 from setiptah.roadgeometry.dijkstra import RoadnetMetric, RoadSegment
+from setiptah.roadgeometry.formats import to_networkx
 from setiptah.roadgeometry.graphs import RoadNetwork
-from setiptah.roadgeometry.legacy.conversion import create_multigraph
 from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
 from setiptah.roadgeometry.matching.util.mygraph import *
 from setiptah.roadgeometry.protocol import Roadnet
@@ -141,7 +141,7 @@ def test_metric_node_distances(example_net2):
     metric = RoadnetMetric(rn)
 
     # For legacy distance
-    mg = create_multigraph(rn)
+    mg = to_networkx(rn)
 
     def embed(u):
         for p in metric.embeddings(u):

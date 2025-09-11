@@ -11,22 +11,23 @@ import networkx as nx
 
 from setiptah.roadgeometry.graphs import RoadNetwork
 from .bm import *
+from setiptah.roadgeometry.formats import dump_networkx
 
 
 @dataclass
 class MultiDiGraphRoadnet(RoadNetwork[TVert, TRoad]):
+    """
+
+    TODO: Now that we're based on `dump_networkx`, next let's delete.
+
+    """
     graph: nx.MultiDiGraph
     length_attr: str = "length"
     oneway_attr: str = "oneway"
 
     def __post_init__(self):
         super().__init__()
-
-        for i in self.graph.nodes:
-            self.add_node(i)
-
-        for i, j, road, data in self.graph.edges(keys=True, data=True):
-            self.add_edge(road, i, j, data[self.length_attr], oneway=data.get(self.oneway_attr, False))
+        dump_networkx(self.graph, self, length_attr=self.length_attr, oneway_attr=self.oneway_attr)
 
 
 OrderedPoints = bintrees.RBTree
