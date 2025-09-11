@@ -5,7 +5,11 @@ import numpy as np
 from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
 
 """ my dependencies """
-from setiptah.roadgeometry.matching import nx_legacy as roadbm, optimal_roadnet_matching2
+from setiptah.roadgeometry.matching import (
+    nx_legacy as roadbm,
+    RoadnetMatchingProblem,
+    MatchingResult,
+)
 import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
 
 import matplotlib.pyplot as plt
@@ -489,7 +493,7 @@ class App:
 
         """ obtain the optimal matching """
         roadnet = MultiDiGraphRoadnet(roadmap)
-        opt_match, _ = optimal_roadnet_matching2(SS, TT, roadnet)
+        opt_match = RoadnetMatchingProblem(SS, TT, roadnet).compute_optimal(MatchingResult.MATCHING)
 
         """ obtain an interval graph from the matching """
         I_graph, I_pos = INTERVAL_GRAPH(opt_match, SS, TT, roadmap, pos)

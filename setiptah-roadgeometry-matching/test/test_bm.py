@@ -85,7 +85,9 @@ def test_roadnet_matching():
 
     # Compare:
     # [x] cost computed during matching construction
-    match, cost_ctd = optimal_roadnet_matching2(PP, QQ, MultiDiGraphRoadnet(roadnet))
+    match, cost_ctd = RoadnetMatchingProblem(
+        PP, QQ, MultiDiGraphRoadnet(roadnet)
+    ).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
     assert len(match) == NUMPOINT
 
     assert True, (
@@ -140,7 +142,7 @@ def test_roadnet_matching_int():
     QQ_ = [sampler.sample() for i in range(NUMPOINT)]
 
     roadnet_, roadnet_graph_ = MultiDiGraphRoadnet(roadnet), roadnet
-    matching_ = optimal_roadnet_matching(PP_, QQ_, roadnet_)
+    matching_ = RoadnetMatchingProblem(PP_, QQ_, roadnet_).compute_optimal(MatchingResult.MATCHING)
 
     inst, _roads, __ = RoadnetMatchingInstance.normalize(PP_, QQ_, roadnet_)
     roadnet = inst.roadnet
@@ -148,7 +150,7 @@ def test_roadnet_matching_int():
     assert inst.is_valid()
 
     PP, QQ = inst.P, inst.Q
-    matching, cost_constr = optimal_roadnet_matching2(PP, QQ, roadnet)
+    matching, cost_constr = RoadnetMatchingProblem(PP, QQ, roadnet).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
 
     # Compare their costs.
     cost_ = ROADMATCHCOST(matching_, PP_, QQ_, roadnet_graph_)
@@ -167,7 +169,7 @@ def within_tolerance(costs):
 def test_match_empty():
     rn = RoadNetwork()
     rn.add_edge("A", 0, 1, 10)
-    match, cost = optimal_roadnet_matching2([], [], rn)
+    match, cost = RoadnetMatchingProblem([], [], rn).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
     assert match == []
     assert cost == 0.
 

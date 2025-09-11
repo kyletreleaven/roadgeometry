@@ -2,22 +2,25 @@
 
 """
 import dataclasses
+import enum
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from enum import auto
 from functools import cached_property
-from typing import NamedTuple, Optional, Callable, Sized
+from typing import NamedTuple, Optional, Callable, Iterable
 
 import bintrees  # Migrate to `sortedcontainers`?
 import networkx as nx  # TODO: Migrate it out?
 import numpy as np
 
-from setiptah.roadgeometry.graphs import RoadInfo, IntRoadnet, int_map_to_seq
+from setiptah.roadgeometry.dijkstra import RoadnetMetric
+from setiptah.roadgeometry.graphs import IntRoadnet, int_map_to_seq
+from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
+from setiptah.roadgeometry.matching.util import inner_class
 from setiptah.roadgeometry.matching.util.mygraph import mygraph
 from setiptah.roadgeometry.protocol import *
-from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
-from setiptah.roadgeometry.dijkstra import RoadnetMetric
 
-T = TypeVar("T")
+T, U = TypeVar("T"), TypeVar("U")
 Factory = Callable[[], T]
 
 
@@ -74,77 +77,108 @@ class RoadnetMatchingInstance(Generic[TRoad, TVert]):
         return True
 
 
-def optimal_roadnet_matching(P, Q, roadnet: Roadnet, assist_only: bool = False, **kwargs):
-    """
-
-    TODO: Do we need this?
-
-    """
-    result = optimal_roadnet_matching2(P, Q, roadnet, assist_only=assist_only, **kwargs)
-
-    if assist_only:
-        return result
-
-    else:
-        try:
-            matching, cost = result
-        except:
-            assert False, result
-        return matching
+BasicPoint = tuple[TRoad, float]
 
 
-def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
-    MATCH = []
+class MatchingResult(enum.Enum):
+    FLOW = auto()
+    MATCHING = auto()
+    COST = auto()
 
-    segment_dict = compute_segments2( P, Q, roadnet )
-    surplus_dict = dict()
-    measure_dict = dict()
-    
-    for road, segment in segment_dict.items() :
-        match = PREMATCH( segment )
-        MATCH.extend( match )
-        
-        surplus_dict[road] = SURPLUS( segment )
 
-        road_len = roadnet.length(road)
-        measure = MEASURE( segment, road_len )
-        measure_dict[road] = measure
+@dataclass(frozen=True)
+class RoadnetMatchingProblem(Generic[TRoad, TVert]):
+    P: tuple[BasicPoint[TRoad], ...]
+    Q: tuple[BasicPoint[TRoad], ...]
+    roadnet: Roadnet[TRoad, TVert]
 
-    assist = compute_optimal_flow(roadnet, surplus_dict, measure_dict)
+    def compute_optimal(self, result: MatchingResult):
+        out, = self.compute_optimal_results(result)
+        return out
 
-    # TODO: Create unit test to detect infeasibility...
-    imbalance = check_flow(assist, roadnet, surplus_dict)
-    # Previously, this was active.
-    # imbalance = []
+    def compute_optimal_results(self, *required: MatchingResult):
+        alg = self.Algorithm()
+        results = alg.run(*required)
+        return tuple(results[req] for req in required)
 
-    try :
-        assert len( imbalance ) <= 0
-    except Exception as ex :
-        ex.imbal = imbalance
-        raise ex
+    @inner_class
+    class Algorithm:
 
-    # TODO: Nah, split this
-    if kwargs.get('assist_only', False ):
-        return assist
+        @property
+        def instance(self) -> "RoadnetMatchingProblem":
+            return self.__outer__
 
-    topograph = create_topograph(segment_dict, assist, roadnet)
-    
-    try :
-        match, cost = TRAVERSE2(topograph)
-    except Exception as ex :
-        ex.assist = assist
-        ex.topograph = topograph
-        raise ex
-    
-    MATCH.extend( match )
-    return MATCH, cost
+        def __init__(self):
+            self.results = {}
+
+            self.matching = []
+
+        def run(self, *results: MatchingResult) -> dict:
+            required = set(results)
+
+            for step in [
+                self._compute_optimal_flow,
+                self._compute_matching,
+            ]:
+                step()
+                if required.issubset(self.results):
+                    break
+
+            return self.results
+
+        def _compute_optimal_flow(self):
+            roadnet = self.instance.roadnet
+
+            self.segment_dict = segment_dict = compute_segments2(self.instance.P, self.instance.Q, roadnet)
+
+            surplus_dict = dict()
+            measure_dict = dict()
+
+            self.matching = matching = []
+            for road, segment in segment_dict.items():
+                matching_ = PREMATCH(segment)
+                matching.extend(matching_)
+
+                surplus_dict[road] = SURPLUS(segment)
+
+                road_len = roadnet.length(road)
+                measure = MEASURE(segment, road_len)
+                measure_dict[road] = measure
+
+            self.flow = flow = compute_optimal_flow(roadnet, surplus_dict, measure_dict)
+
+            # TODO: Create unit test to detect infeasibility...
+            imbalance = check_flow(flow, roadnet, surplus_dict)
+            try:
+                assert len(imbalance) <= 0
+            except Exception as ex:
+                ex.imbal = imbalance
+                raise ex
+
+            self.results[MatchingResult.FLOW] = flow
+
+        def _compute_matching(self):
+            # TODO: Don't we want to be able to do this with any acyclic flow?
+            assist, segment_dict, roadnet = self.flow, self.segment_dict, self.instance.roadnet
+            topograph = create_topograph(segment_dict, assist, roadnet)
+
+            try:
+                match, cost = TRAVERSE2(topograph)
+            except Exception as ex:
+                ex.assist = assist
+                ex.topograph = topograph
+                raise ex
+
+            self.matching.extend(match)
+            self.results[MatchingResult.MATCHING] = self.matching
+            self.results[MatchingResult.COST] = cost
 
 
 """ ALGORITHM SUB-ROUTINES """
 
 
-
 """ Phase I: Transcription """
+
 
 @dataclass
 class BiPartite(Generic[T]):
@@ -166,11 +200,11 @@ class BiPartite(Generic[T]):
 
         return fn
 
-    def map(self, fn):
+    def map(self, fn: Callable[[T], U]) -> "BiPartite[U]":
         return self.__class__(fn(self.supply), fn(self.demand))
 
 
-Segment = list[tuple[float, BiPartite[list[int]]]]
+Segment = Iterable[tuple[float, BiPartite[list[int]]]]
 
 
 def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segment]:
@@ -231,12 +265,12 @@ def PREMATCH(segment: Segment) -> list[tuple[int, int]]:
     return match
 
 
-def SURPLUS(segment: "BiPartite[Sized]") -> int:
+def SURPLUS(segment: Segment) -> int:
     deltas = [len(q.supply) - len(q.demand) for y, q in segment]
     return sum(deltas)
 
 
-def MEASURE(segment: "Segment", length: float, rbound=None):
+def MEASURE(segment: Segment, length: float, rbound=None):
     if rbound is not None:
         lbound = length
     else:
