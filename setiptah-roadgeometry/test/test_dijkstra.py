@@ -7,6 +7,7 @@ from setiptah.roadgeometry.graphs import RoadNetwork
 from setiptah.roadgeometry.legacy.conversion import create_multigraph
 from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
 from setiptah.roadgeometry.matching.util.mygraph import *
+from setiptah.roadgeometry.protocol import Roadnet
 
 
 @pytest.fixture
@@ -104,7 +105,8 @@ def test_shortest_path():
     assert metric.shortest_path(p, q) == [RoadSegment("R", 1, 9)]
 
 
-def test_metric_node_distances():
+@pytest.fixture
+def example_net2():
     rn = RoadNetwork()
 
     rn.add_edge("N", 0, 1, 1., oneway=True)
@@ -117,33 +119,13 @@ def test_metric_node_distances():
 
     rn.add_edge("U", 5, 2, 1., oneway=True)
 
-    g = mygraph()
-    cost = {}
+    return rn
 
-    for u in rn.nodes():
-        g.add_node(u)
 
-    for e in rn.edges():
-        i, j = rn.endpoints(e)
-        L = rn.length(e)
-
-        e_ = e, "+"
-        g.add_edge(e_, i, j)
-        cost[e_] = L
-
-        if not rn.is_oneway(e):
-            e_ = e, "-"
-            g.add_edge(e_, j, i)
-            cost[e_] = L
-
-    dref = {
-        u: Dijkstra(g, cost, u)[0]
-        for u in rn.nodes()
-    }
+def test_unreachable_node(example_net2):
+    rn = example_net2
 
     metric = RoadnetMetric(rn)
-    for u in rn.nodes():
-        metric._populate_dijkstra(u)
 
     assert min(
         metric.graph_shortest_path_length(u, 5)
@@ -151,44 +133,58 @@ def test_metric_node_distances():
         if u != 5
     ) == np.inf
 
-    # compare to old distance metric
+
+def test_metric_node_distances(example_net2):
+    rn = example_net2
+
+    # For metric distance
+    metric = RoadnetMetric(rn)
+
+    # For legacy distance
     mg = create_multigraph(rn)
 
     def embed(u):
         for p in metric.embeddings(u):
             return ROAD.RoadAddress(*p)
 
-    dref_ = {
-        u: {
-            v: ROAD.distance(mg, embed(u), embed(v), "length")
-            for v in rn.nodes()
-        }
-        for u in rn.nodes()
-    }
+    def legacy_distance(u, v):
+        return ROAD.distance(mg, embed(u), embed(v), "length")
 
-    distances = [
-        metric.graph_shortest_path_length(0, 2),
-        dref[0][2],
-        # TODO: Debug!
-        # dref_[0][2],
-        # TODO: How do we integrate with astar in match cost?
-        # astar_path_length(mg, 0, 2, None, "length")
-    ]
-    assert len(set(distances)) == 1, distances
+    # For networkx-based distance
+    spg = shortest_path_graph(rn)
 
-    # assert False, dref
-    diff = {
-        (u, v)
-        for u in rn.nodes()
-        for v in rn.nodes()
-        if metric._distance[u].get(v, None) != dref_[u][v]
-    }
-    # assert not diff, diff
-    if True:
-        assert metric._distance == dref
-    else:
-        for u in rn.nodes():
-            assert metric._distance[u] == dref[u], u
+    def networkx_distance(u, v):
+        try:
+            return nx.shortest_path_length(spg, u, v, weight="length")
+        except nx.exception.NetworkXNoPath:
+            return np.inf
+
+    for u in rn.nodes():
+        for v in rn.nodes():
+            distances = {
+                metric.graph_shortest_path_length(u, v),
+                legacy_distance(u, v),
+                networkx_distance(u, v),
+            }
+            d, = distances  # i.e., they should all be the same!
+
+
+def shortest_path_graph(rn: Roadnet):
+    g = nx.MultiDiGraph()
+    g.add_nodes_from(rn.nodes())
+
+    for e in rn.edges():
+        i, j = rn.endpoints(e)
+        L = rn.length(e)
+
+        e_ = e, "+"
+        g.add_edge(i, j, key=e_, length=L)
+
+        if not rn.is_oneway(e):
+            e_ = e, "-"
+            g.add_edge(j, i, key=e_, length=L)
+
+    return g
 
 
 class TestRoadnetMetric:
