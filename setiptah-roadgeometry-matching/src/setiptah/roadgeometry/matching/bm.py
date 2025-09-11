@@ -123,6 +123,7 @@ def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
         ex.imbal = imbalance
         raise ex
 
+    # TODO: Nah, split this
     if kwargs.get('assist_only', False ):
         return assist
 
@@ -145,7 +146,121 @@ def optimal_roadnet_matching2(P, Q, roadnet: Roadnet, **kwargs):
 
 """ Phase I: Transcription """
 
-Segment = list[tuple[float, "BiPartite[list[int]]"]]
+@dataclass
+class BiPartite(Generic[T]):
+    supply: T
+    demand: T
+
+    def __repr__(self) :
+        return f"<S:{self.supply},D:{self.demand}>"
+
+    @classmethod
+    def create_with(cls, factory: Factory[T]):
+        return cls(factory(), factory())
+
+    @classmethod
+    def factory(cls, factory: Factory[T]) -> Factory["BiPartite[T]"]:
+
+        def fn():
+            return cls.create_with(factory)
+
+        return fn
+
+    def map(self, fn):
+        return self.__class__(fn(self.supply), fn(self.demand))
+
+
+Segment = list[tuple[float, BiPartite[list[int]]]]
+
+
+def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segment]:
+    """
+
+    Returns:
+        a dictionary of segment data structures for each road
+
+    """
+    tree = sort_points(P, Q)
+
+    segments = {road: deque() for road in roadnet.edges()}
+
+    prev_road, segment = None, None
+    for key, qs in tree.iter_items():
+        road, y = key
+        if segment is None or road != prev_road:
+            assert road in roadnet.edges(), (road, roadnet.edges())
+            segment = segments[road]
+            prev_road = road
+        segment.append((y, qs))
+
+    return segments
+
+
+def sort_points(P, Q):
+    tree = bintrees.RBTree()
+
+    for i, p in enumerate(P):
+        key = tuple(p); _r, _y = key
+        queues = ensure_key(key, tree)
+        queues.supply.append(i)
+
+    for j, q in enumerate(Q):
+        key = tuple(q); _r, _y = key
+        queues = ensure_key(key, tree)
+        queues.demand.append(j)
+
+    return tree
+
+
+def ensure_key( key, tree ) :
+    curr = tree.set_default( key )
+    if curr is None : tree[key] = BiPartite.create_with(list)
+    return tree[key]
+
+
+def PREMATCH(segment: Segment) -> list[tuple[int, int]]:
+    match = []
+    for y, q in segment:
+        annih = min(len(q.supply), len(q.demand))
+        for k in range(annih):
+            # This is why we start with deque
+            i = q.supply.pop(0)
+            j = q.demand.pop(0)
+            match.append((i, j))
+
+    return match
+
+
+def SURPLUS(segment: "BiPartite[Sized]") -> int:
+    deltas = [len(q.supply) - len(q.demand) for y, q in segment]
+    return sum(deltas)
+
+
+def MEASURE(segment: "Segment", length: float, rbound=None):
+    if rbound is not None:
+        lbound = length
+    else:
+        lbound = 0.
+        rbound = length
+
+    # bintree instead of dict so that it is enumerated in sorted order
+    # TODO: No, replace with a double-ended vector.
+
+    measure = bintrees.RBTree()
+    posts, deltas = [lbound], [0]
+    for y, q in segment:
+        posts.append(y)
+        deltas.append(len(q.supply) - len(q.demand))
+    posts.append(rbound)
+
+    intervals = zip(posts[:-1], posts[1:])
+    F = np.cumsum(deltas)
+
+    for (a, b), f in zip(intervals, F):
+        measure.setdefault(f, 0.)
+        measure[f] += b - a
+
+    return measure
 
 
 @dataclass(frozen=True)
@@ -180,6 +295,23 @@ class MySegment:
         return cls(BiPartite.create_with(list), [])
 
 
+def create_point_map(segment_dict: dict[TRoad, Segment]) -> dict[TRoad, MySegment]:
+    out = {}
+    for road, seg_in in segment_dict.items():
+        out[road] = seg_out = MySegment.create()
+        for y, qs in seg_in:
+            ns = seg_out.points.map(len)
+            ii = BiPartite(
+                IndexRange(ns.supply, ns.supply + len(qs.supply)),
+                IndexRange(ns.demand, ns.demand + len(qs.demand)),
+            )
+            seg_out.events.append((y, ii))
+            seg_out.points.supply.extend(qs.supply)
+            seg_out.points.demand.extend(qs.demand)
+
+    return out
+
+
 def compute_segments3(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, MySegment]:
     segments = {}
 
@@ -209,169 +341,142 @@ def compute_segments3(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, MySeg
     return segments
 
 
-def create_point_map(segment_dict: dict[TRoad, Segment]) -> dict[TRoad, MySegment]:
-    out = {}
-    for road, seg_in in segment_dict.items():
-        out[road] = seg_out = MySegment.create()
-        for y, qs in seg_in:
-            ns = seg_out.points.map(len)
-            ii = BiPartite(
-                IndexRange(ns.supply, ns.supply + len(qs.supply)),
-                IndexRange(ns.demand, ns.demand + len(qs.demand)),
-            )
-            seg_out.events.append((y, ii))
-            seg_out.points.supply.extend(qs.supply)
-            seg_out.points.demand.extend(qs.demand)
-
-    return out
-
-
-def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segment]:
-    """
-
-    Returns:
-        a dictionary of segment data structures for each road
-
-    """
-    tree = sort_points(P, Q)
-
-    segments = {road: deque() for road in roadnet.edges()}
-
-    prev_road, segment = None, None
-    for key, qs in tree.iter_items():
-        road, y = key
-        if segment is None or road != prev_road:
-            assert road in roadnet.edges(), (road, roadnet.edges())
-            segment = segments[road]
-            prev_road = road
-        segment.append((y, qs))
-
-    return segments
-
-    
-def PREMATCH(segment: Segment) -> list[tuple[int, int]]:
-    match = []
-    for y, q in segment:
-        annih = min( len( q.supply ), len( q.demand ) )
-        for k in range( annih ) :
-            # This is why we start with deque
-            i = q.supply.pop(0)
-            j = q.demand.pop(0)
-            match.append( (i,j) )
-            
-    return match
-
-
-def SURPLUS(segment: "BiPartite[Sized]") -> int:
-    deltas = [len( q.supply ) - len( q.demand ) for y,q in segment]
-    return sum( deltas )
-
-
-def MEASURE(segment: "Segment", length: float, rbound=None):
-    if rbound is not None :
-        lbound = length
-    else :
-        lbound = 0.
-        rbound = length
-
-    # bintree instead of dict so that it is enumerated in sorted order
-    # TODO: No, replace with a double-ended vector.
-
-    measure = bintrees.RBTree()
-    posts, deltas = [lbound], [0]
-    for y, q in segment:
-        posts.append(y)
-        deltas.append(len(q.supply) - len(q.demand))
-    posts.append(rbound)
-
-    intervals = zip( posts[:-1], posts[1:] )
-    F = np.cumsum( deltas )
-    
-    for (a,b), f in zip( intervals, F ) :
-        measure.setdefault( f, 0. )
-        measure[f] += b - a
-        
-    return measure
-
-
-
-
-
-
-
-
-
 """ Phase II: Transformation/Solution/Verification """
 
 
-class costWrapper :
+def compute_optimal_flow(
+        roadnet: Roadnet[TRoad, TVert],
+        surplus: dict[TVert, float],
+        measure_dict: bintrees.RBTree,  # float -> float
+) -> dict[TRoad, float]:
+    network = mygraph()
+    supply = {i: 0. for i in roadnet.nodes()}
+    cost = {}  # functions
+    #
+    oneway_offset = {}  # for one-way roads
+
+    for road in roadnet.edges():
+        i, j = roadnet.endpoints(road)
+
+        supply[j] += surplus[road]
+        measure = measure_dict[road]
+
+        fobj = OBJECTIVE_FUNC(measure)
+
+        # edge construction
+        if roadnet.is_oneway(road):
+            # if one-way road
+
+            # record minimum allowable flow on road
+            zmin = -measure.min_key()  # i.e., z + min key of measure >= 0
+            oneway_offset[road] = zmin
+            # create a 'bias point'
+            supply[i] -= zmin
+            supply[j] += zmin
+
+            # shift and record the cost function on only a forward edge
+            fobj_offset = offsetWrapper(fobj, zmin)
+            network.add_edge(road, i, j)
+            cost[road] = fobj_offset
+
+        else:
+            # if bi-directional road... instantiate pair of edges
+            # cc = roadbm.costWrapper( cost_data )
+            n_fobj = negativeWrapper(fobj)  # won't have to worry about the C(0) offset
+
+            network.add_edge((road, +1), i, j)
+            cost[(road, +1)] = fobj
+            #
+            network.add_edge((road, -1), j, i)
+            cost[(road, -1)] = n_fobj
+
     """
-    wrap an RBTree arrangement of LineData()s to obtain a piece-wise linear callable function 
+    compute the width U of the first cvxcost algorithm phase;
+    a bound on the optimal flow on any edge; 
+    Logic: there cannot be more flow on a given road in the graph
+    than there are total intervals between levels in the network
+    (Proof Sketch):
+    1. U <= M ;
+    2. (Prove...) Given any matching instance which
+        induces a measure network w/ U' total intervals between levels,
+        a new matching instance realizing the same measure network can be constructed
+        on just U' points in each set
     """
-    def __init__(self, lines ) :
-        self.lines = lines
-        
-    def __call__(self, z ) :
-        """
-        this is an O(log n) query function (although, probably an O(1) expected hash map), 
-        can be reduced to O(1) by random access after floor operation """
-        _, line = self.lines.floor_item( z )
-        return line( z )
+    # should be fairly tight. the +1 at the end is to accommodate an empty matching.
+    U = sum(len(m) - 1 for m in measure_dict.values()) + 1
 
-class negativeWrapper :
-    """ a simple callable wrapper to create f(-x) from f(x) """
-    def __init__(self, func ) :
-        self.func = func
-        
-    def __call__(self, z ) :
-        return self.func( -z )
+    f = MinConvexCostFlow(network, {}, supply, cost, U)
 
-class offsetWrapper :
-    """ a simple callable wrapper to create f(x+x0) from f(x) """
-    def __init__(self, func, shift ) :
-        self.func = func
-        self.shift = shift
-        
-    def __call__(self, z ) :
-        return self.func( z + self.shift )
+    flow = {}
+    for road in roadnet.edges():
+        if road in oneway_offset:
+            flow[road] = f[road] + oneway_offset[road]
+        else:
+            flow[road] = f[(road, +1)] - f[(road, -1)]
+
+        flow[road] = int(flow[road])
+
+    return flow
 
 
+def check_flow(
+        flow: dict[TRoad, float],
+        roadnet: Roadnet[TRoad, TVert],
+        surplus: dict[TVert, float]
+) -> dict[TVert, float]:
+    balance = {u: 0. for u in roadnet.nodes()}
+    for road in roadnet.edges():
+        i, j = roadnet.endpoints(road)
+        balance[i] -= flow.get(road, 0.)
+        balance[j] += flow.get(road, 0.) + surplus.get(road, 0.)
+
+    return {k: v for k, v in balance.items() if v != 0.}
 
 
+def OBJECTIVE_FUNC(measure):
+    """ produces the convex objective function assoc. with a set of interval measures """
+    return costWrapper(OBJECTIVE(measure))
 
 
-
-def OBJECTIVE( measure ) :
+def OBJECTIVE(measure):
     """
     produces the objective LineData()s RBTree arrangement
     given the dictionary of interval measures;
     N levels => N+1 LineData()s (verify?)
     """
-    def sweep( x ) :
-        Xminus = np.cumsum( x )
+
+    def sweep(x):
+        Xminus = np.cumsum(x)
         total = Xminus[-1]
         Xplus = total - Xminus
         X = Xplus - Xminus
         return X
-    
+
     # prepare constants kappa and alpha
-    PREALPHA = np.array( [ 0. ] + [ w for f,w in measure.items() ] )
-    ALPHA = sweep( PREALPHA )
-    
-    PREKAPPA = np.array( [ 0. ] + [ f*w for f,w in measure.items() ] )
-    KAPPA = sweep( PREKAPPA )
-    
+    PREALPHA = np.array([0.] + [w for f, w in measure.items()])
+    ALPHA = sweep(PREALPHA)
+
+    PREKAPPA = np.array([0.] + [f * w for f, w in measure.items()])
+    KAPPA = sweep(PREKAPPA)
+
     Cz = bintrees.RBTree()
-    ff = [ f for f in measure ] + [ np.inf ]        # should be in order
-    for f, alpha, kappa in zip( ff, ALPHA, KAPPA ) :
-        Cz.insert( -f, LineData( alpha, kappa ) )
-        
+    ff = [f for f in measure] + [np.inf]  # should be in order
+    for f, alpha, kappa in zip(ff, ALPHA, KAPPA):
+        Cz.insert(-f, LineData(alpha, kappa))
+
     return Cz
 
 
-def OBJECTIVE_FUNC( measure ) :
-    """ produces the convex objective function assoc. with a set of interval measures """
-    return costWrapper( OBJECTIVE(measure) )
+@dataclass(frozen=True, slots=True)
+class LineData:
+    slope: float
+    offset: float
+
+    def __call__(self, x: float):
+        return self.slope * x + self.offset
+
+    def __repr__(self):
+        return f"<{self.slope} z + {self.offset}>"
 
 
 def write_objectives(P, Q, roadnet: Roadnet):
@@ -390,93 +495,38 @@ def write_objectives(P, Q, roadnet: Roadnet):
     return objective_dict
 
 
-def compute_optimal_flow(
-        roadnet: Roadnet[TRoad, TVert],
-        surplus: dict[TVert, float],
-        measure_dict: bintrees.RBTree,  # float -> float
-) -> dict[TRoad, float]:
-    network = mygraph()
-    supply = { i : 0. for i in roadnet.nodes() }
-    cost = {}   # functions
-    #
-    oneway_offset = {}  # for one-way roads
-
-    for road in roadnet.edges():
-        i, j = roadnet.endpoints(road)
-
-        supply[j] += surplus[road]
-        measure = measure_dict[road]
-        
-        fobj = OBJECTIVE_FUNC( measure )
-        
-        # edge construction
-        if roadnet.is_oneway(road):
-            # if one-way road
-            
-            # record minimum allowable flow on road
-            zmin = -measure.min_key()   # i.e., z + min key of measure >= 0 
-            oneway_offset[road] = zmin
-            # create a 'bias point'
-            supply[i] -= zmin
-            supply[j] += zmin
-            
-            # shift and record the cost function on only a forward edge
-            fobj_offset = offsetWrapper( fobj, zmin )
-            network.add_edge( road, i, j )
-            cost[ road ] = fobj_offset
-            
-        else :
-            # if bi-directional road... instantiate pair of edges
-            #cc = roadbm.costWrapper( cost_data )
-            n_fobj = negativeWrapper( fobj )     # won't have to worry about the C(0) offset
-            
-            network.add_edge( (road,+1), i, j )
-            cost[ (road,+1) ] = fobj
-            #
-            network.add_edge( (road,-1), j, i )
-            cost[ (road,-1) ] = n_fobj
-
+class costWrapper :
     """
-    compute the width U of the first cvxcost algorithm phase;
-    a bound on the optimal flow on any edge; 
-    Logic: there cannot be more flow on a given road in the graph
-    than there are total intervals between levels in the network
-    (Proof Sketch):
-    1. U <= M ;
-    2. (Prove...) Given any matching instance which
-        induces a measure network w/ U' total intervals between levels,
-        a new matching instance realizing the same measure network can be constructed
-        on just U' points in each set
+    wrap an RBTree arrangement of LineData()s to obtain a piece-wise linear callable function 
     """
-    # should be fairly tight. the +1 at the end is to accommodate an empty matching.
-    U = sum(len(m) - 1 for m in measure_dict.values()) + 1
-    
-    f = MinConvexCostFlow( network, {}, supply, cost, U )
-    
-    flow = {}
-    for road in roadnet.edges():
-        if road in oneway_offset :
-            flow[road] = f[road] + oneway_offset[road]
-        else :
-            flow[road] = f[(road,+1)] - f[(road,-1)]
-            
-        flow[road] = int( flow[road] )
-    
-    return flow
+    def __init__(self, lines ) :
+        self.lines = lines
+        
+    def __call__(self, z ) :
+        """
+        this is an O(log n) query function (although, probably an O(1) expected hash map), 
+        can be reduced to O(1) by random access after floor operation """
+        _, line = self.lines.floor_item( z )
+        return line( z )
 
 
-def check_flow(
-        flow: dict[TRoad, float],
-        roadnet: Roadnet[TRoad, TVert],
-        surplus: dict[TVert, float]
-) -> dict[TVert, float]:
-    balance = {u: 0. for u in roadnet.nodes()}
-    for road in roadnet.edges():
-        i, j = roadnet.endpoints(road)
-        balance[i] -= flow.get(road, 0.)
-        balance[j] += flow.get(road, 0.) + surplus.get(road, 0.)
+class negativeWrapper :
+    """ a simple callable wrapper to create f(-x) from f(x) """
+    def __init__(self, func ) :
+        self.func = func
+        
+    def __call__(self, z ) :
+        return self.func( -z )
 
-    return {k: v for k, v in balance.items() if v != 0.}
+
+class offsetWrapper :
+    """ a simple callable wrapper to create f(x+x0) from f(x) """
+    def __init__(self, func, shift ) :
+        self.func = func
+        self.shift = shift
+        
+    def __call__(self, z ) :
+        return self.func( z + self.shift )
 
 
 """ Phase III: Matching Construction """
@@ -618,6 +668,14 @@ def TRAVERSE2(topograph: nx.DiGraph):
             cost += w * l
 
     return matching, cost
+
+
+class terminal :    # simple node type for TRAVERSE
+    def __init__(self, q ) :
+        self.q = q
+
+    def __repr__(self):
+        return f"terminal({self.q})"
 
 
 def TRAVERSE3(topograph: nx.DiGraph):
@@ -783,79 +841,7 @@ def pop_point(point_seq: PointSeqQ[TRoad]) -> tuple[TRoad, int]:
     return pseq.as_point()
 
 
-
-
-
-
-
-
-
 """ Misc. Algorithm Utilities """
-
-
-@dataclass
-class BiPartite(Generic[T]):
-    supply: T
-    demand: T
-
-    def __repr__(self) :
-        return f"<S:{self.supply},D:{self.demand}>"
-
-    @classmethod
-    def create_with(cls, factory: Factory[T]):
-        return cls(factory(), factory())
-
-    @classmethod
-    def factory(cls, factory: Factory[T]) -> Factory["BiPartite[T]"]:
-
-        def fn():
-            return cls.create_with(factory)
-
-        return fn
-
-    def map(self, fn):
-        return self.__class__(fn(self.supply), fn(self.demand))
-
-
-def sort_points(P, Q):
-    tree = bintrees.RBTree()
-
-    for i, p in enumerate(P):
-        key = tuple(p); _r, _y = key
-        queues = ensure_key(key, tree)
-        queues.supply.append(i)
-
-    for j, q in enumerate(Q):
-        key = tuple(q); _r, _y = key
-        queues = ensure_key(key, tree)
-        queues.demand.append(j)
-
-    return tree
-
-
-def ensure_key( key, tree ) :
-    curr = tree.set_default( key )
-    if curr is None : tree[key] = BiPartite.create_with(list)
-    return tree[key]
-
-class LineData :
-    def __init__(self, m,b) :
-        self.slope = m
-        self.offset = b
-        
-    def __call__(self, x ) :
-        return self.slope * x + self.offset
-    
-    def __repr__(self) :
-        return '<%f z + %f>' % ( self.slope, self.offset )
-
-
-class terminal :    # simple node type for TRAVERSE
-    def __init__(self, q ) :
-        self.q = q
-
-    def __repr__(self):
-        return f"terminal({self.q})"
 
 
 @dataclass(frozen=True)
