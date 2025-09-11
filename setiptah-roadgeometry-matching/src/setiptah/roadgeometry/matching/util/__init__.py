@@ -1,6 +1,10 @@
 from functools import cached_property
 
 
+def singleton(factory):
+    return factory()
+
+
 def inner_class(cls):
 
     cls_dict = dict(cls.__dict__)
