@@ -2,7 +2,7 @@ import networkx as nx
 import pytest
 
 import setiptah.roadgeometry.legacy.roadmap_basic as ROAD
-from setiptah.roadgeometry.dijkstra import RoadnetMetric, RoadSegment
+from setiptah.roadgeometry.dijkstra import *
 from setiptah.roadgeometry.formats import to_networkx
 from setiptah.roadgeometry.graphs import RoadNetwork
 from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
@@ -228,3 +228,48 @@ class TestRoadnetMetric:
         metric = RoadnetMetric(rn)
         with pytest.raises(ValueError):
             metric.embedding(0, "B")
+
+
+def test_create_path_graph():
+
+    rn = RoadNetwork()
+    rn.add_edge("A", 0, 1, 10.)
+
+    p = ("A", 3.)
+    mid = PointNode(p)
+    rn_ = create_path_network([p], rn)
+
+    road, = rn_.out_edges(VertexNode(0))
+    _, v = rn_.endpoints(road)
+    assert v == mid
+    assert rn_.length(road) == 3.
+
+    road, = rn_.in_edges(VertexNode(1))
+    u, _ = rn_.endpoints(road)
+    assert u == mid
+    assert rn_.length(road) == 7.
+
+    # TODO: Include an edge with zero points but covered by a shortest path.
+
+
+def test_get_segment():
+
+    rn = RoadNetwork()
+
+    rn.add_edge("R", 0, 1, 10.)
+    rn.add_edge("longer", 0, 1, 20.)
+
+    u1, u2, u3, u4 = VertexNode(0), PointNode(("R", 3)), PointNode(("R", 6)), VertexNode(1)
+
+    assert get_segment(u1, u2, rn) == RoadSegment("R", 0, 3)
+    assert get_segment(u2, u3, rn) == RoadSegment("R", 3, 6)
+    assert get_segment(u3, u4, rn) == RoadSegment("R", 6, 10)
+    assert get_segment(u1, u4, rn) == RoadSegment("R", 0, 10)
+
+    with pytest.raises(AssertionError):
+        get_segment(u2, PointNode(("longer", 5)), rn)
+
+
+def test_get_road_embedding_unrecognized():
+    with pytest.raises(ValueError):
+        get_road_embedding(0, "R", None)

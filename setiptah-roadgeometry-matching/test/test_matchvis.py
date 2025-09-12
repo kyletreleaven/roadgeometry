@@ -101,25 +101,3 @@ def test_matching_to_flow(
 
     flow = matching_to_flow(matching, S, T, roadnet)
     assert flow == flow_expected
-
-
-def test_create_path_graph():
-
-    rn = RoadNetwork()
-    rn.add_edge("A", 0, 1, 10.)
-
-    p = ("A", 3.)
-    mid = PointNode(p)
-    rn_ = create_path_network([p], rn)
-
-    road, = rn_.out_edges(VertexNode(0))
-    _, v = rn_.endpoints(road)
-    assert v == mid
-    assert rn_.length(road) == 3.
-
-    road, = rn_.in_edges(VertexNode(1))
-    u, _ = rn_.endpoints(road)
-    assert u == mid
-    assert rn_.length(road) == 7.
-
-    # TODO: Include an edge with zero points but covered by a shortest path.

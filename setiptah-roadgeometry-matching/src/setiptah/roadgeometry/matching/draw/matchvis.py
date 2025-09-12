@@ -1,19 +1,18 @@
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import Any
 
 import bintrees
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
-from setiptah.roadgeometry.dijkstra import RoadSegment, RoadnetMetric
+from setiptah.roadgeometry.dijkstra import (
+    RoadSegment, RoadnetMetric, create_path_network, PointNode, VertexNode
+)
 from setiptah.roadgeometry.draw import draw_planar_roadnet
 from setiptah.roadgeometry.formats import from_networkx
-from setiptah.roadgeometry.graphs import RoadNetwork
 from setiptah.roadgeometry.matching import bm, mygraph
-from setiptah.roadgeometry.protocol import Roadnet, Topology
 from setiptah.roadgeometry.planar import PlanarRoadnet
+from setiptah.roadgeometry.protocol import Roadnet, Topology
 
 """ CONSTANTS """
 
@@ -155,49 +154,6 @@ def point_embedding(p, roadnet: Roadnet, pos):
     road, x = p
     pi, pj = [np.array(pos[i]) for i in roadnet.endpoints(road)]
     return pi + x * (pj - pi) / roadnet.length(road)
-
-
-@dataclass(frozen=True)
-class VertexNode:
-    vertex: Any
-
-    def element(self):
-        return
-
-
-@dataclass(frozen=True)
-class PointNode:
-    point: Any
-
-
-def create_path_network(points, roadnet: Roadnet):
-    out = RoadNetwork()
-    for u in roadnet.nodes():
-        out.add_node(VertexNode(u))
-
-    # collect all points
-    segments = defaultdict(bintrees.RBTree)
-    for road, y in points:
-        segments[road][y] = None  # just a set really
-
-    def create_edge(u, v, length, oneway):
-        road_idx = len(out.edges())
-        out.add_edge(road_idx, u, v, length, oneway=oneway)
-
-    for road in roadnet.edges():
-        seg = segments[road]
-        u, v = roadnet.endpoints(road)
-        length, oneway = roadnet.length(road), roadnet.is_oneway(road)
-
-        prev_node, prev_y = VertexNode(u), 0.
-        for curr_y, _ in seg.iter_items():
-            p = road, curr_y
-            curr_node = PointNode(p)
-            create_edge(prev_node, curr_node, curr_y - prev_y, oneway)
-            prev_node, prev_y = curr_node, curr_y
-        create_edge(prev_node, VertexNode(v), length - prev_y, oneway)
-
-    return out
 
 
 def matching_to_interval_graph(matching, S, T, roadnet: Roadnet):

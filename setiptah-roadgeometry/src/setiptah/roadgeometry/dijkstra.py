@@ -1,16 +1,14 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property
-from numbers import Number
-from typing import Dict, Generator, NamedTuple, Optional
+from typing import Generator, NamedTuple, Optional, Any
 
+import bintrees
 import numpy as np
 
-from .util.priodict import *
+from .graphs import RoadNetwork
 from .protocol import *
-
-
-
+from .util.priodict import *
 
 SourceVertex = TVert
 TargetVertex = TVert
@@ -302,3 +300,96 @@ class RoadnetMetric(RoadnetQuery[TRoad, TVert]):
                 return path
 
         return _Path
+
+
+@dataclass(frozen=True)
+class VertexNode:
+    vertex: Any
+
+
+@dataclass(frozen=True)
+class PointNode:
+    point: Any
+
+
+def create_path_network(points, roadnet: Roadnet):
+    """
+
+    A path network has as its vertices the union of the original road network vertices
+    and a set of query points. The edges are such that shortest path distances between all vertices
+    in the path network agree with those between the same features in the road network metric space.
+
+    """
+    out = RoadNetwork()
+    for u in roadnet.nodes():
+        out.add_node(VertexNode(u))
+
+    # collect all points
+    segments = defaultdict(bintrees.RBTree)
+    for road, y in points:
+        segments[road][y] = None  # just a set really
+
+    def create_edge(u, v, length, oneway):
+        road_idx = len(out.edges())
+        out.add_edge(road_idx, u, v, length, oneway=oneway)
+
+    for road in roadnet.edges():
+        seg = segments[road]
+        u, v = roadnet.endpoints(road)
+        length, oneway = roadnet.length(road), roadnet.is_oneway(road)
+
+        prev_node, prev_y = VertexNode(u), 0.
+        for curr_y, _ in seg.iter_items():
+            p = road, curr_y
+            curr_node = PointNode(p)
+            create_edge(prev_node, curr_node, curr_y - prev_y, oneway)
+            prev_node, prev_y = curr_node, curr_y
+        create_edge(prev_node, VertexNode(v), length - prev_y, oneway)
+
+    return out
+
+
+def get_segment(
+        u: VertexNode | PointNode,
+        v: VertexNode | PointNode,
+        roadnet: Roadnet,
+) -> RoadSegment:
+    """Recover the segment on a road network between adjacent nodes in one of its path networks."""
+    road = get_segment_road(u, v, roadnet)
+    _, start = get_road_embedding(u, road, roadnet)
+    _, end = get_road_embedding(v, road, roadnet)
+    return RoadSegment(road, start, end)
+
+
+def get_segment_road(
+        u: VertexNode | PointNode,
+        v: VertexNode | PointNode,
+        roadnet: Roadnet,
+):
+    """Determine the road underneath the smallest segment between two nodes on a path network."""
+    if isinstance(u, PointNode):
+        road, _ = u.point
+    elif isinstance(v, PointNode):
+        road, _ = v.point
+    else:
+        roads = (
+            road
+            for road in roadnet.out_edges(u.vertex)
+            if roadnet.endpoints(road)[1] == v.vertex
+        )
+        road = min(roads, key=roadnet.length)
+
+    return road
+
+
+def get_road_embedding(u: VertexNode | PointNode, road, roadnet: Roadnet):
+    """Resolve a path network node to its corresponding point on the original road network."""
+    if isinstance(u, PointNode):
+        road_, _ = u.point
+        assert road_ == road
+        return u.point
+
+    if isinstance(u, VertexNode):
+        return RoadnetQuery(roadnet).embedding(u.vertex, road)
+
+    raise ValueError()
