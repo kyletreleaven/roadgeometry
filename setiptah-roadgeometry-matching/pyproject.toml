@@ -33,4 +33,6 @@ dev = [
     "ipywidgets",
     "pandas",
     "nbconvert",
+    "pyrosm",
+    "tqdm",
 ]

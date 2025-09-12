@@ -83,3 +83,20 @@ def runpy(session):  # Wasn't working when the session was just "run"...
 
     local_install_packages(session, *dev_deps)
     session.run("python", *(session.posargs or []))
+
+
+@nox.session
+def notebook(session):
+    local_install(session, ".")
+
+    try:
+        toml = nox.project.load_toml("pyproject.toml")
+        dev_deps = toml["project"]["optional-dependencies"]["dev"]
+
+    except:
+        import json
+        print(json.dumps(toml, indent=2))
+        raise
+
+    session.install(*dev_deps)
+    session.run("jupyter", "notebook")
