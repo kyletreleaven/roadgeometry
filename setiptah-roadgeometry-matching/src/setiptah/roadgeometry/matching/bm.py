@@ -92,6 +92,8 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
     P: tuple[BasicPoint[TRoad], ...]
     Q: tuple[BasicPoint[TRoad], ...]
     roadnet: Roadnet[TRoad, TVert]
+    _: dataclasses.KW_ONLY
+    use_ranges: bool = False
 
     def compute_optimal(self, result: MatchingResult):
         out, = self.compute_optimal_results(result)
@@ -161,10 +163,19 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
         def _compute_matching(self):
             # TODO: Don't we want to be able to do this with any acyclic flow?
             assist, segment_dict, roadnet = self.flow, self.segment_dict, self.instance.roadnet
-            topograph = create_topograph(segment_dict, assist, roadnet)
+
+            if self.instance.use_ranges:
+                ranges_segment_dict = compile_index_ranges(segment_dict)
+                topograph = create_topograph2(ranges_segment_dict, assist, roadnet)
+            else:
+                topograph = create_topograph(segment_dict, assist, roadnet)
 
             try:
-                match, cost = TRAVERSE2(topograph)
+                if self.instance.use_ranges:
+                    match, cost = TRAVERSE3(topograph)
+                else:
+                    match, cost = TRAVERSE2(topograph)
+
             except Exception as ex:
                 ex.assist = assist
                 ex.topograph = topograph
@@ -330,7 +341,7 @@ class MySegment:
         return cls(BiPartite.create_with(list), [])
 
 
-def create_point_map(segment_dict: dict[TRoad, Segment]) -> dict[TRoad, MySegment]:
+def compile_index_ranges(segment_dict: dict[TRoad, Segment]) -> dict[TRoad, MySegment]:
     out = {}
     for road, seg_in in segment_dict.items():
         out[road] = seg_out = MySegment.create()

@@ -49,22 +49,6 @@ def BIPARTITEMATCH_ROADS_CONGESTED( S, T, roadmap, congestion_dict ) :
  
     return assist
 
-    pm = roadbm.create_point_map(segment_dict)
-    topograph = roadbm.create_topograph2(pm, assist, roadnet)
- 
-    return topograph
- 
-    # will need a more informative TRAVERSE method    
-    try :
-        match, _cost = roadbm.TRAVERSE2( topograph )
-    except Exception as ex :
-        ex.assist = assist
-        ex.topograph = topograph
-        raise ex
-    
-    MATCH.extend( match )
-    return MATCH
-
 
 def SOLVER(roadnet: nx.MultiDiGraph, surplus, measure_dict, congestion_dict):
     from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow

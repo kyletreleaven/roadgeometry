@@ -1,7 +1,7 @@
 import networkx as nx
 
 import setiptah.roadgeometry.probability as roadprob
-from setiptah.roadgeometry.formats import to_networkx
+from setiptah.roadgeometry.formats import to_networkx, from_networkx
 from setiptah.roadgeometry.matching.nx_legacy import *
 
 
@@ -117,6 +117,30 @@ def test_roadnet_matching():
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html
 
 
+def test_index_range_equivalence():
+
+    roadgraph = nx.MultiDiGraph()
+
+    roadgraph.add_edge(0, 1, 'N', length=1., oneway=True)
+    roadgraph.add_edge(1, 2, 'E', length=1.)
+    roadgraph.add_edge(2, 3, 'S', length=1.)
+    roadgraph.add_edge(3, 0, 'W', length=1.)
+    roadgraph.add_edge(0, 4, 'dangler', length=1.)
+
+    sampler = roadprob.UniformDist(roadgraph)
+
+    NUMPOINT = 50
+    PP = [sampler.sample() for i in range(NUMPOINT)]
+    QQ = [sampler.sample() for i in range(NUMPOINT)]
+
+    roadnet = from_networkx(roadgraph)
+
+    cost = RoadnetMatchingProblem(PP, QQ, roadnet, use_ranges=False).compute_optimal(MatchingResult.COST)
+    cost_using_ranges = RoadnetMatchingProblem(PP, QQ, roadnet, use_ranges=True).compute_optimal(MatchingResult.COST)
+
+    assert cost_using_ranges == cost
+
+
 def test_roadnet_matching_int():
 
     roadnet = nx.MultiDiGraph()
@@ -210,7 +234,7 @@ def test_create_point_map():
 
     pm = compute_segments3(PP, QQ, roadnet_frfr)
     segs_ = compute_segments2(PP, QQ, roadnet_frfr)
-    pm_ = create_point_map(segs_)
+    pm_ = compile_index_ranges(segs_)
 
     assert pm_ == pm
 
