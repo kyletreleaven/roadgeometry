@@ -15,6 +15,8 @@ from .protocol import *
 SourceVertex = TVert
 TargetVertex = TVert
 
+Point = Roadnet[TRoad, TVert].Point
+
 
 class RoadSegment(NamedTuple, Generic[TRoad]):
     road: TRoad
@@ -26,28 +28,8 @@ RoadPath = Optional[list[RoadSegment]]
 
 
 @dataclass(frozen=True)
-class RoadnetMetric(Generic[TRoad, TVert]):
+class RoadnetQuery(Generic[TRoad, TVert]):
     roadnet: Roadnet[TRoad, TVert]
-
-    Point = Roadnet[TRoad, TVert].Point
-
-    @cached_property
-    def _distance(self) -> dict[SourceVertex, dict[TargetVertex, float]]:
-        return {}
-
-    @cached_property
-    def _upstream(self) -> dict[SourceVertex, dict[TargetVertex, TVert]]:
-        return {}
-
-    def _out_edges(self, i: TVert):
-        for e in self.roadnet.out_edges(i):
-            _, j = self.roadnet.endpoints(e)
-            yield e, j
-        for e in self.roadnet.in_edges(i):
-            if self.roadnet.is_oneway(e):
-                continue
-            j, _ = self.roadnet.endpoints(e)
-            yield e, j
 
     def embeddings(self, u: TVert) -> Generator[Point, None, None]:
         for e in self.roadnet.out_edges(u):
@@ -62,6 +44,38 @@ class RoadnetMetric(Generic[TRoad, TVert]):
         if u == j:
             return road, self.roadnet.length(road)
         raise ValueError(f"Node {u} not incident to road {road}.")
+
+    def _out_edges(self, i: TVert):
+        for e in self.roadnet.out_edges(i):
+            _, j = self.roadnet.endpoints(e)
+            yield e, j
+        for e in self.roadnet.in_edges(i):
+            if self.roadnet.is_oneway(e):
+                continue
+            j, _ = self.roadnet.endpoints(e)
+            yield e, j
+
+    def is_valid_point(self, p: Point):
+        road, _ = p
+        return self.is_on_road(p, road)
+
+    def is_on_road(self, p: Point, road: TRoad) -> bool:
+        road_, x = p
+        return (
+            road_ == road
+            and 0. <= x <= self.roadnet.length(road)
+        )
+
+
+class RoadnetMetric(RoadnetQuery[TRoad, TVert]):
+
+    @cached_property
+    def _distance(self) -> dict[SourceVertex, dict[TargetVertex, float]]:
+        return {}
+
+    @cached_property
+    def _upstream(self) -> dict[SourceVertex, dict[TargetVertex, TVert]]:
+        return {}
 
     def graph_shortest_path_length(self, source: SourceVertex, target: TargetVertex) -> float:
         self._ensure(source)
@@ -110,17 +124,6 @@ class RoadnetMetric(Generic[TRoad, TVert]):
         self._distance[source] = d
         self._upstream[source] = upstream
 
-    def is_valid_point(self, p: Point):
-        road, _ = p
-        return self.is_on_road(p, road)
-
-    def is_on_road(self, p: Point, road: TRoad) -> bool:
-        road_, x = p
-        return (
-            road_ == road
-            and 0. <= x <= self.roadnet.length(road)
-        )
-
     def distance(self, p: Point, q: Point) -> float:
         """
 
@@ -139,8 +142,8 @@ class RoadnetMetric(Generic[TRoad, TVert]):
 
         @dataclass
         class _Path:
-            p: metric.Point
-            q: metric.Point
+            p: Point
+            q: Point
 
             @cached_property
             def _result(self):
@@ -258,7 +261,7 @@ class RoadnetMetric(Generic[TRoad, TVert]):
         @dataclass
         class _Path:
             u: TVert
-            q: metric.Point
+            q: Point
 
             @cached_property
             def _result(self):
