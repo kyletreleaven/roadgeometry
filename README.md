@@ -18,6 +18,8 @@ In contrast,
 classical algorithms like the [**Hungarian method**](https://en.wikipedia.org/wiki/Hungarian_algorithm) run in $O(n^3)$,
 which can be too slow at scale for many applications.
 
+**See demonstration in [this](https://github.com/kyletreleaven/roadgeometry/blob/mainline/setiptah-roadgeometry-matching/notebooks/geopandas-matching-demo-cambridge.ipynb) Jupyter notebook.**
+
 ---
 
 ## Highlights
