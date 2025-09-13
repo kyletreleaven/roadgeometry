@@ -4,8 +4,10 @@ import setiptah.roadgeometry.probability as roadprob
 from setiptah.roadgeometry.formats import to_networkx, from_networkx
 from setiptah.roadgeometry.matching.nx_legacy import *
 
+import pytest
 
-def test_roadnet_matching():
+
+def random_instance():
 
     roadnet = nx.MultiDiGraph()
     if True:
@@ -30,88 +32,76 @@ def test_roadnet_matching():
     PP = [sampler.sample() for i in range(NUMPOINT)]
     QQ = [sampler.sample() for i in range(NUMPOINT)]
 
-    segs = SEGMENTS(PP, QQ, roadnet)
-    segs_: dict[TRoad, MySegment] = compute_segments3(PP, QQ, roadnet_frfr)
-    # assert False, segs_
+    return RoadnetMatchingProblem(PP, QQ, roadnet_frfr)
 
-    # prematch
-    pm = set(
-        m
-        for road, seg in segs.items()
-        for m in PREMATCH(seg.iter_items())
-    )
-    # assert False, pm
+
+@pytest.mark.parametrize("instance_factory", [
+    random_instance
+])
+def test_roadnet_matching(instance_factory):
+
+    inst: RoadnetMatchingProblem = instance_factory()
+
+    PP, QQ, roadnet = inst.P, inst.Q, inst.roadnet
+
+    segment_dict = compute_segments2(PP, QQ, roadnet)
+    # assert False, segment_dict
 
     # surplus
     surplus_dict = {
-        road: SURPLUS(seg.iter_items())
-        for road, seg in segs.items()
+        road: SURPLUS(seg)
+        for road, seg in segment_dict.items()
     }
     assert sum(surplus_dict.values()) == 0
-    # assert False, surplus_dict
-
-    road_len = {
-        road: roadnet_frfr.length(road)
-        for road in segs
-    }
-    # assert False, road_len
 
     measure_dict = {
-        road: MEASURE(seg.iter_items(), road_len[road])
-        for road, seg in segs.items()
+        road: MEASURE(seg, roadnet.length(road))
+        for road, seg in segment_dict.items()
     }
-    # assert False, measure_dict
 
-    assist = compute_optimal_flow(roadnet_frfr, surplus_dict, measure_dict)
+    flow = compute_optimal_flow(roadnet, surplus_dict, measure_dict)
 
     # Good to check!
-    imbalance = CHECKFLOW(assist, roadnet, surplus_dict)
+    imbalance = check_flow(flow, roadnet, surplus_dict)
     assert len(imbalance) <= 0
 
-    topograph = create_topograph2(segs_, assist, roadnet_frfr)
+    topograph = create_topograph(segment_dict, flow, roadnet)
     # assert False, topograph.edges(data=True)
 
-    nodes = list(nx.topological_sort( topograph ))
-    # assert False, (len(nodes), nodes)
-
-    match_ref, cost_ctd_ = TRAVERSE3(topograph)
+    matching_ref, cost_ref = TRAVERSE2(topograph)
     # assert False, match_ref
-    match_ = [
-        (segs_[road1].points.supply[i1], segs_[road2].points.demand[i2])
-        for (road1, i1), (road2, i2) in match_ref
-    ]
+
     # assert False, match_
-    cost_sp_ = ROADMATCHCOST(match_, PP, QQ, roadnet)
+    cost_ref_shortest_paths = matching_cost(matching_ref, PP, QQ, roadnet)
 
-    # Compare:
-    # [x] cost computed during matching construction
-    match, cost_ctd = RoadnetMatchingProblem(
-        PP, QQ, MultiDiGraphRoadnet(roadnet)
+    # cost computed during matching construction
+    matching, cost_ctd = RoadnetMatchingProblem(
+        PP, QQ, roadnet
     ).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
-    assert len(match) == NUMPOINT
+    assert len(matching) == len(PP) == len(QQ)
 
-    assert True, (
-        (cost_ctd_, cost_ctd),
-        (match, match_),
-    )
+    # sum shortest path lengths,
+    cost_shortest_paths = matching_cost(matching, PP, QQ, roadnet)
 
-    # [x] sum shortest path lengths,
-    cost_sp = ROADMATCHCOST(match, PP, QQ, roadnet)
-
-    # [x] objective fn cost of flow,
+    # objective fn cost of flow,
     obj_fn_dict = {
         road: OBJECTIVE_FUNC(measure)
         for road, measure in measure_dict.items()
-    }  # write_objectives(PP, QQ, roadnet_frfr)
+    }
 
-    costs_obj = flow_cost_per_road(assist, obj_fn_dict)
+    costs_obj = flow_cost_per_road(flow, obj_fn_dict)
     cost_obj = sum(costs_obj.values())
 
     # limit spread
-    costs = [cost_ctd, cost_sp, cost_obj, cost_ctd_, cost_sp_]
-    costs_ = sorted(costs)
+    costs = [
+        cost_ref,
+        cost_ref_shortest_paths,
+        cost_ctd,
+        cost_shortest_paths,
+        cost_obj
+    ]
 
-    assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
+    assert within_tolerance(costs), costs
 
     # TODO: Test vs. a third-party implementation on distance matrix; e.g.,
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html
@@ -135,10 +125,18 @@ def test_index_range_equivalence():
 
     roadnet = from_networkx(roadgraph)
 
-    cost = RoadnetMatchingProblem(PP, QQ, roadnet, use_ranges=False).compute_optimal(MatchingResult.COST)
-    cost_using_ranges = RoadnetMatchingProblem(PP, QQ, roadnet, use_ranges=True).compute_optimal(MatchingResult.COST)
+    matching, cost = RoadnetMatchingProblem(
+        PP, QQ, roadnet, use_ranges=False
+    ).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
+    matching_from_ranges = RoadnetMatchingProblem(
+        PP, QQ, roadnet, use_ranges=True
+    ).compute_optimal(MatchingResult.MATCHING)
+    # assert False, matching_from_ranges
 
-    assert cost_using_ranges == cost
+    cost_shortest_path = ROADMATCHCOST(matching, PP, QQ, roadgraph)
+    cost_from_ranges = ROADMATCHCOST(matching_from_ranges, PP, QQ, roadgraph)
+
+    assert within_tolerance([cost, cost_shortest_path, cost_from_ranges])
 
 
 def test_roadnet_matching_int():
@@ -178,15 +176,14 @@ def test_roadnet_matching_int():
     roadnet_graph = to_networkx(roadnet)
     cost_sp2 = ROADMATCHCOST(matching2, PP, QQ, roadnet_graph)
 
-    # Compare their costs.
-
-    within_tolerance([cost_ctd1, cost_sp1, cost_ctd2, cost_sp2])
-    # assert False, cost_constr
+    # Compare their costs!
+    all_costs = [cost_ctd1, cost_sp1, cost_ctd2, cost_sp2]
+    assert within_tolerance(all_costs), all_costs
 
 
 def within_tolerance(costs):
     costs_ = sorted(costs)
-    assert abs(costs_[-1] - costs_[0]) < 1e-10, costs
+    return abs(costs_[-1] - costs_[0]) < 1e-10
 
 
 def test_match_empty():

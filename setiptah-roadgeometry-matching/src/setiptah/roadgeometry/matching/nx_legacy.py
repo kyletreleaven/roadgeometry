@@ -85,12 +85,7 @@ def CHECKFLOW(
 
 
 def MATCHCOSTS(matching: tuple[int, int], P, Q, roadnet: nx.MultiDiGraph):
-    metric = RoadnetMetric(MultiDiGraphRoadnet(roadnet))
-    inst = MatchingInstance(P, Q, metric)
-    return [
-        inst.match_cost(match)
-        for match in matching
-    ]
+    return match_costs(matching, P, Q, MultiDiGraphRoadnet(roadnet))
 
 
 def ROADMATCHCOST( match, P, Q, roadnet ) :

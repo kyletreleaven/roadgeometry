@@ -161,27 +161,17 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
             self.results[MatchingResult.FLOW] = flow
 
         def _compute_matching(self):
-            # TODO: Don't we want to be able to do this with any acyclic flow?
             assist, segment_dict, roadnet = self.flow, self.segment_dict, self.instance.roadnet
 
             if self.instance.use_ranges:
-                ranges_segment_dict = compile_index_ranges(segment_dict)
-                topograph = create_topograph2(ranges_segment_dict, assist, roadnet)
+                matching, cost = compute_matching_for_acyclic_flow_with_ranges(
+                    assist, segment_dict, roadnet
+                )
+
             else:
-                topograph = create_topograph(segment_dict, assist, roadnet)
+                matching, cost = compute_matching_for_acyclic_flow(assist, segment_dict, roadnet)
 
-            try:
-                if self.instance.use_ranges:
-                    match, cost = TRAVERSE3(topograph)
-                else:
-                    match, cost = TRAVERSE2(topograph)
-
-            except Exception as ex:
-                ex.assist = assist
-                ex.topograph = topograph
-                raise ex
-
-            self.matching.extend(match)
+            self.matching.extend(matching)
             self.results[MatchingResult.MATCHING] = self.matching
             self.results[MatchingResult.COST] = cost
 
@@ -671,6 +661,43 @@ def CHECKTOPO( topograph ) :
     return [ u for u in topograph.nodes() if balance(u) != 0 ]
 
 
+def compute_matching_for_acyclic_flow(
+        flow: dict[TRoad, int],
+        segment_dict: dict[TRoad, Segment],
+        roadnet: Roadnet[TRoad, TVert],
+):
+    """
+
+    For _any_ acylclic flow, not _just_ an optimal one.
+
+    """
+    topograph = create_topograph(segment_dict, flow, roadnet)
+    return TRAVERSE2(topograph)
+
+
+def compute_matching_for_acyclic_flow_with_ranges(
+        flow: dict[TRoad, int],
+        segment_dict: dict[TRoad, Segment],
+        roadnet: Roadnet[TRoad, TVert],
+):
+    ranges_segment_dict: dict[TRoad, MySegment] = compile_index_ranges(segment_dict)
+    topograph = create_topograph2(ranges_segment_dict, flow, roadnet)
+
+    match_, cost = TRAVERSE3(topograph)
+    # assert False, (ranges_segment_dict, match_)
+
+    # TODO: Better to tuck this into a data structure somewhere so it is done by TRAVERSE3.
+    match = [
+        (
+            ranges_segment_dict[road1].points.supply[i],
+            ranges_segment_dict[road2].points.demand[j],
+        )
+        for (road1, i), (road2, j) in match_
+    ]
+
+    return match, cost
+
+
 def TRAVERSE2(topograph: nx.DiGraph):
     """
 
@@ -826,3 +853,16 @@ def flow_cost_per_road(flow: dict[TRoad, float], obj_dict):
         road: obj_dict[road](x)
         for road, x in flow.items()
     }
+
+
+def matching_cost(matching: tuple[int, int], P, Q, roadnet: Roadnet):
+    return sum(match_costs(matching, P, Q, roadnet))
+
+
+def match_costs(matching: tuple[int, int], P, Q, roadnet: Roadnet) -> list[float]:
+    metric = RoadnetMetric(roadnet)
+    inst = MatchingInstance(P, Q, metric)
+    return [
+        inst.match_cost(match)
+        for match in matching
+    ]
