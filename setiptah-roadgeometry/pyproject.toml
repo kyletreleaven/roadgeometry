@@ -31,7 +31,8 @@ dev = [
 test = [
     "pytest",
     "pytest-coverage",
-    "setiptah-roadgeometry-matching"
+    "setiptah-roadgeometry-matching",
+    "shapely",
 ]
 package = [
     "black",
