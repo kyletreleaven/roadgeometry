@@ -531,6 +531,13 @@ def write_objectives(P, Q, roadnet: Roadnet):
     return objective_dict
 
 
+def compute_roadnet_objective_fns(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, "classWrapper"]:
+    return {
+        road: costWrapper(lines)
+        for road, lines in write_objectives(P, Q, roadnet).items()
+    }
+
+
 class costWrapper :
     """
     wrap an RBTree arrangement of LineData()s to obtain a piece-wise linear callable function 

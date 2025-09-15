@@ -24,6 +24,7 @@ test = [
     "networkx",
     "scipy",
     "matplotlib",
+    "geopandas",
 ]
 dev = [
     "scipy",

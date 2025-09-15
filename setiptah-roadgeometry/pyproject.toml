@@ -25,7 +25,7 @@ dev = [
     "ipython",
     "notebook",
     "ipywidgets",
-    "pandas",
+    "geopandas",
     "nbconvert",
 ]
 test = [
@@ -33,6 +33,7 @@ test = [
     "pytest-coverage",
     "setiptah-roadgeometry-matching",
     "shapely",
+    "geopandas",
 ]
 package = [
     "black",
