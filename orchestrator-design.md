@@ -188,6 +188,48 @@ Rule authors must be aware of this. Where a product is not portable, the options
 
 ---
 
+## Graph-Time Safety Annotations
+
+Rules can declare statically — at graph construction time, before any execution — that
+certain inputs are **consumed** or **unsafe** when the rule runs. This is analogous to
+Rust's `cargo:rerun-if-changed` directives but expressed as properties of the rule rather
+than runtime signals.
+
+The orchestrator uses these annotations during graph analysis to make scheduling decisions:
+
+- Do not run this target concurrently with other targets that share the same inputs
+- Do not reuse a workspace that has been touched by a rule declaring those inputs consumed
+- Flag to the user that certain inputs will be modified or invalidated by running this target
+
+This keeps the safety contract at the graph level — visible, auditable, and reasoned about
+before execution begins — rather than discovered at runtime.
+
+---
+
+## Workspace Structure
+
+The workspace is a structured directory with well-known subdirectories, communicated to the
+build command via environment variables:
+
+```
+workspace/
+  src/   — inputs: populated by the orchestrator from dependencies and source map
+  tmp/   — scratch space: toolchain writes here freely during stage 2
+  out/   — outputs: rule places declared products here for stage 3 extraction
+```
+
+The build command receives env vars pointing to each subdirectory (e.g. `RG_SRC`, `RG_TMP`,
+`RG_OUT`). Rule authors direct their toolchain to the appropriate locations, using shims
+where necessary to move artifacts between subdirectories.
+
+The `out/` directory is the interface between targets — what a target exposes to downstream
+dependents. A dependency's `src/` and `tmp/` are never visible outside that target.
+
+**Note:** The interaction between workspace structure, product portability, and opinionated
+toolchains is not fully resolved — see Open Questions.
+
+---
+
 ## Relationship to Existing Tools
 
 | Tool | Role | Relationship |
