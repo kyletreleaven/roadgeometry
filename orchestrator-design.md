@@ -121,6 +121,73 @@ correctly through the dependency graph.
 
 ---
 
+## Executable Targets
+
+A target may declare that its product includes an **executable** — a binary or script that
+other rules can reference as a tool. The orchestrator wires that executable into the consuming
+target's execution environment (via PATH or direct reference) before stage 2 runs.
+
+This makes tools first-class dependencies in the build graph. A target that builds a code
+generator can be declared as a tool dependency of a target that uses it. The tool is built
+first, then made available to the consuming target's command invocation — without the
+consuming rule needing to know where the tool came from or how it was built.
+
+---
+
+## Guest Repos
+
+An external source tree — typically a git clone — can be declared as a **guest repo**. Its
+targets are addressable within the same orchestration system using the same target reference
+syntax as local targets.
+
+If the guest repo uses the same orchestrator, its targets integrate natively into the
+dependency graph. If it doesn't, a rule/plugin bridges the gap — translating the guest's
+native build system into the orchestrator's target model.
+
+Guest repos extend the recursive property beyond the local monorepo boundary: the dependency
+graph becomes a DAG that spans repositories. A guest repo may itself declare guest repos,
+and a guest repo's executable target may be used as a tool in a local rule.
+
+---
+
+## Rule Responsibilities and Orchestrator Primitives
+
+The orchestrator is strictly tool-agnostic — it has no built-in knowledge of any specific
+toolchain. All tool-specific knowledge lives in **rules** (plugins). The orchestrator provides
+primitives that rules build on:
+
+- **Workspace layout** — create, populate, and clean workspace directories
+- **Execution environment** — rules can set environment variables, PATH, working directory,
+  and resource constraints for the stage 2 command invocation, independent of whether the
+  toolchain itself provides escape hatches for output redirection
+- **Product declaration** — rules declare what files/directories constitute the product
+  and where to find them after stage 2 completes
+
+Rules are responsible for:
+- Knowing where their toolchain writes outputs within the workspace
+- Deciding the workspace lifecycle strategy (clean vs. persistent)
+- Handling product portability (see below)
+- Redirecting toolchain outputs via execution environment manipulation where possible
+
+---
+
+## Product Portability
+
+Not all products can be moved from the workspace to output storage after stage 2. A compiled
+binary is portable; a Python virtualenv with baked-in absolute paths is not.
+
+Rule authors must be aware of this. Where a product is not portable, the options are:
+
+- **Stable output path** — configure the toolchain (via execution environment) to write
+  directly to a known stable path that serves as both workspace and output storage
+- **Descriptor as product** — the product is a description of how to reconstruct the
+  environment (e.g. a lockfile, a manifest), not the environment itself; consumers
+  reconstruct on demand
+- **Workspace as output** — the workspace itself becomes the output storage for that target;
+  downstream targets reference it in place rather than consuming a moved product
+
+---
+
 ## Relationship to Existing Tools
 
 | Tool | Role | Relationship |
@@ -141,7 +208,17 @@ The orchestrator does not replace any of these — it orchestrates them.
 - What is the concrete format of a source map?
 - What is the concrete format of a product — a directory, a manifest, a content-addressed store?
 - How are workspace population recipes expressed — declarative config, scripted, or both?
-- How does the orchestrator handle toolchains that are themselves environment managers
-  (e.g. nox creating virtualenvs, cargo managing `target/`) with strong opinions about
-  output locations?
+- **Toolchains with opinionated output locations**: the orchestrator provides execution
+  environment manipulation as a primitive, and rules can use this to redirect toolchain
+  outputs where the toolchain respects the relevant env vars or flags. But some toolchains
+  hardcode output locations (e.g. nox writing to `.nox/`, some pip behaviors) and cannot
+  be redirected. The product portability strategies (stable path, descriptor, workspace-as-
+  output) handle the aftermath, but don't resolve the case where you cannot control where
+  the toolchain writes in the first place. Is there a general solution, or is this an
+  inherent limitation that rule authors must document and work around per-toolchain?
 - What is the distribution/installation story for the orchestrator itself?
+- Copy vs. link for workspace population: copying is hermetic but expensive and disconnects
+  the workspace from live edits; linking is fast and dev-friendly but breaks hermeticity and
+  risks commands modifying their inputs. The right strategy may vary by workspace lifecycle
+  (clean vs. persistent) and target type (dev vs. release), but that entangles two decisions
+  that might be better kept separate.
