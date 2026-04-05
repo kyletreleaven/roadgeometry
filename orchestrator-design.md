@@ -245,6 +245,32 @@ The orchestrator does not replace any of these — it orchestrates them.
 
 ---
 
+## Challenges
+
+### Analysis and Observability Tools
+
+Linters, formatters, code coverage, static analyzers, and similar tools don't fit cleanly
+into the stage 1 → 2 → 3 model:
+
+- They produce no meaningful build artifact — nothing downstream depends on their output
+- Their "product" is metadata *about* the build graph (reports, annotations, metrics) rather
+  than an input to it
+- They often need to see source in its natural layout rather than an assembled workspace
+- Some (e.g. coverage aggregation) need to span multiple targets simultaneously
+
+These are better understood as **analysis targets** — a distinct category with relaxed
+constraints: they may consume other targets' products or source directly, they produce
+reports rather than build artifacts, and they are never declared as dependencies of other
+targets. They observe the build graph rather than participate in it.
+
+Open questions for this category:
+- How do analysis targets declare what they need to observe — source, products, or both?
+- How does cross-target coverage aggregation work when individual targets are isolated?
+- Should analysis targets be a first-class concept in the orchestrator, or implemented
+  entirely as rules with relaxed conventions?
+
+---
+
 ## Open Questions
 
 - What is the concrete format of a source map?
