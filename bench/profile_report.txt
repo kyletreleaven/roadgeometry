@@ -1,0 +1,64 @@
+nox > Running session bench
+nox > Creating virtual environment (uv) using python in .nox/bench
+nox > uv pip install bintrees numpy networkx matplotlib scipy
+nox > uv pip install -e setiptah-roadgeometry
+nox > uv pip install bintrees numpy networkx matplotlib scipy
+nox > uv pip install -e setiptah-roadgeometry
+nox > uv pip install -e setiptah-roadgeometry-matching
+nox > uv pip install numpy networkx line_profiler
+nox > python bench/profile_matching.py --sizes 50 100 200 500 1000 --n 500
+
+============================================================
+Timing across input sizes
+============================================================
+     n    mean (s)     min (s)
+------------------------------
+    50      0.0733      0.0716
+   100      0.1007      0.0911
+   200      0.1391      0.1338
+   500      0.1973      0.1934
+  1000      0.2698      0.2641
+
+============================================================
+cProfile: n=500 points per side
+============================================================
+         1780993 function calls (1780991 primitive calls) in 0.510 seconds
+
+   Ordered by: cumulative time
+   List reduced from 195 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.510    0.510 /Users/ktreleav/workspaces/roadgeometry/bench/profile_matching.py:56(run_once)
+        1    0.000    0.000    0.441    0.441 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:102(compute_optimal_results)
+        1    0.000    0.000    0.441    0.441 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:119(run)
+        1    0.000    0.000    0.430    0.430 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:132(_compute_optimal_flow)
+        1    0.000    0.000    0.397    0.397 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:383(compute_optimal_flow)
+        1    0.000    0.000    0.385    0.385 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/nxopt/cvxcostflow.py:103(MinConvexCostFlow)
+        1    0.037    0.037    0.383    0.383 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/nxopt/cvxcostflow.py:159(FragileMCCF)
+      124    0.031    0.000    0.097    0.001 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/util/mygraph.py:79(Dijkstra)
+     1375    0.010    0.000    0.078    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/nxopt/cvxcostflow.py:52(LinearizeCost)
+      419    0.048    0.000    0.072    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/nxopt/cvxcostflow.py:65(ReducedCost)
+        1    0.000    0.000    0.069    0.069 /Users/ktreleav/workspaces/roadgeometry/bench/profile_matching.py:46(make_instance)
+     1000    0.001    0.000    0.066    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry/src/setiptah/roadgeometry/probability.py:99(sample)
+    18784    0.007    0.000    0.063    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:548(__call__)
+     1000    0.009    0.000    0.063    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry/src/setiptah/roadgeometry/legacy/roadmap_basic.py:79(get_road_data)
+    18784    0.054    0.000    0.054    0.000 /Users/ktreleav/workspaces/roadgeometry/.nox/bench/lib/python3.13/site-packages/bintrees/abctree.py:764(floor_item)
+    89038    0.037    0.000    0.053    0.000 /Users/ktreleav/workspaces/roadgeometry/.nox/bench/lib/python3.13/site-packages/networkx/classes/reportviews.py:958(<genexpr>)
+     9984    0.002    0.000    0.036    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:561(__call__)
+   155643    0.021    0.000    0.033    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/util/mygraph.py:69(edges)
+     1375    0.007    0.000    0.029    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/nxopt/cvxcostflow.py:29(ResidualGraph)
+   337438    0.029    0.000    0.029    0.000 {method 'get' of 'dict' objects}
+    23633    0.019    0.000    0.027    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry/src/setiptah/roadgeometry/util/priodict.py:47(__setitem__)
+    12400    0.020    0.000    0.027    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry/src/setiptah/roadgeometry/util/priodict.py:18(smallest)
+      798    0.025    0.000    0.025    0.000 {built-in method builtins.repr}
+     4902    0.016    0.000    0.024    0.000 /Users/ktreleav/workspaces/roadgeometry/.nox/bench/lib/python3.13/site-packages/bintrees/rbtree.py:123(insert)
+        1    0.000    0.000    0.023    0.023 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:212(compute_segments2)
+        1    0.001    0.001    0.021    0.021 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:235(sort_points)
+     1000    0.001    0.000    0.020    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/bm.py:251(ensure_key)
+     7531    0.005    0.000    0.016    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/util/mygraph.py:37(add_edge)
+   140542    0.013    0.000    0.013    0.000 /Users/ktreleav/workspaces/roadgeometry/setiptah-roadgeometry-matching/src/setiptah/roadgeometry/matching/util/mygraph.py:75(endpoints)
+     2180    0.001    0.000    0.013    0.000 /Users/ktreleav/workspaces/roadgeometry/.nox/bench/lib/python3.13/site-packages/bintrees/abctree.py:371(set_default)
+
+
+
+nox > Session bench was successful.
