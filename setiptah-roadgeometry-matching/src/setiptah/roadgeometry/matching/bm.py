@@ -16,6 +16,11 @@ import numpy as np
 from setiptah.roadgeometry.dijkstra import RoadnetMetric
 from setiptah.roadgeometry.graphs import IntRoadnet, int_map_to_seq
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
+from setiptah.roadgeometry.matching.protocol import FlowSolver
+
+# Module-level default solver. Replace this to globally swap in a different
+# implementation (e.g. the C++ backend) without changing call sites.
+default_flow_solver: FlowSolver = MinConvexCostFlow
 from setiptah.roadgeometry.matching.range_queues import *
 from setiptah.roadgeometry.matching.util import inner_class
 from setiptah.roadgeometry.matching.util.mygraph import mygraph
@@ -94,6 +99,7 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
     roadnet: Roadnet[TRoad, TVert]
     _: dataclasses.KW_ONLY
     use_ranges: bool = False
+    flow_solver: FlowSolver = dataclasses.field(default_factory=lambda: default_flow_solver)
 
     def compute_optimal(self, result: MatchingResult):
         out, = self.compute_optimal_results(result)
@@ -148,7 +154,10 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
                 measure = MEASURE(segment, road_len)
                 measure_dict[road] = measure
 
-            self.flow = flow = compute_optimal_flow(roadnet, surplus_dict, measure_dict)
+            self.flow = flow = compute_optimal_flow(
+                roadnet, surplus_dict, measure_dict,
+                flow_solver=self.instance.flow_solver,
+            )
 
             # TODO: Create unit test to detect infeasibility...
             imbalance = check_flow(flow, roadnet, surplus_dict)
@@ -384,7 +393,10 @@ def compute_optimal_flow(
         roadnet: Roadnet[TRoad, TVert],
         surplus: dict[TVert, float],
         measure_dict: bintrees.RBTree,  # float -> float
+        flow_solver: FlowSolver = None,
 ) -> dict[TRoad, float]:
+    if flow_solver is None:
+        flow_solver = default_flow_solver
     network = mygraph()
     supply = {i: 0. for i in roadnet.nodes()}
     cost = {}  # functions
@@ -441,7 +453,7 @@ def compute_optimal_flow(
     # should be fairly tight. the +1 at the end is to accommodate an empty matching.
     U = sum(len(m) - 1 for m in measure_dict.values()) + 1
 
-    f = MinConvexCostFlow(network, {}, supply, cost, U)
+    f = flow_solver(network, {}, supply, cost, U)
 
     flow = {}
     for road in roadnet.edges():

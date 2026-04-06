@@ -117,9 +117,10 @@ PyPI / Python wheel is the 1.0 priority. Conan/vcpkg packaging deferred until de
 - [x] **Step 0: Profile** — `FragileMCCF` dominates (75%); `Dijkstra` loop (19%), `ReducedCost` +
   `LinearizeCost` (29% combined), `priodict` (11%), `bintrees.floor_item` (12%). `TRAVERSE2/3`
   essentially free at practical n. See `bench/profile_report.md`.
-- [ ] **Step 1: Python refactor** — define `FlowSolver` protocol (oracle + piecewise-linear
-  variants), inject into `RoadnetMatchingProblem` with `MinConvexCostFlow` as default.
-  Verify existing tests still pass. No C++ yet.
+- [x] **Step 1: Python refactor** — `FlowSolver` and `ConvexFlowSolver` protocols in
+  `matching/protocol.py`; `flow_solver` injected into `RoadnetMatchingProblem` and
+  `compute_optimal_flow`; module-level `default_flow_solver` as single swap point.
+  All 24 tests pass.
 - [ ] **Step 2: C++ core data structures** — priority queue (`std::priority_queue`), sorted
   container (`std::map`, replacing `bintrees.RBTree`), `IntRoadnet` mirror, augmentation graph
 - [ ] **Step 3: `ConvexCostFlowSolver<Graph, PriorityQueue>`** — C++ template, bound via
