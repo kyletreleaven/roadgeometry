@@ -37,6 +37,9 @@ def local_install_packages(session, *packages):
 
 @nox.session
 def test(session):
+    # TODO: C++ coverage — rebuild setiptah-roadgeometry-cpp with -fprofile-arcs
+    # -ftest-coverage (via a CMake ROADGEOMETRY_COVERAGE option), run pytest, then
+    # invoke lcov/genhtml to produce a combined Python+C++ coverage report.
     try:
         toml = nox.project.load_toml("pyproject.toml")
         deps = toml["project"]["dependencies"]
