@@ -33,6 +33,20 @@ def local_install_packages(session, *packages):
 
 
 @nox.session
+def build_roadgeometry_cpp(session):
+    """Build and install the C++ extension for setiptah-roadgeometry."""
+    session.install("-e", "setiptah-roadgeometry-cpp")
+    session.run("python", "-c", "from setiptah.roadgeometry import _cpp; print('_cpp loaded:', _cpp)")
+
+
+@nox.session
+def build_matching_cpp(session):
+    """Build and install the C++ extension package."""
+    session.install("-e", "setiptah-roadgeometry-matching-cpp")
+    session.run("python", "-c", "from setiptah.roadgeometry.matching import _cpp; print('_cpp loaded:', _cpp)")
+
+
+@nox.session
 def bench(session):
     for pkg in PACKAGES:
         local_install(session, pkg)

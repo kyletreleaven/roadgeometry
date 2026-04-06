@@ -1,0 +1,15 @@
+[build-system]
+requires = ["scikit-build-core>=0.3", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "setiptah-roadgeometry-cpp"
+version = "0.1.0"
+description = "C++ backend for setiptah-roadgeometry"
+authors = [
+    { name = "Kyle Treleaven", email = "ktreleav@gmail.com" }
+]
+dependencies = []
+
+[tool.scikit-build]
+cmake.source-dir = "."
