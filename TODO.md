@@ -23,22 +23,19 @@ The C interface is a sibling compiled artifact, not a dependency of the Python b
 
 ### Plugin seams (Protocol interfaces)
 
-Three composable abstractions:
+One primary seam at the Python level:
 
 | Protocol | Python impl | C++ template |
 |---|---|---|
-| `DistanceOracle` | `RoadnetMetric` | `DijkstraOracle<RoadId, VertId>` |
-| `FlowSolver` | `MinConvexCostFlow` | `ConvexCostFlowSolver<CostFn>` |
-| `MatchingSolver` | `RoadnetMatchingProblem` | `RoadnetMatcher<DistOracle, FlowSolver>` |
+| `FlowSolver` | `MinConvexCostFlow` | `ConvexCostFlowSolver<Graph, PriorityQueue>` |
 
-`RoadnetMatcher` is parameterized on the other two — C++ users compose freely:
+Two variants of `FlowSolver`:
+- **Oracle-style** — black box callable, any solver can satisfy it
+- **Piecewise-linear-aware** — receives cost structure directly, can exploit convexity
 
-```cpp
-// default
-using FastMatcher = RoadnetMatcher<DijkstraOracle<int,int>, ConvexCostFlowSolver<PiecewiseLinear>>;
-// custom distance oracle
-using CustomMatcher = RoadnetMatcher<LookupTableOracle, ConvexCostFlowSolver<PiecewiseLinear>>;
-```
+Priority queue and augmentation graph are template parameters of the C++ solver. Not
+exposed at the Python protocol level initially, but pybind11 bindings could expose named
+instantiations to Python power users post-1.0.
 
 ### C++ template library (Layer 1)
 - Header-only, self-contained, no compilation required to use as a C++ library
@@ -85,18 +82,57 @@ PyPI / Python wheel is the 1.0 priority. Conan/vcpkg packaging deferred until de
 - C++ coverage from Python test suite: compile with `--coverage`, run `pytest`, collect with `lcov`
 - Same Python test suite validates both pure-Python and C++ backends
 
+### Design decisions
+
+- **`FlowSolver` is the primary plugin seam** — not `DistanceOracle` or `MatchingSolver`.
+  `RoadnetMetric.distance()` is not in the hot path (only used for post-hoc cost verification).
+  `MatchingSolver` as a protocol adds abstraction without motivation — the interesting variation
+  is in the solver, not the overall algorithm structure.
+
+- **Two `FlowSolver` variants** — oracle-style (black box callable, any solver) and
+  piecewise-linear-aware (receives `RBTree` of `LineData` directly, can exploit convex
+  structure). Current `MinConvexCostFlow` is the canonical piecewise-linear implementation.
+
+- **Priority queue and augmentation graph are sub-seams of `FlowSolver`** — not exposed at
+  the Python protocol level. In C++ they become template parameters of
+  `ConvexCostFlowSolver<Graph, PriorityQueue>`, visible to C++ power users but invisible
+  at the Python boundary.
+
+- **Python always normalizes to `<int, int>` before dispatch** — `IntRoadnet.normalize()`
+  is O(n) and strictly dominated by the O(n log n) solve; amortized to zero for repeated
+  solves on the same network. The pybind11 binding exposes only the `<int, int>`
+  instantiation; no runtime dispatch shim needed.
+
+- **C++ template stays fully general** — `ConvexCostFlowSolver<RoadId, VertId, Graph,
+  PriorityQueue>` works with any ID types. C++ devs with non-integer IDs use the template
+  directly without normalizing. The `<int, int>` instantiation is the canonical fast default
+  (packed arrays, cache-friendly) but not the only valid one.
+
+- **No normalization utilities in the C/C++ library** — C++ devs write their own
+  `std::unordered_map<T, int>` index if they want it. Python normalization machinery
+  (`IntRoadnet.normalize()`) covers the primary audience. Revisit post-1.0 if there is
+  demand from C users.
+
 ### Implementation order
-- [ ] **Step 0: Profile** — instrument Python matching code on realistic input to confirm hot paths
-  before writing any C++. Candidates: `MinConvexCostFlow`, `TRAVERSE3`, `RoadnetMetric.distance()`
-- [ ] **Step 1: Python refactor** — define Protocol interfaces, restructure existing code behind
-  seams, verify existing tests still pass. No C++ yet.
-- [ ] **Step 2: C++ core data structures** — priority queue, sorted container (replacing
-  `bintrees.RBTree`), `IntRoadnet` mirror
-- [ ] **Step 3: `DijkstraOracle<RoadId, VertId>`** — bind via pybind11, validate against Python
-  impl with existing tests
-- [ ] **Step 4: `ConvexCostFlowSolver<CostFn>`** — bind via pybind11, validate
-- [ ] **Step 5: `RoadnetMatcher<DistOracle, FlowSolver>`** — compose above, full end-to-end binding
-- [ ] **Step 6: C interface** — `libroadgeometry` with opaque handles, built alongside pybind11 module
-- [ ] **Step 7: packaging** — `scikit-build-core` build, PyPI wheel, CMake install rules for headers + C lib
-- [ ] **Post-1.0: C interface customization** — function-pointer vtables for swapping oracle/solver at C level
+- [x] **Step 0: Profile** — `FragileMCCF` dominates (75%); `Dijkstra` loop (19%), `ReducedCost` +
+  `LinearizeCost` (29% combined), `priodict` (11%), `bintrees.floor_item` (12%). `TRAVERSE2/3`
+  essentially free at practical n. See `bench/profile_report.md`.
+- [ ] **Step 1: Python refactor** — define `FlowSolver` protocol (oracle + piecewise-linear
+  variants), inject into `RoadnetMatchingProblem` with `MinConvexCostFlow` as default.
+  Verify existing tests still pass. No C++ yet.
+- [ ] **Step 2: C++ core data structures** — priority queue (`std::priority_queue`), sorted
+  container (`std::map`, replacing `bintrees.RBTree`), `IntRoadnet` mirror, augmentation graph
+- [ ] **Step 3: `ConvexCostFlowSolver<Graph, PriorityQueue>`** — C++ template, bound via
+  pybind11 as default `<int,int>` instantiation, validated against Python impl with existing tests
+- [ ] **Step 4: wire into matching** — Python `RoadnetMatchingProblem` uses C++ solver by
+  default when available; pure-Python fallback
+- [ ] **Step 5: C interface** — `libroadgeometry` with opaque handles, built alongside pybind11 module
+- [ ] **Step 6: packaging** — `scikit-build-core` build, PyPI wheel, CMake install rules for headers + C lib
+- [ ] **Examples & tests per language** — at minimum one usage example and one correctness/
+  performance test in each target language:
+  - Python: already covered by existing test suite + `bench/profile_matching.py`
+  - C++: standalone example using the header-only library; demonstrates default instantiation
+    and at least one custom template composition
+  - C: example using the `libroadgeometry` opaque handle API
+- [ ] **Post-1.0: C interface customization** — function-pointer vtables for swapping solver at C level
 - [ ] **Post-1.0: package managers** — Conan and/or vcpkg recipes
