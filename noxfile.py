@@ -51,5 +51,9 @@ def bench(session):
     for pkg in PACKAGES:
         local_install(session, pkg)
 
+    session.install("pybind11", "scikit-build-core")
+    for cpp_pkg in ["setiptah-roadgeometry-cpp", "setiptah-roadgeometry-matching-cpp"]:
+        session.install("-e", cpp_pkg, "--no-build-isolation")
+
     session.install("numpy", "networkx", "line_profiler")
     session.run("python", *(session.posargs or ["bench/profile_matching.py"]))
