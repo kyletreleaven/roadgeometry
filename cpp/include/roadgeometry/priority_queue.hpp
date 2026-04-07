@@ -19,14 +19,16 @@ namespace roadgeometry {
  * membership and priority lookup. Stale heap entries (superseded by a
  * decrease-key) are discarded lazily during pop_min.
  *
- * @tparam Key       Node/key type. Must be hashable (std::hash<Key> must exist).
+ * @tparam Key       Node/key type. Must be hashable via Hash.
  * @tparam Priority  Priority type. Must be totally ordered. Defaults to double.
  * @tparam Hash      Hash function for Key. Defaults to std::hash<Key>.
+ * @tparam Equal     Equality predicate for Key. Defaults to std::equal_to<Key>.
  */
 template<
     typename Key,
     typename Priority = double,
-    typename Hash = std::hash<Key>
+    typename Hash = std::hash<Key>,
+    typename Equal = std::equal_to<Key>
 >
 class PriorityQueue {
 public:
@@ -92,8 +94,15 @@ public:
 private:
     using Pair = std::pair<Priority, Key>;
 
-    std::priority_queue<Pair, std::vector<Pair>, std::greater<Pair>> heap_;
-    std::unordered_map<Key, Priority, Hash> map_;
+    // Compare by priority only — avoids requiring Key to support operator<.
+    struct PairCmp {
+        bool operator()(const Pair& a, const Pair& b) const {
+            return a.first > b.first;
+        }
+    };
+
+    std::priority_queue<Pair, std::vector<Pair>, PairCmp> heap_;
+    std::unordered_map<Key, Priority, Hash, Equal> map_;
 
     /** Discard stale heap entries until the top is a live entry. */
     void prune() {
