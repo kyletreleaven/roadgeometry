@@ -23,6 +23,10 @@ namespace roadgeometry {
  * @tparam Priority  Priority type. Must be totally ordered. Defaults to double.
  * @tparam Hash      Hash function for Key. Defaults to std::hash<Key>.
  * @tparam Equal     Equality predicate for Key. Defaults to std::equal_to<Key>.
+ *
+ * TODO: Template out the key→priority storage (Map parameter) so callers with
+ * dense integer keys can substitute std::vector<Priority> for better cache
+ * performance. Requires a size parameter and a sentinel for "not present".
  */
 template<
     typename Key,
