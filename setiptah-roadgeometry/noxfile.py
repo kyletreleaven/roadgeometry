@@ -50,7 +50,14 @@ def _install_test_deps(session):
     session.install("pybind11", "scikit-build-core")
     for pkg in cpp_pkgs:
         local_path = Path("..") / pkg
-        args = ["-e", str(local_path)] if local_path.exists() else [pkg]
+        if local_path.exists():
+            import shutil
+            build_dir = local_path / "build"
+            if build_dir.exists():
+                shutil.rmtree(build_dir)
+            args = ["-e", str(local_path)]
+        else:
+            args = [pkg]
         args += ["--no-build-isolation", "--config-settings", "cmake.args=-DROADGEOMETRY_COVERAGE=ON"]
         session.install(*args)
 
@@ -67,6 +74,7 @@ def test(session):
         "--html-details", "coverage_report/index.html",
         "--filter", r"../setiptah-roadgeometry-cpp/src/",
         "--filter", r"../cpp/include/",
+        "--exclude", r".*pybind11.*",
         "--txt",
         "--print-summary",
         "--gcov-ignore-errors=source_not_found",
