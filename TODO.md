@@ -123,8 +123,17 @@ PyPI / Python wheel is the 1.0 priority. Conan/vcpkg packaging deferred until de
   All 24 tests pass.
 - [ ] **Step 2: C++ core data structures** — priority queue (`std::priority_queue`), sorted
   container (`std::map`, replacing `bintrees.RBTree`), `IntRoadnet` mirror, augmentation graph
+  - [x] `cpp/` source tree and `roadgeometry::roadgeometry` CMake interface target
+  - [x] `setiptah-roadgeometry-cpp` package with scikit-build-core + pybind11
+  - [x] `PriorityQueue<Key, Priority>` header-only template (`cpp/include/roadgeometry/priority_queue.hpp`)
+  - [x] pybind11 binding: `_cpp.PriorityQueue` (int keys, double priorities)
+  - [x] Test suite: parity tests vs `priorityDictionary`, Dijkstra parity, unit tests
+  - [x] C++ coverage via gcovr in `nox test` session
+  - [ ] Dijkstra using `PriorityQueue` bound and wired as default in `mygraph.Dijkstra`
 - [ ] **Step 3: `ConvexCostFlowSolver<Graph, PriorityQueue>`** — C++ template, bound via
   pybind11 as default `<int,int>` instantiation, validated against Python impl with existing tests
+  - [ ] Sorted container (`std::map`) replacing `bintrees.RBTree`
+  - [ ] `IntRoadnet` mirror and augmentation graph
 - [ ] **Step 4: wire into matching** — Python `RoadnetMatchingProblem` uses C++ solver by
   default when available; pure-Python fallback
 - [ ] **Step 5: C interface** — `libroadgeometry` with opaque handles, built alongside pybind11 module
