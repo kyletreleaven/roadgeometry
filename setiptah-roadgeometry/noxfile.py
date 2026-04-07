@@ -35,23 +35,44 @@ def local_install_packages(session, *packages):
         session.install(*remote)
 
 
+def _install_test_deps(session):
+    """Install test dependencies, building cpp packages with coverage instrumentation."""
+    toml = nox.project.load_toml("pyproject.toml")
+    deps = toml["project"]["dependencies"]
+    test_deps = toml["project"]["optional-dependencies"]["test"]
+
+    all_deps = [*deps, *test_deps]
+    cpp_pkgs = {p for p in all_deps if p.endswith("-cpp")}
+    other_deps = [p for p in all_deps if p not in cpp_pkgs]
+
+    local_install_packages(session, *other_deps)
+
+    session.install("pybind11", "scikit-build-core")
+    for pkg in cpp_pkgs:
+        local_path = Path("..") / pkg
+        args = ["-e", str(local_path)] if local_path.exists() else [pkg]
+        args += ["--no-build-isolation", "--config-settings", "cmake.args=-DROADGEOMETRY_COVERAGE=ON"]
+        session.install(*args)
+
+
 @nox.session
 def test(session):
-    # TODO: C++ coverage — rebuild setiptah-roadgeometry-cpp with -fprofile-arcs
-    # -ftest-coverage (via a CMake ROADGEOMETRY_COVERAGE option), run pytest, then
-    # invoke lcov/genhtml to produce a combined Python+C++ coverage report.
-    try:
-        toml = nox.project.load_toml("pyproject.toml")
-        deps = toml["project"]["dependencies"]
-        test_deps = toml["project"]["optional-dependencies"]["test"]
-
-    except:
-        import json
-        print(json.dumps(toml, indent=2))
-        raise
-
-    local_install_packages(session, *deps, *test_deps)
-    session.run("pytest", *(session.posargs or []))  # posargs for test filtering
+    _install_test_deps(session)
+    session.install("gcovr")
+    session.run("pytest", *(session.posargs or []))
+    # .gcda files land in the cpp package's build/ dir alongside the .gcno files
+    Path("coverage_report").mkdir(exist_ok=True)
+    session.run(
+        "gcovr",
+        "--html-details", "coverage_report/index.html",
+        "--filter", r"../setiptah-roadgeometry-cpp/src/",
+        "--filter", r"../cpp/include/",
+        "--txt",
+        "--print-summary",
+        "--gcov-ignore-errors=source_not_found",
+        "../setiptah-roadgeometry-cpp/build/",
+        external=True,
+    )
 
 
 @nox.session

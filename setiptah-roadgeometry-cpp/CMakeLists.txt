@@ -16,5 +16,11 @@ add_subdirectory(
 pybind11_add_module(_cpp MODULE src/_cpp.cpp)
 target_link_libraries(_cpp PRIVATE roadgeometry::roadgeometry)
 
+option(ROADGEOMETRY_COVERAGE "Enable coverage instrumentation" OFF)
+if(ROADGEOMETRY_COVERAGE)
+    target_compile_options(_cpp PRIVATE --coverage)
+    target_link_options(_cpp PRIVATE --coverage)
+endif()
+
 # Install into the setiptah.roadgeometry namespace package
 install(TARGETS _cpp DESTINATION setiptah/roadgeometry)

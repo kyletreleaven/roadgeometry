@@ -13,3 +13,4 @@ dependencies = []
 
 [tool.scikit-build]
 cmake.source-dir = "."
+build-dir = "build"
