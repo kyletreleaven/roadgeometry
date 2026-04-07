@@ -61,21 +61,70 @@ dijkstra(const Graph& graph, const Cost& cost, typename Graph::node_type source)
     return {dist, upstream};
 }
 
+
+// TODO: The two overloads below could be unified into a single template:
+//
+//   template<typename OutEdges, typename Endpoints, typename Cost>
+//   dijkstra(const OutEdges& out_edges, const Endpoints& endpoints,
+//            const Cost& cost, <source-type> source);
+//
+// Both implementations share the same algorithm body. The only type bound
+// required is operator[] on out_edges, endpoints, and cost. The Graph struct
+// abstraction is unnecessary — it can be "rolled out" into these three
+// subscriptable parameters directly. Node/edge types would be deduced via
+// decltype(out_edges[source]) etc.
+
 /**
- * Simple flat-array graph for use with normalized (int) node and edge ids.
+ * Dijkstra optimized for dense integer node/edge ids.
  *
- * out_edges[node]  = list of edge ids leaving that node
- * endpoints[edge]  = (tail_node, head_node)
+ * Takes flat array inputs and returns parallel output vectors, avoiding hash
+ * map overhead. Suitable for normalized graphs where nodes are 0..n-1 and
+ * edges are 0..m-1.
+ *
+ * @param out_edges  out_edges[node] = list of edge ids leaving that node
+ * @param endpoints  endpoints[edge] = (tail, head)
+ * @param cost       cost[edge]
+ * @param source     source node id
+ * @return (dist, upstream) as parallel vectors:
+ *         dist[i]     = shortest distance to node i (inf if unreachable)
+ *         upstream[i] = edge id on shortest path to i (-1 if source/unreachable)
  */
-struct IntGraph {
-    using node_type = int;
-    using edge_type = int;
+inline std::pair<std::vector<double>, std::vector<int>>
+dijkstra(
+    const std::vector<std::vector<int>>&    out_edges,
+    const std::vector<std::pair<int, int>>& endpoints,
+    const std::vector<double>&              cost,
+    int                                      source
+) {
+    const int    n   = static_cast<int>(out_edges.size());
+    const double inf = std::numeric_limits<double>::infinity();
 
-    std::vector<std::vector<int>>        out_edges_;
-    std::vector<std::pair<int, int>>     endpoints_;
+    std::vector<double> dist(n, inf);
+    std::vector<int>    upstream(n, -1);
+    std::vector<double> tentative(n, inf);
 
-    const std::vector<int>& out_edges(int node) const { return out_edges_[node]; }
-    std::pair<int, int>     endpoints(int edge) const { return endpoints_[edge]; }
-};
+    PriorityQueue<int> pq;
+    pq.push(source, 0.0);
+    tentative[source] = 0.0;
+
+    while (!pq.empty()) {
+        int i  = pq.pop_min();
+        dist[i] = tentative[i];
+
+        for (int e : out_edges[i]) {
+            int j = endpoints[e].second;
+            if (dist[j] < inf) continue;
+
+            double dj = dist[i] + cost[e];
+            if (dj < tentative[j]) {
+                tentative[j] = dj;
+                pq.push(j, dj);
+                upstream[j] = e;
+            }
+        }
+    }
+
+    return {dist, upstream};
+}
 
 }  // namespace roadgeometry
