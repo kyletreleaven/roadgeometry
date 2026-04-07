@@ -6,6 +6,11 @@ import numpy as np
 
 from setiptah.roadgeometry.matching.util.mygraph import mygraph, Dijkstra
 
+try:
+    from setiptah.roadgeometry.matching._cpp import dijkstra as _cpp_dijkstra
+except ImportError:
+    _cpp_dijkstra = None
+
 PHASE_ERROR = 10**-6        # TODO: Find a way to eliminate this.
 
 LOG = logging.getLogger(__name__)
@@ -93,6 +98,34 @@ def Excess( excess, flow, graph, supply, edge=None ) :
             excess[i] -= flow.get(e, 0. )
             
             
+
+def _normalize_graph(graph, cost, node_to_int):
+    """Build flat int-indexed arrays from a mygraph + cost dict for C++ Dijkstra.
+
+    Returns (out_edges, endpoints, cost_arr, edges) where `edges` is the list
+    of edge ids in the order used for indexing (needed for denormalization).
+    """
+    edges = list(graph.edges())
+    n = len(node_to_int)
+    out_edges = [[] for _ in range(n)]
+    endpoints = [None] * len(edges)
+    cost_arr = [0.0] * len(edges)
+    for ei, e in enumerate(edges):
+        tail, head = graph.endpoints(e)
+        out_edges[node_to_int[tail]].append(ei)
+        endpoints[ei] = (node_to_int[tail], node_to_int[head])
+        cost_arr[ei] = cost[e]
+    return out_edges, endpoints, cost_arr, edges
+
+
+def _denormalize_dijkstra(dist_arr, up_arr, int_to_node, edges, source):
+    """Convert C++ Dijkstra output back to {node: dist} and {node: edge} dicts."""
+    inf = float('inf')
+    dist = {int_to_node[i]: d for i, d in enumerate(dist_arr) if d < inf}
+    upstream = {int_to_node[i]: edges[e] for i, e in enumerate(up_arr) if e >= 0}
+    upstream[source] = None
+    return dist, upstream
+
 
 """ Convex Cost Flow Algorithm """
 
@@ -199,6 +232,12 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
 
     flow = { e : 0. for e in network.edges() }
     Excess( excess, flow, network, supply )
+
+    # Pre-compute node normalization for C++ Dijkstra (node set is stable).
+    if _cpp_dijkstra is not None:
+        _nodes = list(network.nodes())
+        _node_to_int = {n: i for i, n in enumerate(_nodes)}
+        _int_to_node = _nodes  # alias for clarity
     
     potential = { i : 0. for i in network.nodes() }
         
@@ -266,7 +305,12 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
             cert = { re : c for (re,c) in redcost.items() if re in rgraph.edges() }
             #print 'reduced costs on res. graph, for shortest paths: %s' % repr( cert )
             
-            dist, upstream = Dijkstra( rgraph, redcost, s )
+            if _cpp_dijkstra is not None:
+                _out_edges, _endpoints, _cost_arr, _redges = _normalize_graph(rgraph, redcost, _node_to_int)
+                _dist_arr, _up_arr = _cpp_dijkstra(_out_edges, _endpoints, _cost_arr, _node_to_int[s])
+                dist, upstream = _denormalize_dijkstra(_dist_arr, _up_arr, _int_to_node, _redges, s)
+            else:
+                dist, upstream = Dijkstra( rgraph, redcost, s )
             #print 'Dijkstra shortest path distances: %s' % repr( dist )
             #print 'Dijkstra upstreams: %s' % repr( upstream )
             

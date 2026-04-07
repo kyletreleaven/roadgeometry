@@ -25,6 +25,7 @@ test = [
     "scipy",
     "matplotlib",
     "geopandas",
+    "setiptah-roadgeometry-matching-cpp",
 ]
 dev = [
     "scipy",
