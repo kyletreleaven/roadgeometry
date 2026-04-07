@@ -121,15 +121,14 @@ PyPI / Python wheel is the 1.0 priority. Conan/vcpkg packaging deferred until de
   `matching/protocol.py`; `flow_solver` injected into `RoadnetMatchingProblem` and
   `compute_optimal_flow`; module-level `default_flow_solver` as single swap point.
   All 24 tests pass.
-- [ ] **Step 2: C++ core data structures** — priority queue (`std::priority_queue`), sorted
-  container (`std::map`, replacing `bintrees.RBTree`), `IntRoadnet` mirror, augmentation graph
+- [x] **Step 2: C++ core data structures** — priority queue with decrease-key via lazy deletion; `PriorityDict` binding as drop-in for `priorityDictionary`
   - [x] `cpp/` source tree and `roadgeometry::roadgeometry` CMake interface target
   - [x] `setiptah-roadgeometry-cpp` package with scikit-build-core + pybind11
   - [x] `PriorityQueue<Key, Priority>` header-only template (`cpp/include/roadgeometry/priority_queue.hpp`)
   - [x] pybind11 binding: `_cpp.PriorityQueue` (int keys, double priorities)
   - [x] Test suite: parity tests vs `priorityDictionary`, Dijkstra parity, unit tests
   - [x] C++ coverage via gcovr in `nox test` session
-  - [ ] Dijkstra using `PriorityQueue` bound and wired as default in `mygraph.Dijkstra`
+  - [x] Dijkstra using `PriorityQueue` bound and wired as default in `mygraph.Dijkstra`
 - [ ] **Step 3: `ConvexCostFlowSolver<Graph, PriorityQueue>`** — C++ template, bound via
   pybind11 as default `<int,int>` instantiation, validated against Python impl with existing tests
   - [ ] Sorted container (`std::map`) replacing `bintrees.RBTree`
