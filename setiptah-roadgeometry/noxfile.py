@@ -74,7 +74,6 @@ def test(session):
         "--html-details", "coverage_report/index.html",
         "--filter", r"../setiptah-roadgeometry-cpp/src/",
         "--filter", r"../cpp/include/",
-        "--exclude", r".*pybind11.*",
         "--txt",
         "--print-summary",
         "--gcov-ignore-errors=source_not_found",
