@@ -8,7 +8,11 @@ import numpy as np
 
 from .graphs import RoadNetwork
 from .protocol import *
-from .util.priodict import *
+from .util.priodict import priorityDictionary as _PurePriorityDict
+try:
+    from setiptah.roadgeometry._cpp import PriorityDict as priorityDictionary
+except ImportError:
+    priorityDictionary = _PurePriorityDict
 
 SourceVertex = TVert
 TargetVertex = TVert

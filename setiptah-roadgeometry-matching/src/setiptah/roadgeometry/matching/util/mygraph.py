@@ -6,7 +6,11 @@ from typing import TypeVar, Generic
 import numpy as np
 
 from setiptah.roadgeometry.protocol import Topology
-from setiptah.roadgeometry.util.priodict import *
+from setiptah.roadgeometry.util.priodict import priorityDictionary as _PurePriorityDict
+try:
+    from setiptah.roadgeometry._cpp import PriorityDict as priorityDictionary
+except ImportError:
+    priorityDictionary = _PurePriorityDict
 
 TV = TypeVar("TV")
 TE = TypeVar("TE")
