@@ -12,7 +12,7 @@ from setiptah.roadgeometry.matching.bm import (
     compute_segments2, compute_optimal_flow, check_flow,
     SURPLUS, MEASURE, OBJECTIVE_FUNC,
     flow_cost_per_road,
-    create_topograph,
+    create_topograph, CHECKTOPO,
 )
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import (
     MinConvexCostFlow,
@@ -80,6 +80,8 @@ def check_instance(PP, QQ, roadnet, flow_solver, check_topograph=False):
         assert nx.is_directed_acyclic_graph(topo), (
             f"topograph has cycles: {format_flow_cycle(flow, roadnet)}"
         )
+        unbalanced = CHECKTOPO(topo)
+        assert len(unbalanced) == 0, f"topograph not conservative at nodes: {unbalanced}"
     return flow, measure_dict
 
 
