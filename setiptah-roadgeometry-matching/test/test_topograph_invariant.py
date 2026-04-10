@@ -8,6 +8,7 @@ from pathlib import Path
 import networkx as nx
 import pytest
 
+from setiptah.roadgeometry.graphs import RoadNetwork
 from setiptah.roadgeometry.matching.io import roadnet_from_json, point_set_from_json
 from setiptah.roadgeometry.matching.bm import (
     compute_segments2, compute_optimal_flow, check_flow,
@@ -71,5 +72,40 @@ def test_conservative_flow_gives_balanced_topograph(fixture):
     assert nx.is_directed_acyclic_graph(topo), (
         f"topograph has cycles: {nx.find_cycle(topo)}"
     )
+    unbalanced = CHECKTOPO(topo)
+    assert len(unbalanced) == 0, f"topograph not conservative: {unbalanced}"
+
+
+def test_antiparallel_empty_roads():
+    """Targeted regression for the DiGraph edge-collision bug.
+
+    Roads B and C are antiparallel and carry no points.  With flow split across
+    them both in the same net direction (B positive, C negative), both create an
+    edge special[1]→special[2] in the topograph.  Before the fix, the second
+    add_edge silently overwrote the first, dropping half the flow from the balance.
+
+    Two supply points on A and two demand on D make the conservative integer flow
+    (B=1, C=-1) the unique optimum, so no solver is needed.
+    """
+    rn = RoadNetwork()
+    rn.add_edge("A", 0, 1, 1.0)
+    rn.add_edge("B", 1, 2, 1.0)
+    rn.add_edge("C", 2, 1, 1.0)  # antiparallel to B, no points
+    rn.add_edge("D", 2, 3, 1.0)
+
+    supply = [("A", 1/3), ("A", 2/3)]
+    demand = [("D", 1/3), ("D", 2/3)]
+
+    segment_dict = compute_segments2(supply, demand, rn)
+    surplus_dict  = {road: SURPLUS(seg) for road, seg in segment_dict.items()}
+
+    # B and C both carry net flow 1→2; any split is equally optimal.
+    # Inject a non-trivial split to exercise the collision case.
+    flow = {"A": 0, "B": 1, "C": -1, "D": 2}
+
+    imbalance = check_flow(flow, rn, surplus_dict)
+    assert len(imbalance) == 0, f"flow not conservative: {imbalance}"
+
+    topo = create_topograph(segment_dict, flow, rn)
     unbalanced = CHECKTOPO(topo)
     assert len(unbalanced) == 0, f"topograph not conservative: {unbalanced}"
