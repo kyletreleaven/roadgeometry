@@ -648,6 +648,15 @@ def create_topograph(
             add_edge(prev_node, curr_node, h, curr_y - prev_y)
             h += len(qs.supply) - len(qs.demand)
             prev_node, prev_y = curr_node, curr_y
+
+        if prev_node is special[u]:
+            # No points on this road. Without an intermediate node the edge would
+            # go directly special[u] → special[v], which collides in the DiGraph
+            # with any other pointless road sharing the same endpoint pair.
+            # Inject a road-specific stub node to keep each road's edges distinct.
+            prev_node = terminal(BiPartite.create_with(list), ref=road)
+            add_edge(special[u], prev_node, h, 0.)
+
         add_edge(prev_node, special[v], h, roadnet.length(road) - prev_y)
 
     return topograph
