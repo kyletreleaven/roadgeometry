@@ -103,6 +103,24 @@ class UniformDist :
         return ROAD.RoadAddress( road, y )
 
 
+class RoadnetUniformDist:
+    """Uniform distribution over a Roadnet (protocol-compatible alternative to UniformDist).
+
+    Samples a road weighted by length, then a uniform offset along that road.
+    Works with any object satisfying the Roadnet protocol.
+    """
+
+    def __init__(self, roadnet):
+        self.roadnet = roadnet
+        weight_dict = {road: roadnet.length(road) for road in roadnet.edges()}
+        self.road_sampler = WeightedSet(weight_dict)
+
+    def sample(self):
+        road = self.road_sampler.sample()
+        y = self.roadnet.length(road) * np.random.rand()
+        return (road, y)
+
+
 def sampleaddress(roadnet: nx.MultiDiGraph, length: str = "length") -> ROAD.RoadAddress:
     """
     quick sampling function,, roads are elements chosen with equal probability;
