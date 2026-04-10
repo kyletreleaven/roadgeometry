@@ -173,6 +173,24 @@ def _denormalize_dijkstra(dist_arr, up_arr, int_to_node, edges, source):
     return dist, upstream
 
 
+def _check_upstream(dist, upstream, source, graph, cost):
+    """Dijkstra correctness condition: each node's upstream path to source
+    must accumulate exactly dist[node] in total cost."""
+    assert dist[source] == 0.0, f"source dist {dist[source]} != 0"
+    assert upstream[source] is None, f"source upstream {upstream[source]} != None"
+    for node, d in dist.items():
+        acc, j, visited = 0.0, node, set()
+        while j != source:
+            assert j not in visited, f"upstream cycle detected at {j}"
+            visited.add(j)
+            e = upstream[j]
+            acc += cost[e]
+            tail, _ = graph.endpoints(e)
+            j = tail
+        assert abs(acc - d) < 1e-9, f"node {node}: upstream path cost {acc} != dist {d}"
+    return True
+
+
 """ Convex Cost Flow Algorithm """
 
 class ALGGLOBAL :
@@ -353,6 +371,10 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None, *, dijkstr
                 _out_edges, _endpoints, _cost_arr, _redges = _normalize_graph(rgraph, redcost, _node_to_int)
                 _dist_arr, _up_arr = dijkstra.fn(_out_edges, _endpoints, _cost_arr, _node_to_int[s])
                 dist, upstream = _denormalize_dijkstra(_dist_arr, _up_arr, _int_to_node, _redges, s)
+                _ref_dist, _ = Dijkstra(rgraph, redcost, s)
+                assert _check_upstream(dist, upstream, s, rgraph, redcost)
+                for _node, _d in _ref_dist.items():
+                    assert abs(dist[_node] - _d) < 1e-9, f"dist mismatch at {_node}: cpp={dist[_node]}, py={_d}"
             else:
                 dist, upstream = dijkstra(rgraph, redcost, s)
             #print 'Dijkstra shortest path distances: %s' % repr( dist )

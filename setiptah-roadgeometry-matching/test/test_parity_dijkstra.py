@@ -32,14 +32,11 @@ def random_instance(rng, n_intersections=12, n_points=20):
 
 def flow_is_acyclic(flow, roadnet):
     g = nx.DiGraph()
-    for road in roadnet.edges():
-        f = flow.get(road, 0)
-        if f > 0:
-            i, j = roadnet.endpoints(road)
-            g.add_edge(i, j)
-        elif f < 0:
-            i, j = roadnet.endpoints(road)
-            g.add_edge(j, i)
+    for road, f in flow.items():
+        if f == 0:
+            continue
+        i, j = roadnet.endpoints(road)
+        g.add_edge(i, j) if f > 0 else g.add_edge(j, i)
     return nx.is_directed_acyclic_graph(g)
 
 
@@ -55,7 +52,7 @@ def check_instance(PP, QQ, roadnet, flow_solver):
     flow = compute_optimal_flow(roadnet, surplus_dict, measure_dict, flow_solver=flow_solver)
     imbalance = check_flow(flow, roadnet, surplus_dict)
     assert len(imbalance) == 0, f"flow not conservative: {imbalance}"
-    assert flow_is_acyclic(flow, roadnet), "flow has cycles"
+    assert flow_is_acyclic(flow, roadnet), f"flow has cycles: {flow}"
     return flow, measure_dict
 
 
