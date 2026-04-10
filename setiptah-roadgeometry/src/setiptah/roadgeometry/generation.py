@@ -26,11 +26,11 @@ def DelaunayRoadMap( interchanges ) :
 
 
 class DelaunayRoadnet:
-    """Bidirectional road network from a Delaunay triangulation of 2D points.
+    """Road network from a Delaunay triangulation of 2D points.
 
-    Implements the Roadnet protocol. Each undirected Delaunay edge (i, j) becomes
-    two directed roads (i, j) and (j, i) with length equal to the Euclidean distance.
-    No one-way roads.
+    Implements the Roadnet protocol. Each undirected Delaunay edge is oriented
+    canonically as (i, j) with i < j. Flow on a road may be positive (i→j) or
+    negative (j→i); no road is one-way.
     """
 
     def __init__(self, points):
@@ -52,13 +52,11 @@ class DelaunayRoadnet:
 
         for u, v in undirected:
             dist = float(np.linalg.norm(points[v] - points[u]))
-            for road in ((u, v), (v, u)):
-                tail, head = road
-                self._edges.append(road)
-                self._out_edges[tail].append(road)
-                self._in_edges[head].append(road)
-                self._endpoints[road] = (tail, head)
-                self._lengths[road] = dist
+            self._edges.append((u, v))
+            self._out_edges[u].append((u, v))
+            self._in_edges[v].append((u, v))
+            self._endpoints[(u, v)] = (u, v)
+            self._lengths[(u, v)] = dist
 
         self._nodes = list(range(N))
 
