@@ -635,7 +635,7 @@ def create_topograph(
 
     special = dict()
     for u in roadnet.nodes():
-        special[u] = terminal(None)
+        special[u] = terminal(None, ref=u)
 
     for road in roadnet.edges():
         u, v = roadnet.endpoints(road)
@@ -644,7 +644,7 @@ def create_topograph(
         h = assist[road]
         prev_node, prev_y = special[u], 0.
         for curr_y, qs in segment:
-            curr_node = terminal(qs)
+            curr_node = terminal(qs, ref=road)
             add_edge(prev_node, curr_node, h, curr_y - prev_y)
             h += len(qs.supply) - len(qs.demand)
             prev_node, prev_y = curr_node, curr_y
@@ -763,10 +763,13 @@ def TRAVERSE2(topograph: nx.DiGraph):
 
 
 class terminal :    # simple node type for TRAVERSE
-    def __init__(self, q ) :
-        self.q = q
+    def __init__(self, q, ref=None):
+        self.q   = q
+        self.ref = ref
 
     def __repr__(self):
+        if self.ref is not None:
+            return f"terminal({self.q}, ref={self.ref!r})"
         return f"terminal({self.q})"
 
 

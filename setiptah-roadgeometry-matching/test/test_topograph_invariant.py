@@ -4,6 +4,7 @@ a conservative flow must produce a balanced topograph.
 import json
 from pathlib import Path
 
+import networkx as nx
 import pytest
 
 from setiptah.roadgeometry.matching.io import roadnet_from_json, point_set_from_json
@@ -38,5 +39,8 @@ def test_conservative_flow_gives_balanced_topograph(fixture):
     assert len(imbalance) == 0, f"flow not conservative: {imbalance}"
 
     topo = create_topograph(segment_dict, flow, roadnet)
+    assert nx.is_directed_acyclic_graph(topo), (
+        f"topograph has cycles: {nx.find_cycle(topo)}"
+    )
     unbalanced = CHECKTOPO(topo)
     assert len(unbalanced) == 0, f"topograph not conservative: {unbalanced}"
