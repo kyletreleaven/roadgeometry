@@ -33,6 +33,18 @@ def test_conservative_flow_gives_balanced_topograph(fixture):
     roadnet, supply, demand, flow = load_fixture(fixture)
 
     segment_dict = compute_segments2(supply, demand, roadnet)
+
+    for road, seg in segment_dict.items():
+        # each segment should have all the roads' points
+        supply_on_seg = set(k for _, qs in seg for k in qs.supply)
+        demand_on_seg = set(k for _, qs in seg for k in qs.demand)
+
+        supply_on_road = set(k for k, (road_, y) in enumerate(supply) if road_ == road)
+        demand_on_road = set(k for k, (road_, y) in enumerate(demand) if road_ == road)
+
+        assert not supply_on_seg.symmetric_difference(supply_on_road)
+        assert not demand_on_seg.symmetric_difference(demand_on_road)
+
     surplus_dict = {road: SURPLUS(seg) for road, seg in segment_dict.items()}
 
     imbalance = check_flow(flow, roadnet, surplus_dict)
