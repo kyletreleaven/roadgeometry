@@ -129,6 +129,10 @@ PyPI / Python wheel is the 1.0 priority. Conan/vcpkg packaging deferred until de
   - [x] Test suite: parity tests vs `priorityDictionary`, Dijkstra parity, unit tests
   - [x] C++ coverage via gcovr in `nox test` session
   - [x] Dijkstra using `PriorityQueue` bound and wired as default in `mygraph.Dijkstra`
+- [x] **Step 2.5: C++ Dijkstra in `FragileMCCF`** — flat int-indexed arrays, node normalization
+  pre-computed once per solve, `_normalize_graph`/`_denormalize_dijkstra` helpers;
+  `bench` session now installs cpp packages. Profile hotspots shift to `LinearizeCost` +
+  `ReducedCost` (combined ~37%) and `bintrees.floor_item` (13%); Dijkstra no longer dominates.
 - [ ] **Step 3: `ConvexCostFlowSolver<Graph, PriorityQueue>`** — C++ template, bound via
   pybind11 as default `<int,int>` instantiation, validated against Python impl with existing tests
   - [ ] Sorted container (`std::map`) replacing `bintrees.RBTree`
