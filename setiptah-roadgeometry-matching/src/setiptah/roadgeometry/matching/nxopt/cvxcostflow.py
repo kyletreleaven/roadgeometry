@@ -1,17 +1,63 @@
 import itertools
 import logging
 import math
+from typing import Protocol
 
 import numpy as np
 
 from setiptah.roadgeometry.matching.util.mygraph import mygraph, Dijkstra
 
 try:
-    from setiptah.roadgeometry.matching._cpp import dijkstra as _cpp_dijkstra
+    from setiptah.roadgeometry.matching._cpp import dijkstra as cpp_dijkstra
 except ImportError:
-    _cpp_dijkstra = None
+    cpp_dijkstra = None
 
 PHASE_ERROR = 10**-6        # TODO: Find a way to eliminate this.
+
+
+class DijkstraFn(Protocol):
+    """General mygraph-level Dijkstra interface."""
+    def __call__(self, graph: mygraph, cost: dict, source) -> tuple[dict, dict]: ...
+
+
+class FlatIntDijkstra:
+    """Wraps a flat int-array dijkstra to satisfy DijkstraFn.
+
+    When called directly, normalizes on each call. FragileMCCF detects this
+    wrapper via isinstance, unwraps ._fn, and handles normalization itself
+    using a pre-computed node mapping (stable across the solve).
+
+    TODO: long-term this becomes part of a Solver bundle that also covers graph
+    evolution, since Dijkstra and graph evolver naturally co-vary (both general
+    or both flat-int).
+    """
+
+    def __init__(self, fn):
+        self._fn = fn
+
+    def __call__(self, graph: mygraph, cost: dict, source) -> tuple[dict, dict]:
+        nodes = list(graph.nodes())
+        node_to_int = {n: i for i, n in enumerate(nodes)}
+        out_edges_arr, endpoints_arr, cost_arr, edges = _normalize_graph(graph, cost, node_to_int)
+        dist_arr, up_arr = self._fn(out_edges_arr, endpoints_arr, cost_arr, node_to_int[source])
+        return _denormalize_dijkstra(dist_arr, up_arr, nodes, edges, source)
+
+    @classmethod
+    def node_mapping(cls, network: mygraph) -> tuple[dict, list]:
+        """Pre-compute (node_to_int, int_to_node) for a stable node set."""
+        nodes = list(network.nodes())
+        return {n: i for i, n in enumerate(nodes)}, nodes
+
+    @property
+    def fn(self):
+        return self._fn
+
+
+def py_dijkstra(graph: mygraph, cost: dict, source) -> tuple[dict, dict]:
+    return Dijkstra(graph, cost, source)
+
+
+_default_dijkstra: DijkstraFn = FlatIntDijkstra(cpp_dijkstra) if cpp_dijkstra is not None else py_dijkstra
 
 LOG = logging.getLogger(__name__)
 
@@ -133,9 +179,9 @@ class ALGGLOBAL :
     REGULAR = ':'
     AUGMENTING = 'AUG'
 
-def MinConvexCostFlow( network, capacity, supply, cost, U, epsilon=None ) :
+def MinConvexCostFlow( network, capacity, supply, cost, U, epsilon=None, *, dijkstra: DijkstraFn = _default_dijkstra ) :
     """
-    network is a mygraph() --- supports non-negative flow on digraph edges 
+    network is a mygraph() --- supports non-negative flow on digraph edges
     capacity is a dict() : road -> real, non-neg flow capacity
     supply is a dict() : vertex -> real vertex supply; assumed conservative supply, i.e., sums to 0
     cost is a dict() : road -> convex cost function assoc. w/ road
@@ -143,13 +189,13 @@ def MinConvexCostFlow( network, capacity, supply, cost, U, epsilon=None ) :
     U is the width of the first phase of the capacity-scaling algorithm
     epsilon is final phase width: eps=1 (default) yields integer optimal solution
     """
-    
+
     # create a *robust* instance, to ensure strong connectivity of *any* Delta-residual graph
     network_aug, capacity_rename, cost_aug = MCCFRobustInstance( network, capacity, supply, cost, U )
-    
+
     # run the "fragile" implementation
-    flow = FragileMCCF( network_aug, capacity_rename, supply, cost_aug, U, epsilon )
-    
+    flow = FragileMCCF( network_aug, capacity_rename, supply, cost_aug, U, epsilon, dijkstra=dijkstra )
+
     # prepare output --- perhaps do some feasibility checking in the future
     res = { e : x for (type,e), x in flow.items() if type == ALGGLOBAL.REGULAR }
     return res
@@ -189,13 +235,13 @@ def MCCFRobustInstance( network, capacity, supply, cost, U ) :
     
     
     
-def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
+def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None, *, dijkstra: DijkstraFn = _default_dijkstra ) :
     """
     network is a mygraph (above)
     capacity is a dictionary from E -> real capacities
     supply is a dictionary from E -> real supplies
     cost is a dictionary from E -> lambda functions of convex cost edge costs
-    
+
     1. Assumes supply is conservative (sum to zero).
     2. Assumes every Delta-residual graph is strongly connected,
     i.e., there exists a path with inf capacity b/w any two nodes;
@@ -233,11 +279,9 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
     flow = { e : 0. for e in network.edges() }
     Excess( excess, flow, network, supply )
 
-    # Pre-compute node normalization for C++ Dijkstra (node set is stable).
-    if _cpp_dijkstra is not None:
-        _nodes = list(network.nodes())
-        _node_to_int = {n: i for i, n in enumerate(_nodes)}
-        _int_to_node = _nodes  # alias for clarity
+    # Pre-compute node normalization for FlatIntDijkstra (node set is stable across the solve).
+    if isinstance(dijkstra, FlatIntDijkstra):
+        _node_to_int, _int_to_node = FlatIntDijkstra.node_mapping(network)
     
     potential = { i : 0. for i in network.nodes() }
         
@@ -305,12 +349,12 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None ) :
             cert = { re : c for (re,c) in redcost.items() if re in rgraph.edges() }
             #print 'reduced costs on res. graph, for shortest paths: %s' % repr( cert )
             
-            if _cpp_dijkstra is not None:
+            if isinstance(dijkstra, FlatIntDijkstra):
                 _out_edges, _endpoints, _cost_arr, _redges = _normalize_graph(rgraph, redcost, _node_to_int)
-                _dist_arr, _up_arr = _cpp_dijkstra(_out_edges, _endpoints, _cost_arr, _node_to_int[s])
+                _dist_arr, _up_arr = dijkstra.fn(_out_edges, _endpoints, _cost_arr, _node_to_int[s])
                 dist, upstream = _denormalize_dijkstra(_dist_arr, _up_arr, _int_to_node, _redges, s)
             else:
-                dist, upstream = Dijkstra( rgraph, redcost, s )
+                dist, upstream = dijkstra(rgraph, redcost, s)
             #print 'Dijkstra shortest path distances: %s' % repr( dist )
             #print 'Dijkstra upstreams: %s' % repr( upstream )
             
