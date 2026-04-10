@@ -12,6 +12,7 @@ from setiptah.roadgeometry.matching.bm import (
     compute_segments2, compute_optimal_flow, check_flow,
     SURPLUS, MEASURE, OBJECTIVE_FUNC,
     flow_cost_per_road,
+    create_topograph,
 )
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import (
     MinConvexCostFlow,
@@ -67,13 +68,18 @@ def flow_cost(flow, measure_dict):
     return sum(flow_cost_per_road(flow, obj_dict).values())
 
 
-def check_instance(PP, QQ, roadnet, flow_solver):
+def check_instance(PP, QQ, roadnet, flow_solver, check_topograph=False):
     segment_dict = compute_segments2(PP, QQ, roadnet)
     surplus_dict = {road: SURPLUS(seg) for road, seg in segment_dict.items()}
     measure_dict = {road: MEASURE(seg, roadnet.length(road)) for road, seg in segment_dict.items()}
     flow = compute_optimal_flow(roadnet, surplus_dict, measure_dict, flow_solver=flow_solver)
     imbalance = check_flow(flow, roadnet, surplus_dict)
     assert len(imbalance) == 0, f"flow not conservative: {imbalance}"
+    if check_topograph:
+        topo = create_topograph(segment_dict, flow, roadnet)
+        assert nx.is_directed_acyclic_graph(topo), (
+            f"topograph has cycles: {format_flow_cycle(flow, roadnet)}"
+        )
     return flow, measure_dict
 
 
@@ -82,9 +88,9 @@ def test_parity(seed):
     rng = np.random.default_rng(seed)
     PP, QQ, roadnet = random_instance(rng)
 
-    flow_py,  measure_dict_py = check_instance(PP, QQ, roadnet, flow_solver=py_flow_solver)
+    flow_py,  measure_dict_py = check_instance(PP, QQ, roadnet, flow_solver=py_flow_solver, check_topograph=True)
     cost_py  = flow_cost(flow_py,  measure_dict_py)
 
-    # flow_cpp, measure_dict = check_instance(PP, QQ, roadnet, flow_solver=None)
-    # cost_cpp = flow_cost(flow_cpp, measure_dict)
-    # assert abs(cost_cpp - cost_py) < 1e-9, f"cost mismatch: cpp={cost_cpp}, py={cost_py}"
+    flow_cpp, measure_dict = check_instance(PP, QQ, roadnet, flow_solver=None, check_topograph=True)
+    cost_cpp = flow_cost(flow_cpp, measure_dict)
+    assert abs(cost_cpp - cost_py) < 1e-9, f"cost mismatch: cpp={cost_cpp}, py={cost_py}"
