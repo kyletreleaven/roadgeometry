@@ -18,6 +18,9 @@ from setiptah.roadgeometry.matching.nxopt.cvxcostflow import (
     MinConvexCostFlow,
     py_dijkstra,
 )
+from setiptah.roadgeometry.matching.io import (
+    roadnet_to_json, point_set_to_json,
+)
 
 py_flow_solver = partial(MinConvexCostFlow, dijkstra=py_dijkstra)
 
@@ -81,7 +84,17 @@ def check_instance(PP, QQ, roadnet, flow_solver, check_topograph=False):
             f"topograph has cycles: {format_flow_cycle(flow, roadnet)}"
         )
         unbalanced = CHECKTOPO(topo)
-        assert len(unbalanced) == 0, f"topograph not conservative at nodes: {unbalanced}"
+        if unbalanced:
+            rn_json, edge_to_id = roadnet_to_json(roadnet)
+            import json, sys
+            doc = {
+                "roadnet": rn_json,
+                "supply":  point_set_to_json(PP, edge_to_id),
+                "demand":  point_set_to_json(QQ, edge_to_id),
+                "flow":    {edge_to_id[e]: int(v) for e, v in flow.items()},
+            }
+            json.dump(doc, sys.stderr, indent=2)
+            assert False, f"topograph not conservative at nodes: {unbalanced}"
     return flow, measure_dict
 
 
