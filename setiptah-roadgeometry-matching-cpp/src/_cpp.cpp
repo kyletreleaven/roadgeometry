@@ -10,23 +10,46 @@
 #include "roadgeometry/dijkstra.hpp"
 #include "roadgeometry/input_graph.hpp"
 #include "roadgeometry/fragile_mccf.hpp"
+#include "roadgeometry/piecewise_linear.hpp"
 
 namespace py = pybind11;
 using namespace roadgeometry;
 
+// Build a CostFn from a Python object: unwrap PiecewiseLinear directly,
+// or wrap an arbitrary Python callable.
+static std::function<double(double)> cost_fn_from_py(const py::object& obj)
+{
+    if (py::isinstance<PiecewiseLinear>(obj)) {
+        // Copy the C++ object — no Python call overhead at evaluation time.
+        PiecewiseLinear pwl = obj.cast<PiecewiseLinear>();
+        return [pwl = std::move(pwl)](double x) { return pwl(x); };
+    }
+    return [obj](double x) -> double { return obj(x).cast<double>(); };
+}
+
 PYBIND11_MODULE(_cpp, m) {
     m.doc() = "C++ backend for roadgeometry matching";
 
+    // ------------------------------------------------------------------
+    // PiecewiseLinear
+    //
+    // Construct from a list of (left, slope, offset) tuples (sorted by left).
+    // Callable as f(x) -> float from both Python and C++.
+    // ------------------------------------------------------------------
+    py::class_<PiecewiseLinear>(m, "PiecewiseLinear")
+        .def(py::init([](const std::vector<std::tuple<double,double,double>>& segs) {
+            std::vector<PiecewiseLinear::Segment> segments;
+            segments.reserve(segs.size());
+            for (auto& [left, slope, offset] : segs)
+                segments.push_back({left, slope, offset});
+            return PiecewiseLinear(std::move(segments));
+        }), py::arg("segments"),
+            "Construct from a list of (left, slope, offset) tuples sorted by left.")
+        .def("__call__", &PiecewiseLinear::operator(), py::arg("x"));
+
+    // ------------------------------------------------------------------
     // dijkstra(out_edges, endpoints, cost, source)
-    //
-    //   out_edges : list[list[int]]        — out_edges[node] = [edge_id, ...]
-    //   endpoints : list[tuple[int, int]]  — endpoints[edge] = (tail, head)
-    //   cost      : list[float]            — cost[edge]
-    //   source    : int
-    //
-    // Returns (dist, upstream) as parallel lists indexed by node int:
-    //   dist[i]     = shortest distance to node i (inf if unreachable)
-    //   upstream[i] = edge_id on shortest path to i (-1 if source or unreachable)
+    // ------------------------------------------------------------------
     m.def("dijkstra", [](
         const std::vector<std::vector<int>>&    out_edges,
         const std::vector<std::pair<int, int>>& endpoints,
@@ -36,20 +59,14 @@ PYBIND11_MODULE(_cpp, m) {
         return dijkstra(out_edges, endpoints, cost, source);
     });
 
-    // fragile_mccf(out_edges, endpoints, supply, cost, U, epsilon) -> list[float]
+    // ------------------------------------------------------------------
+    // fragile_mccf(out_edges, endpoints, supply, cost, U, epsilon)
     //
-    //   out_edges : list[list[int]]         — out_edges[node] = [edge_id, ...]
-    //   endpoints : list[tuple[int, int]]   — endpoints[edge] = (tail, head)
-    //   supply    : list[float]             — supply[node], indexed 0..n-1
-    //   cost      : list[callable | None]   — cost[edge](x) -> float, or None for zero cost
-    //   U         : float                   — capacity-scaling initial width
-    //   epsilon   : float                   — final phase width (default 1.0)
-    //
-    // Returns flow as list[float] indexed by edge int.
-    //
-    // Preconditions (caller's responsibility):
-    //   - supply is conservative (sums to zero)
-    //   - every Delta-residual graph is strongly connected
+    //   cost : list[PiecewiseLinear | callable | None]
+    //          PiecewiseLinear entries are unwrapped directly (no Python
+    //          callback at evaluation time).  Other callables are wrapped
+    //          in std::function.  None means zero cost.
+    // ------------------------------------------------------------------
     m.def("fragile_mccf", [](
         const std::vector<std::vector<int>>&    out_edges,
         const std::vector<std::pair<int, int>>& endpoints,
@@ -61,7 +78,6 @@ PYBIND11_MODULE(_cpp, m) {
         int n = static_cast<int>(out_edges.size());
         int m = static_cast<int>(endpoints.size());
 
-        // Build HashMapGraph<int, int>
         HashMapGraph<int, int> network;
         for (int i = 0; i < n; ++i) network.add_node(i);
         for (int e = 0; e < m; ++e) {
@@ -69,26 +85,18 @@ PYBIND11_MODULE(_cpp, m) {
             network.add_edge(e, u, v);
         }
 
-        // Supply map (skip zero entries)
         std::unordered_map<int, double> supply;
         for (int i = 0; i < n; ++i)
             if (supply_arr[i] != 0.0) supply[i] = supply_arr[i];
 
-        // Cost map: wrap Python callables as std::function<double(double)>
         using CostFn = std::function<double(double)>;
         std::unordered_map<int, CostFn> cost;
         for (int e = 0; e < m; ++e) {
-            if (!cost_arr[e].is_none()) {
-                py::object fn = cost_arr[e];
-                cost[e] = [fn](double x) -> double {
-                    return fn(x).cast<double>();
-                };
-            }
+            if (!cost_arr[e].is_none())
+                cost[e] = cost_fn_from_py(cost_arr[e]);
         }
 
-        // Empty capacity map: fragile_mccf treats missing entries as infinity.
         std::unordered_map<int, double> capacity;
-
         auto flow_map = fragile_mccf(network, capacity, supply, cost, U, epsilon);
 
         std::vector<double> flow_arr(m, 0.0);
