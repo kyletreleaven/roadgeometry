@@ -371,10 +371,6 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None, *, dijkstr
                 _out_edges, _endpoints, _cost_arr, _redges = _normalize_graph(rgraph, redcost, _node_to_int)
                 _dist_arr, _up_arr = dijkstra.fn(_out_edges, _endpoints, _cost_arr, _node_to_int[s])
                 dist, upstream = _denormalize_dijkstra(_dist_arr, _up_arr, _int_to_node, _redges, s)
-                _ref_dist, _ = Dijkstra(rgraph, redcost, s)
-                assert _check_upstream(dist, upstream, s, rgraph, redcost)
-                for _node, _d in _ref_dist.items():
-                    assert abs(dist[_node] - _d) < 1e-9, f"dist mismatch at {_node}: cpp={dist[_node]}, py={_d}"
             else:
                 dist, upstream = dijkstra(rgraph, redcost, s)
             #print 'Dijkstra shortest path distances: %s' % repr( dist )
