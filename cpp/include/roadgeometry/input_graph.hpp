@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <ranges>
 #include <stdexcept>
 #include <unordered_map>
@@ -10,14 +11,16 @@
 namespace roadgeometry {
 
 // ---------------------------------------------------------------------------
-// HashMapGraph<Node, Edge>
+// HashMapGraph<Node, Edge, Hash>
 //
 // A directed graph backed by hash maps.  Satisfies both InputGraph (read
 // access for the algorithm) and ResidualGraph (mutation during the solve).
 //
-// Node and Edge types must be hashable.
+// Node must be hashable via std::hash<Node>.
+// Edge must be hashable via Hash (defaults to std::hash<Edge>), allowing
+// callers to supply a custom hasher when Edge is e.g. std::pair<…>.
 // ---------------------------------------------------------------------------
-template <typename Node, typename Edge>
+template <typename Node, typename Edge, typename Hash = std::hash<Edge>>
 class HashMapGraph {
 public:
     using node_type = Node;
@@ -26,8 +29,8 @@ public:
     // -- Mutation -----------------------------------------------------------
 
     void add_node(Node u) {
-        out_.emplace(u, std::unordered_set<Edge>{});
-        in_.emplace(u,  std::unordered_set<Edge>{});
+        out_.emplace(u, std::unordered_set<Edge, Hash>{});
+        in_.emplace(u,  std::unordered_set<Edge, Hash>{});
     }
 
     void add_edge(Edge e, Node u, Node v) {
@@ -59,9 +62,9 @@ public:
     const auto& in_edges(Node u)  const { return in_.at(u); }
 
 private:
-    std::unordered_map<Edge, std::pair<Node, Node>>    endpoints_;
-    std::unordered_map<Node, std::unordered_set<Edge>> out_;
-    std::unordered_map<Node, std::unordered_set<Edge>> in_;
+    std::unordered_map<Edge, std::pair<Node, Node>, Hash>    endpoints_;
+    std::unordered_map<Node, std::unordered_set<Edge, Hash>> out_;
+    std::unordered_map<Node, std::unordered_set<Edge, Hash>> in_;
 };
 
 static_assert(InputGraph<HashMapGraph<int, int>>);

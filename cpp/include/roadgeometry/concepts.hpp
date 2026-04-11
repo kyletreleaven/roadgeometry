@@ -67,11 +67,15 @@ concept ResidualGraph = requires(G g,
 // Associates a default ResidualGraph implementation with an InputGraph type.
 // Specialize this to opt a custom InputGraph into a faster residual
 // representation without changing any call sites.
+//
+// Forward-declares HashMapResidualGraph so the default type alias compiles
+// before residual_graph.hpp is included.
 // ---------------------------------------------------------------------------
+template <typename Node, typename Edge> class HashMapResidualGraph;
+
 template <InputGraph G>
 struct residual_graph_traits {
-    // No default — specializations must provide:
-    //   using type = SomeResidualGraph;
+    using type = HashMapResidualGraph<typename G::node_type, typename G::edge_type>;
 };
 
 } // namespace roadgeometry

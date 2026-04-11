@@ -2,6 +2,7 @@
 #include <utility>
 
 #include "concepts.hpp"
+#include "hash_utils.hpp"
 #include "input_graph.hpp"
 
 namespace roadgeometry {
@@ -21,7 +22,7 @@ public:
 
 private:
     using Arc = edge_type;
-    HashMapGraph<Node, Arc> g_;
+    HashMapGraph<Node, Arc, PairHash> g_;
 
 public:
     void add_edge(Arc e, Node u, Node v) { g_.add_edge(e, u, v); }
@@ -38,14 +39,5 @@ public:
     void add_node(Node u) { g_.add_node(u); }
 };
 
-
-// ---------------------------------------------------------------------------
-// Default trait: any InputGraph gets HashMapResidualGraph.
-// Specialize for a specific InputGraph to opt into a faster residual.
-// ---------------------------------------------------------------------------
-template <InputGraph G>
-struct residual_graph_traits<G> {
-    using type = HashMapResidualGraph<typename G::node_type, typename G::edge_type>;
-};
 
 } // namespace roadgeometry
