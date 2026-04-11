@@ -33,7 +33,9 @@ public:
     }
 
     double operator()(double x) const {
-        // Find the last segment whose left <= x.
+        // O(log n) binary search.
+        // TODO: in the road-matching case all breakpoints are integers, so this
+        // could be O(1) via a direct array index after an integer floor.
         auto it = std::upper_bound(
             segments_.begin(), segments_.end(), x,
             [](double val, const Segment& s) { return val < s.left; }
