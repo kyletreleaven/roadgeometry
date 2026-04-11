@@ -3,6 +3,7 @@
 """
 import dataclasses
 import enum
+import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import auto
@@ -16,6 +17,7 @@ import numpy as np
 from setiptah.roadgeometry.dijkstra import RoadnetMetric
 from setiptah.roadgeometry.graphs import IntRoadnet, int_map_to_seq
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
+from setiptah.roadgeometry.matching.nxopt.pwl import PWL, negate as pwl_negate, shift as pwl_shift
 from setiptah.roadgeometry.matching.protocol import FlowSolver
 
 # Module-level default solver. Replace this to globally swap in a different
@@ -389,6 +391,17 @@ def compute_segments3(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, MySeg
 """ Phase II: Transformation/Solution/Verification """
 
 
+def _pwl_from_objective(lines: bintrees.RBTree) -> PWL:
+    """Convert an OBJECTIVE RBTree to a PWL.
+
+    The RBTree keys are the left boundaries of each segment directly (breakpoints
+    in flow space).  They are already in ascending order.  The first key is -inf.
+    """
+    segments = [(-math.inf if i == 0 else float(k), line.slope, line.offset)
+                for i, (k, line) in enumerate(lines.items())]
+    return PWL(segments)
+
+
 def compute_optimal_flow(
         roadnet: Roadnet[TRoad, TVert],
         surplus: dict[TVert, float],
@@ -409,7 +422,7 @@ def compute_optimal_flow(
         supply[j] += surplus[road]
         measure = measure_dict[road]
 
-        fobj = OBJECTIVE_FUNC(measure)
+        fobj = _pwl_from_objective(OBJECTIVE(measure))
 
         # edge construction
         if roadnet.is_oneway(road):
@@ -422,21 +435,16 @@ def compute_optimal_flow(
             supply[i] -= zmin
             supply[j] += zmin
 
-            # shift and record the cost function on only a forward edge
-            fobj_offset = offsetWrapper(fobj, zmin)
             network.add_edge(road, i, j)
-            cost[road] = fobj_offset
+            cost[road] = pwl_shift(fobj, zmin)
 
         else:
             # if bi-directional road... instantiate pair of edges
-            # cc = roadbm.costWrapper( cost_data )
-            n_fobj = negativeWrapper(fobj)  # won't have to worry about the C(0) offset
-
             network.add_edge((road, +1), i, j)
             cost[(road, +1)] = fobj
             #
             network.add_edge((road, -1), j, i)
-            cost[(road, -1)] = n_fobj
+            cost[(road, -1)] = pwl_negate(fobj)
 
     """
     compute the width U of the first cvxcost algorithm phase;
