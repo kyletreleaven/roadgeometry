@@ -11,7 +11,7 @@ target_include_directories(roadgeometry INTERFACE
     $<INSTALL_INTERFACE:include>
 )
 
-target_compile_features(roadgeometry INTERFACE cxx_std_17)
+target_compile_features(roadgeometry INTERFACE cxx_std_20)
 
 # Install rules (for find_package support)
 install(TARGETS roadgeometry EXPORT roadgeometryTargets)
