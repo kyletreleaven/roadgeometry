@@ -300,7 +300,7 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None, *, dijkstr
     # Pre-compute node normalization for FlatIntDijkstra (node set is stable across the solve).
     if isinstance(dijkstra, FlatIntDijkstra):
         _node_to_int, _int_to_node = FlatIntDijkstra.node_mapping(network)
-    
+
     potential = { i : 0. for i in network.nodes() }
         
     while Delta >= epsilon :
@@ -429,5 +429,62 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None, *, dijkstr
         # end the phase
         if Delta <= epsilon : break
         Delta = Delta / 2
-    
+
     return flow
+
+
+# ---------------------------------------------------------------------------
+# C++ backend for FragileMCCF
+# ---------------------------------------------------------------------------
+
+try:
+    from setiptah.roadgeometry.matching._cpp import fragile_mccf as _cpp_fragile_mccf
+except ImportError:
+    _cpp_fragile_mccf = None
+
+
+def cpp_fragile_mccf(network: mygraph, capacity_in, supply, cost, U, epsilon=1.0):
+    """Drop-in replacement for FragileMCCF backed by the C++ implementation.
+
+    Normalizes `network` to int-indexed arrays, delegates to the C++ solver,
+    then restores original edge keys.
+
+    Same preconditions as FragileMCCF (conservative supply, strong connectivity).
+    Raises ImportError if the C++ extension is not available.
+    """
+    if _cpp_fragile_mccf is None:
+        raise ImportError("C++ extension not available; build setiptah-roadgeometry-matching-cpp")
+
+    nodes = list(network.nodes())
+    edges = list(network.edges())
+    node_to_int = {n: i for i, n in enumerate(nodes)}
+
+    out_edges_arr = [[] for _ in range(len(nodes))]
+    endpoints_arr = []
+    for ei, e in enumerate(edges):
+        u, v = network.endpoints(e)
+        out_edges_arr[node_to_int[u]].append(ei)
+        endpoints_arr.append((node_to_int[u], node_to_int[v]))
+
+    supply_arr = [supply.get(n, 0.0) for n in nodes]
+    cost_arr   = [cost.get(e) for e in edges]  # None → zero cost
+
+    flow_arr = _cpp_fragile_mccf(
+        out_edges_arr, endpoints_arr, supply_arr, cost_arr, U, epsilon
+    )
+
+    return {e: flow_arr[ei] for ei, e in enumerate(edges)}
+
+
+def CppMinConvexCostFlow(network, capacity, supply, cost, U, epsilon=None):
+    """MinConvexCostFlow using the C++ fragile_mccf solver.
+
+    Wraps the input in MCCFRobustInstance (same as MinConvexCostFlow) then
+    delegates the inner solve to cpp_fragile_mccf.
+    """
+    if epsilon is None:
+        epsilon = 1
+
+    network_aug, capacity_rename, cost_aug = MCCFRobustInstance(network, capacity, supply, cost, U)
+    flow = cpp_fragile_mccf(network_aug, capacity_rename, supply, cost_aug, U, epsilon)
+    return {e: x for (type_, e), x in flow.items() if type_ == ALGGLOBAL.REGULAR}

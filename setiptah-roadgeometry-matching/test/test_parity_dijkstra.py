@@ -17,12 +17,19 @@ from setiptah.roadgeometry.matching.bm import (
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import (
     MinConvexCostFlow,
     py_dijkstra,
+    CppMinConvexCostFlow,
 )
 from setiptah.roadgeometry.matching.io import (
     roadnet_to_json, point_set_to_json,
 )
 
 py_flow_solver = partial(MinConvexCostFlow, dijkstra=py_dijkstra)
+
+flow_solvers = {
+    "py":          py_flow_solver,
+    "cpp_dijkstra": None,           # default: uses C++ Dijkstra inside Python FragileMCCF
+    "cpp_fragile":  CppMinConvexCostFlow,
+}
 
 
 def random_instance(rng, n_intersections=12, n_points=20):
@@ -99,13 +106,14 @@ def check_instance(PP, QQ, roadnet, flow_solver, check_topograph=False):
 
 
 @pytest.mark.parametrize("seed", [0, 1, 2, 3, 4])
-def test_parity(seed):
+@pytest.mark.parametrize("mode", ["py", "cpp_dijkstra", "cpp_fragile"])
+def test_parity(seed, mode):
     rng = np.random.default_rng(seed)
     PP, QQ, roadnet = random_instance(rng)
 
-    flow_py,  measure_dict_py = check_instance(PP, QQ, roadnet, flow_solver=py_flow_solver, check_topograph=True)
-    cost_py  = flow_cost(flow_py,  measure_dict_py)
+    flow_py, measure_dict = check_instance(PP, QQ, roadnet, flow_solver=py_flow_solver, check_topograph=True)
+    cost_py = flow_cost(flow_py, measure_dict)
 
-    flow_cpp, measure_dict = check_instance(PP, QQ, roadnet, flow_solver=None, check_topograph=True)
-    cost_cpp = flow_cost(flow_cpp, measure_dict)
-    assert abs(cost_cpp - cost_py) < 1e-9, f"cost mismatch: cpp={cost_cpp}, py={cost_py}"
+    flow_alt, _ = check_instance(PP, QQ, roadnet, flow_solver=flow_solvers[mode], check_topograph=True)
+    cost_alt = flow_cost(flow_alt, measure_dict)
+    assert abs(cost_alt - cost_py) < 1e-9, f"[{mode}] cost mismatch: {cost_alt} vs py={cost_py}"
