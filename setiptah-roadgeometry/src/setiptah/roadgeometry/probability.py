@@ -53,29 +53,30 @@ def sample_onroad( road, roadnet, length='length' ) :
     return ROAD.RoadAddress(road,y)
 
 
-class WeightedSet :
+class WeightedSet:
+    """Sampler where elements are chosen according to provided weights.
+
+    Keys are targets, values are non-negative weights; need not sum to 1.
+
+    Exposes `digitize` so callers can share the random draw and look up
+    parallel arrays (e.g. lengths) without a per-sample attribute lookup.
     """
-    utility class, instantiates a sampler, where
-    elements are chosen from a set according to provided weights
-    """
-    def __init__(self, weight_dict ) :
-        """
-        keys are targets, values are weights; needn't sum to 1
-        doesn't check for repeats
-        """
-        targets = weight_dict.keys()
-        weights = list(weight_dict.values())
-        scores = np.cumsum( np.array(weights) )
-        
-        self._hiscore = scores[-1]
-        self._tree = bintrees.RBTree()
-        for target, score in zip( targets, scores ) :
-            self._tree.insert( score, target )
-            
-    def sample(self) :
-        z = self._hiscore * np.random.rand()
-        _, res = self._tree.ceiling_item( z )
-        return res
+
+    def __init__(self, weight_dict: dict) -> None:
+        self.targets = list(weight_dict.keys())
+        self._bins = np.cumsum(np.array(list(weight_dict.values()), dtype=float))
+
+    def digitize(self, z: np.ndarray) -> np.ndarray:
+        """Map uniform random values in [0, total_weight) to target indices."""
+        return np.digitize(z, self._bins)
+
+    def sample(self, size: int = 1):
+        """Draw `size` samples.  Returns a single element if size=1, else a list."""
+        z = self._bins[-1] * np.random.rand(size)
+        indices = self.digitize(z)
+        if size == 1:
+            return self.targets[indices[0]]
+        return [self.targets[i] for i in indices]
 
 
 class UniformDist :
@@ -86,21 +87,23 @@ class UniformDist :
         if roadnet is not None :
             self.set_roadnet( roadnet, length )
         
-    def set_roadnet(self, roadnet, length=None ) :
-        if length is None : length = 'length'
-        
-        weight_dict = dict()
-        for _,__, road, data in roadnet.edges( keys=True, data=True ) :
-            weight_dict[road] = data.get( length, 1 )
-            
-        self.roadnet = roadnet
-        self.road_sampler = WeightedSet( weight_dict )
+    def set_roadnet(self, roadnet, length=None):
+        if length is None: length = 'length'
+        length_dict = {road: data.get(length, 1)
+                       for _, __, road, data in roadnet.edges(keys=True, data=True)}
 
-    def sample(self) :
-        road = self.road_sampler.sample()
-        L = ROAD.get_road_data( road, self.roadnet ).get( 'length', 1 )
-        y = L * np.random.rand()
-        return ROAD.RoadAddress( road, y )
+        class _Adapter:
+            def edges(self): return length_dict.keys()
+            def length(self, road): return length_dict[road]
+
+        self.roadnet = roadnet
+        self._inner  = RoadnetUniformDist(_Adapter())
+
+    def sample(self, size: int = 1):
+        result = self._inner.sample(size)
+        if size == 1:
+            return ROAD.RoadAddress(*result)
+        return [ROAD.RoadAddress(road, y) for road, y in result]
 
 
 class RoadnetUniformDist:
@@ -114,11 +117,17 @@ class RoadnetUniformDist:
         self.roadnet = roadnet
         weight_dict = {road: roadnet.length(road) for road in roadnet.edges()}
         self.road_sampler = WeightedSet(weight_dict)
+        self._lengths = np.array([weight_dict[r] for r in self.road_sampler.targets])
 
-    def sample(self):
-        road = self.road_sampler.sample()
-        y = self.roadnet.length(road) * np.random.rand()
-        return (road, y)
+    def sample(self, size: int = 1):
+        z = self.road_sampler._bins[-1] * np.random.rand(size)
+        indices = self.road_sampler.digitize(z)
+        roads   = [self.road_sampler.targets[i] for i in indices]
+        lengths = self._lengths[indices]
+        y       = lengths * np.random.rand(size)
+        if size == 1:
+            return (roads[0], float(y[0]))
+        return list(zip(roads, y.tolist()))
 
 
 def sampleaddress(roadnet: nx.MultiDiGraph, length: str = "length") -> ROAD.RoadAddress:
