@@ -1,11 +1,13 @@
 import itertools
 import logging
 import math
-from typing import Protocol
+from collections.abc import Mapping
+from typing import Callable, Protocol
 
 import numpy as np
 
 from setiptah.roadgeometry.matching.util.mygraph import mygraph, Dijkstra
+from setiptah.roadgeometry.protocol import TRoad
 
 try:
     from setiptah.roadgeometry.matching._cpp import dijkstra as cpp_dijkstra
@@ -434,12 +436,42 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None, *, dijkstr
 # ---------------------------------------------------------------------------
 
 try:
-    from setiptah.roadgeometry.matching._cpp import fragile_mccf as _cpp_fragile_mccf
+    from setiptah.roadgeometry.matching._cpp import (
+        fragile_mccf as _cpp_fragile_mccf,
+        PiecewiseLinear as CppPiecewiseLinear,
+    )
 except ImportError:
     _cpp_fragile_mccf = None
+    CppPiecewiseLinear = None
+
+from .pwl import PWL as _PWL
 
 
-def cpp_fragile_mccf(network: mygraph, capacity_in, supply, cost, U, epsilon=1.0):
+# A cost function accepted by the C++ binding: a Python PWL,
+# a CppPiecewiseLinear, or any Python callable float -> float.
+CostEntry = _PWL | Callable[[float], float]
+
+
+def _to_cpp_cost(fn: CostEntry) -> "CppPiecewiseLinear | Callable[[float], float]":
+    """Normalise a cost entry for the C++ binding.
+
+    - PWL                → CppPiecewiseLinear  (no Python callback at eval time)
+    - CppPiecewiseLinear → pass through  (already the fast path)
+    - any callable       → pass through  (wrapped as std::function in C++)
+    """
+    if isinstance(fn, _PWL):
+        return CppPiecewiseLinear(fn.segments)
+    return fn
+
+
+def cpp_fragile_mccf(
+    network: mygraph,
+    capacity_in,
+    supply: Mapping[TRoad, float],
+    cost: Mapping[TRoad, CostEntry],
+    U: float,
+    epsilon: float = 1.0,
+) -> dict[TRoad, float]:
     """Drop-in replacement for FragileMCCF backed by the C++ implementation.
 
     Normalizes `network` to int-indexed arrays, delegates to the C++ solver,
@@ -463,7 +495,7 @@ def cpp_fragile_mccf(network: mygraph, capacity_in, supply, cost, U, epsilon=1.0
         endpoints_arr.append((node_to_int[u], node_to_int[v]))
 
     supply_arr = [supply.get(n, 0.0) for n in nodes]
-    cost_arr   = [cost.get(e) for e in edges]  # None → zero cost
+    cost_arr   = [_to_cpp_cost(cost[e]) for e in edges]
 
     flow_arr = _cpp_fragile_mccf(
         out_edges_arr, endpoints_arr, supply_arr, cost_arr, U, epsilon
