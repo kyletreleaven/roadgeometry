@@ -105,6 +105,9 @@ def test_roadnet_matching(instance_factory):
 
     # TODO: Test vs. a third-party implementation on distance matrix; e.g.,
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html
+    # TODO: Add a fixed instance with a known optimal cost — e.g. a simple path graph with
+    # hand-placed points whose matching and cost can be computed by inspection. This would
+    # catch regressions in PREMATCH/OBJECTIVE/compute_optimal_flow that random instances may miss.
 
 
 def test_index_range_equivalence():
