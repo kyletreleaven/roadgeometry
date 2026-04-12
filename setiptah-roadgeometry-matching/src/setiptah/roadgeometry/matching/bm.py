@@ -217,7 +217,7 @@ class BiPartite(Generic[T]):
         return self.__class__(fn(self.supply), fn(self.demand))
 
 
-Segment = Iterable[tuple[float, BiPartite[list[int]]]]
+Segment = Iterable[tuple[float, BiPartite[deque[int]]]]
 
 
 def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segment]:
@@ -229,7 +229,7 @@ def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segme
     """
     tree = sort_points(P, Q)
 
-    segments = {road: deque() for road in roadnet.edges()}
+    segments = {road: [] for road in roadnet.edges()}
 
     prev_road, segment = None, None
     for key, qs in tree.iter_items():
@@ -261,7 +261,7 @@ def sort_points(P, Q):
 
 def ensure_key( key, tree ) :
     curr = tree.set_default( key )
-    if curr is None : tree[key] = BiPartite.create_with(list)
+    if curr is None : tree[key] = BiPartite.create_with(deque)
     return tree[key]
 
 
@@ -270,9 +270,8 @@ def PREMATCH(segment: Segment) -> list[tuple[int, int]]:
     for y, q in segment:
         annih = min(len(q.supply), len(q.demand))
         for k in range(annih):
-            # This is why we start with deque
-            i = q.supply.pop(0)
-            j = q.demand.pop(0)
+            i = q.supply.popleft()
+            j = q.demand.popleft()
             match.append((i, j))
 
     return match
