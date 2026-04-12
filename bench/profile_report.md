@@ -132,3 +132,83 @@ drawing down the flow solver terms.
   `roadmap_basic` path used for sampling should be replaced regardless.
 - True O(n log n) asymptotic behavior (sort-dominated) would only emerge at very large n on
   a fixed graph — not the regime we care about for optimization.
+
+---
+
+## cProfile — After C++ FragileMCCF + PWL (2026-04-12, n=100, 0.046s total)
+
+**Solver:** `cpp_fragile` (`CppMinConvexCostFlow` → `_cpp.fragile_mccf`)  
+**Changes since prior report:**
+- `FragileMCCF` replaced by C++ capacity-scaling SSP
+- `bintrees.floor_item` cost evaluation replaced by `PiecewiseLinear` (C++ bisect, no Python callback)
+- `CppPiecewiseLinear` objects passed directly to the binding — no `std::function` wrapper for normal edges
+
+```
+         157128 function calls (157126 primitive calls) in 0.046 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.046    0.046 profile_matching.py:68(run_once)
+        1    0.000    0.000    0.029    0.029 bm.py:110(compute_optimal_results)
+        1    0.000    0.000    0.029    0.029 bm.py:127(run)
+        1    0.000    0.000    0.026    0.026 bm.py:140(_compute_optimal_flow)
+        1    0.000    0.000    0.018    0.018 bm.py:405(compute_optimal_flow)
+```
+> `compute_optimal_flow` — the top-level algorithm entry point — takes 18ms of the 46ms total.
+> The remaining 28ms is split between `make_instance` (setup) and miscellaneous overhead.
+
+```
+        1    0.000    0.000    0.017    0.017 profile_matching.py:58(make_instance)
+      200    0.000    0.000    0.014    0.000 probability.py:99(sample)
+      200    0.002    0.000    0.014    0.000 roadmap_basic.py:79(get_road_data)
+    18741    0.008    0.000    0.012    0.000 networkx/reportviews.py:958(<genexpr>)
+```
+> `make_instance` + sampling accounts for 17ms — **benchmark setup cost, not algorithm cost**.
+> The 18k NetworkX `reportviews` genexpr calls happen entirely inside `get_road_data` during
+> point sampling, not inside the flow solver.
+
+```
+        1    0.000    0.000    0.008    0.008 cvxcostflow.py:508(CppMinConvexCostFlow)
+     1832    0.005    0.000    0.007    0.000 bintrees/rbtree.py:123(insert)
+        1    0.000    0.000    0.007    0.007 cvxcostflow.py:467(cpp_fragile_mccf)
+      180    0.001    0.000    0.007    0.000 bm.py:497(OBJECTIVE)
+        1    0.006    0.006    0.006    0.006 {built-in method _cpp.fragile_mccf}
+```
+> The C++ solver itself (`built-in method _cpp.fragile_mccf`) is **6ms** — down from ~28ms before,
+> a ~5× speedup. It no longer dominates.
+>
+> `bintrees/rbtree.py:insert` — 1832 calls, 7ms — is now the **leading algorithm cost**.
+> This is `bm.py:OBJECTIVE` building one RBTree per road (180 roads × ~10 inserts each).
+> These trees are the pre-processing step that constructs PWL cost functions before the solver runs.
+> Note that `bintrees.floor_item` no longer appears in the profile at all: cost evaluation now
+> happens entirely in C++ (`PiecewiseLinear::operator()`), with no Python callbacks.
+
+```
+        1    0.000    0.000    0.004    0.004 bm.py:223(compute_segments2)
+        1    0.000    0.000    0.004    0.004 bm.py:246(sort_points)
+      200    0.000    0.000    0.004    0.000 bm.py:262(ensure_key)
+      180    0.001    0.000    0.003    0.000 bm.py:286(MEASURE)
+        1    0.000    0.000    0.003    0.003 bm.py:174(_compute_matching)
+      580    0.000    0.000    0.003    0.000 bintrees/abctree.py:371(set_default)
+     2485    0.001    0.000    0.003    0.000 bintrees/abctree.py:819(_iter_items_forward)
+    29126    0.002    0.000    0.002    0.000 {method 'items' of 'dict' objects}
+        1    0.001    0.001    0.002    0.002 bm.py:737(TRAVERSE2)
+```
+> The remaining bintrees calls (`set_default`, `_iter_items_forward`) are from `MEASURE` and
+> `compute_matching_for_acyclic_flow` — also pre/post-processing, not the solver.
+> `TRAVERSE2` (matching construction, Phase III) is essentially free at 1ms.
+
+### Summary
+
+| Phase | Time | Previously |
+|---|---:|---:|
+| Benchmark setup (`make_instance`) | 17ms | ~14% |
+| `OBJECTIVE` RBTree construction | 7ms | *(hidden inside FragileMCCF cost callbacks)* |
+| C++ `fragile_mccf` solver | 6ms | ~28ms (pure Python FragileMCCF) |
+| Everything else (sort, matching, marshal) | ~16ms | — |
+
+The solver is no longer the bottleneck. Next target: `OBJECTIVE`/`bintrees.insert` — the RBTree
+construction that builds PWL cost functions. Since the tree is built once and then converted to
+`PiecewiseLinear` for the solver, it could be replaced with a plain sorted list or built directly
+as a C++ object.
