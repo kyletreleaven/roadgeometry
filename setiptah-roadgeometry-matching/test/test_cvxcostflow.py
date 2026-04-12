@@ -5,9 +5,51 @@ import numpy as np
 import pytest
 
 from setiptah.roadgeometry.matching.util.mygraph import mygraph
-from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
+from setiptah.roadgeometry.matching.nxopt.cvxcostflow import (
+    MinConvexCostFlow,
+    CppMinConvexCostFlow,
+)
 
 LOG = logging.getLogger(__name__)
+
+FLOW_SOLVERS = {
+    "py":  MinConvexCostFlow,
+    "cpp": CppMinConvexCostFlow,
+}
+
+
+@pytest.mark.parametrize("solver_name", list(FLOW_SOLVERS))
+def test_capacity_respected(solver_name):
+    """Solver must not exceed finite edge capacities.
+
+    Two parallel edges 0→1:
+      e_cheap : cost x,    capacity 1
+      e_dear  : cost 10x,  capacity ∞
+
+    Supply 2 at node 0, demand 2 at node 1.
+    Optimal: 1 unit on e_cheap (at capacity), 1 unit on e_dear.
+    Any solver that ignores capacity will push 2 units on e_cheap.
+    """
+    solver = FLOW_SOLVERS[solver_name]
+
+    g = mygraph()
+    g.add_edge("e_cheap", 0, 1)
+    g.add_edge("e_dear",  0, 1)
+
+    supply   = {0: 2.0, 1: -2.0}
+    capacity = {"e_cheap": 1.0}
+    cost     = {
+        "e_cheap": lambda x: x,
+        "e_dear":  lambda x: 10.0 * x,
+    }
+    U = 4.0
+
+    flow = solver(g, capacity, supply, cost, U)
+
+    assert flow.get("e_cheap", 0.0) <= 1.0 + 1e-9, "capacity violated on e_cheap"
+    assert flow.get("e_dear",  0.0) >= 1.0 - 1e-9, "1 unit must use e_dear"
+    total = flow.get("e_cheap", 0.0) + flow.get("e_dear", 0.0)
+    assert abs(total - 2.0) < 1e-9, "flow must satisfy supply"
 
 
 @pytest.mark.xfail(reason="not implemented")
