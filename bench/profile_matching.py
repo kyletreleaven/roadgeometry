@@ -60,8 +60,8 @@ def make_instance(n: int, rows: int = 10, cols: int = 10):
     roadgraph = make_grid_network(rows, cols)
     roadnet = MultiDiGraphRoadnet(roadgraph)
     sampler = roadprob.UniformDist(roadgraph)
-    P = [sampler.sample() for _ in range(n)]
-    Q = [sampler.sample() for _ in range(n)]
+    P = sampler.sample(n)
+    Q = sampler.sample(n)
     return P, Q, roadnet
 
 
