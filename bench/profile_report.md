@@ -73,15 +73,15 @@ another reason to clean up the sampling path eventually.
 
 ---
 
-## C++ Implementation Priority
+## C++ Implementation Priority (historical — as of 2026-04-05)
 
-| Priority | Target | Rationale |
+| Priority | Target | Status |
 |---|---|---|
-| 1 | `FragileMCCF` + `Dijkstra` on residual graph | 75% of runtime; pure Python graph + heap |
-| 2 | `ReducedCost` + `LinearizeCost` | 29% combined; tight inner loop of MCCF |
-| 3 | Priority queue (`priodict`) | Pure Python heap, called 36k times |
-| 4 | `mygraph` adjacency + NetworkX iteration | 10% from view overhead alone |
-| 5 | `bintrees.RBTree` → `std::map` | Already C, but integrates with C++ template design |
+| 1 | `FragileMCCF` + `Dijkstra` on residual graph | **Done** — `_cpp.fragile_mccf` |
+| 2 | `ReducedCost` + `LinearizeCost` | **Done** — subsumed into C++ solver |
+| 3 | Priority queue (`priodict`) | **Done** — subsumed into C++ solver |
+| 4 | `mygraph` adjacency + NetworkX iteration | **Done** — solver uses C++ graph internally; sampling vectorized (no `get_road_data`) |
+| 5 | `bintrees.RBTree` → `std::map` for cost eval | **Done** — `PiecewiseLinear` replaces `bintrees.floor_item`; `OBJECTIVE`/`MEASURE` construction still uses bintrees (see next section) |
 
 ---
 
@@ -128,8 +128,9 @@ drawing down the flow solver terms.
 
 - `TRAVERSE2` / `TRAVERSE3` (matching construction, Phase III) does not appear in the top 30
   — essentially free at this problem size.
-- Sampling overhead (~14% at n=500) is benchmark setup cost, not algorithm cost. The legacy
-  `roadmap_basic` path used for sampling should be replaced regardless.
+- Sampling overhead (~14% at n=500) was benchmark setup cost. Since addressed: `WeightedSet`
+  now uses `np.digitize` + vectorized `np.random.rand(n)`, and lengths are pre-computed at
+  construction time — `get_road_data` and `bintrees.ceiling_item` no longer appear per sample.
 - True O(n log n) asymptotic behavior (sort-dominated) would only emerge at very large n on
   a fixed graph — not the regime we care about for optimization.
 
@@ -208,7 +209,11 @@ drawing down the flow solver terms.
 | C++ `fragile_mccf` solver | 6ms | ~28ms (pure Python FragileMCCF) |
 | Everything else (sort, matching, marshal) | ~16ms | — |
 
-The solver is no longer the bottleneck. Next target: `OBJECTIVE`/`bintrees.insert` — the RBTree
-construction that builds PWL cost functions. Since the tree is built once and then converted to
-`PiecewiseLinear` for the solver, it could be replaced with a plain sorted list or built directly
-as a C++ object.
+The solver is no longer the bottleneck. Sampling has since been vectorized (no `get_road_data`,
+no per-sample Python overhead). The profile should be re-run to confirm the new baseline.
+
+Remaining algorithm targets:
+- **`OBJECTIVE`/`bintrees.insert`** — RBTree construction that builds PWL cost functions,
+  one per road. Built once then converted to `PiecewiseLinear`; could be replaced with a plain
+  sorted list accumulation or built directly as a C++ object.
+- **`MEASURE`/`bintrees` iteration** — related pre-processing; also uses bintrees.
