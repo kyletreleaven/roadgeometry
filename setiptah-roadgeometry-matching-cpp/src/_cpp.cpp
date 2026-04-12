@@ -72,6 +72,7 @@ PYBIND11_MODULE(_cpp, m) {
         const std::vector<std::pair<int, int>>& endpoints,
         const std::vector<double>&              supply_arr,
         const std::vector<py::object>&          cost_arr,
+        const std::vector<double>&              capacity_arr,
         double U,
         double epsilon
     ) -> std::vector<double> {
@@ -97,6 +98,10 @@ PYBIND11_MODULE(_cpp, m) {
         }
 
         std::unordered_map<int, double> capacity;
+        for (int e = 0; e < m; ++e)
+            if (std::isfinite(capacity_arr[e]))
+                capacity[e] = capacity_arr[e];
+
         auto flow_map = fragile_mccf(network, capacity, supply, cost, U, epsilon);
 
         std::vector<double> flow_arr(m, 0.0);
@@ -108,6 +113,7 @@ PYBIND11_MODULE(_cpp, m) {
     py::arg("endpoints"),
     py::arg("supply"),
     py::arg("cost"),
+    py::arg("capacity"),
     py::arg("U"),
     py::arg("epsilon") = 1.0
     );

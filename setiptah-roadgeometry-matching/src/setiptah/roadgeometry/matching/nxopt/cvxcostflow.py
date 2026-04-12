@@ -466,7 +466,7 @@ def _to_cpp_cost(fn: CostEntry) -> "CppPiecewiseLinear | Callable[[float], float
 
 def cpp_fragile_mccf(
     network: mygraph,
-    capacity_in,
+    capacity_in: Mapping[TRoad, float],
     supply: Mapping[TRoad, float],
     cost: Mapping[TRoad, CostEntry],
     U: float,
@@ -494,11 +494,12 @@ def cpp_fragile_mccf(
         out_edges_arr[node_to_int[u]].append(ei)
         endpoints_arr.append((node_to_int[u], node_to_int[v]))
 
-    supply_arr = [supply.get(n, 0.0) for n in nodes]
-    cost_arr   = [_to_cpp_cost(cost[e]) for e in edges]
+    supply_arr   = [supply.get(n, 0.0) for n in nodes]
+    cost_arr     = [_to_cpp_cost(cost[e]) for e in edges]
+    capacity_arr = [capacity_in.get(e, math.inf) for e in edges]
 
     flow_arr = _cpp_fragile_mccf(
-        out_edges_arr, endpoints_arr, supply_arr, cost_arr, U, epsilon
+        out_edges_arr, endpoints_arr, supply_arr, cost_arr, capacity_arr, U, epsilon
     )
 
     return {e: flow_arr[ei] for ei, e in enumerate(edges)}
