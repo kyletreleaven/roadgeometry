@@ -26,8 +26,8 @@ class DoubleEndedVector:
     """Growable integer-indexed array with implicit zero default.
 
     Supports arbitrary integer indices; grows in both directions on demand.
-    Iteration yields (index, value) pairs in ascending index order,
-    skipping zeros (i.e. only explicitly-written positions with nonzero value).
+    Iteration yields (index, value) pairs in ascending index order over all
+    allocated positions, including zeros.
     """
 
     __slots__ = ("_right", "_left", "_offset")
@@ -61,10 +61,6 @@ class DoubleEndedVector:
                 self._left.append(0.0)
             self._left[k] = v
 
-    def add(self, i: int, v: float) -> None:
-        """Increment value at index i by v."""
-        self[i] = self[i] + v
-
     @property
     def min_index(self) -> int:
         assert self._offset is not None
@@ -75,15 +71,19 @@ class DoubleEndedVector:
         assert self._offset is not None
         return self._offset + len(self._right) - 1
 
+    def __len__(self) -> int:
+        return len(self._left) + len(self._right)
+
+    def __iter__(self) -> Iterator[int]:
+        """Yield indices in ascending order over all allocated positions."""
+        for i, _ in self.items():
+            yield i
+
     def items(self) -> Iterator[tuple[int, float]]:
-        """Yield (index, value) in ascending order, skipping zeros."""
+        """Yield (index, value) in ascending order over all allocated positions."""
         if self._offset is None:
             return
         for k in range(len(self._left) - 1, -1, -1):
-            v = self._left[k]
-            if v != 0.0:
-                yield self._offset - 1 - k, v
+            yield self._offset - 1 - k, self._left[k]
         for k in range(len(self._right)):
-            v = self._right[k]
-            if v != 0.0:
-                yield self._offset + k, v
+            yield self._offset + k, self._right[k]
