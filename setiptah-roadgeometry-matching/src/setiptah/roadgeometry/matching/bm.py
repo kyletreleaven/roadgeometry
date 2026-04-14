@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import auto
 from functools import cached_property
-from typing import NamedTuple, Optional, Callable, Iterable
+from typing import NamedTuple, Optional, Callable, Iterable, Iterator, Protocol
 
 import bintrees  # Migrate to `sortedcontainers`?
 import networkx as nx  # TODO: Migrate it out?
@@ -17,6 +17,7 @@ import numpy as np
 from setiptah.roadgeometry.dijkstra import RoadnetMetric
 from setiptah.roadgeometry.graphs import IntRoadnet, int_map_to_seq
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
+from setiptah.roadgeometry.matching.util.double_ended_vector import DoubleEndedVector
 from setiptah.roadgeometry.matching.nxopt.pwl import PWL, negate as pwl_negate, shift as pwl_shift
 from setiptah.roadgeometry.matching.protocol import FlowSolver
 
@@ -220,6 +221,27 @@ class BiPartite(Generic[T]):
 Segment = Iterable[tuple[float, BiPartite[deque[int]]]]
 
 
+class Measure(Protocol):
+    """Read interface required of a road measure by OBJECTIVE and compute_optimal_flow."""
+
+    def __len__(self) -> int:
+        """Number of allocated flow levels."""
+        ...
+
+    def __iter__(self) -> Iterator[int]:
+        """Yield flow levels in ascending order."""
+        ...
+
+    def items(self) -> Iterator[tuple[int, float]]:
+        """Yield (flow_level, interval_length) pairs in ascending flow_level order."""
+        ...
+
+    @property
+    def min_index(self) -> int:
+        """The minimum flow level with nonzero measure."""
+        ...
+
+
 def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segment]:
     """
 
@@ -282,30 +304,19 @@ def SURPLUS(segment: Segment) -> int:
     return sum(deltas)
 
 
-def MEASURE(segment: Segment, length: float, rbound=None):
+def MEASURE(segment: Segment, length: float, rbound: float | None = None) -> DoubleEndedVector:
     if rbound is not None:
-        lbound = length
+        lbound, rbound = length, rbound
     else:
-        lbound = 0.
-        rbound = length
-
-    # bintree instead of dict so that it is enumerated in sorted order
-    # TODO: No, replace with a double-ended vector.
-
-    measure = bintrees.RBTree()
-    posts, deltas = [lbound], [0]
+        lbound, rbound = 0., length
+    measure = DoubleEndedVector()
+    f = 0
+    prev_y = lbound
     for y, q in segment:
-        posts.append(y)
-        deltas.append(len(q.supply) - len(q.demand))
-    posts.append(rbound)
-
-    intervals = zip(posts[:-1], posts[1:])
-    F = np.cumsum(deltas)
-
-    for (a, b), f in zip(intervals, F):
-        measure.setdefault(f, 0.)
-        measure[f] += b - a
-
+        measure[f] += y - prev_y
+        f += len(q.supply) - len(q.demand)
+        prev_y = y
+    measure[f] += rbound - prev_y
     return measure
 
 
@@ -404,7 +415,7 @@ def _pwl_from_objective(lines: bintrees.RBTree) -> PWL:
 def compute_optimal_flow(
         roadnet: Roadnet[TRoad, TVert],
         surplus: dict[TVert, float],
-        measure_dict: bintrees.RBTree,  # float -> float
+        measure_dict: dict[TRoad, Measure],
         flow_solver: FlowSolver = None,
 ) -> dict[TRoad, float]:
     if flow_solver is None:
@@ -428,7 +439,7 @@ def compute_optimal_flow(
             # if one-way road
 
             # record minimum allowable flow on road
-            zmin = -measure.min_key()  # i.e., z + min key of measure >= 0
+            zmin = -measure.min_index  # i.e., z + min index of measure >= 0
             oneway_offset[road] = zmin
             # create a 'bias point'
             supply[i] -= zmin

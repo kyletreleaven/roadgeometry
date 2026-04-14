@@ -78,7 +78,7 @@ def SOLVER(roadnet: nx.MultiDiGraph, surplus, measure_dict, congestion_dict):
             # if one-way road
             
             # record minimum allowable flow on road
-            zmin = -measure.min_key()   # i.e., z + min key of measure >= 0 
+            zmin = -measure.min_index   # i.e., z + min index of measure >= 0
             oneway_offset[road] = zmin
             # create a 'bias point'
             supply[i] -= zmin
@@ -122,8 +122,8 @@ def CONGESTION_OBJECTIVE( measure, rho, U, efficient=True ) :
 def CONGESTION_OBJECTIVE_DATA( measure, rho, U, efficient=True ) :
         
     """ prepare convolution """
-    a = measure.min_key()
-    b = measure.max_key()
+    a = measure.min_index
+    b = measure.max_index
     
     # serialize
     if True :
