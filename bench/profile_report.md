@@ -61,9 +61,10 @@
 | C++ `fragile_mccf` solver | 5ms |
 | Everything else (sort, marshal, topograph) | ~12ms |
 
-All remaining algorithm overhead is bintrees. Since `OBJECTIVE` and `MEASURE` trees are each
-built once and then read sequentially, neither requires a tree structure — both could be replaced
-with plain sorted lists, eliminating bintrees from the hot path entirely.
+The biggest opportunity is `OBJECTIVE`: `sort_points` already produces sorted data per road,
+so `OBJECTIVE` could build the `PiecewiseLinear` directly from that output rather than first
+inserting into an RBTree and then iterating it. The intermediate RBTree construction is pure
+overhead.
 
 ---
 
@@ -85,8 +86,9 @@ Empirical log-log regression over n=100..10000 on a fixed 10×10 grid:
 
 Runtime has the structure `T(n) ≈ C_flow(n) + C_sort × n × log(n)`:
 
-- `C_sort × n × log(n)` — inserting 2n points into the sorted map (`sort_points`). Will
-  eventually dominate at very large n on a fixed graph, but has not crossed over at n=10000.
+- `C_sort × n × log(n)` — inserting 2n points into the sorted map (`sort_points`). O(n log n)
+  is the right complexity and the implementation is not a concern. Will eventually dominate at
+  very large n on a fixed graph, but has not crossed over at n=10000.
 - `C_flow(n)` — grows sub-linearly because the network saturates at high point density:
   many points co-locate on the same roads and are pre-matched, shrinking the effective problem.
   Dijkstra call counts confirm this: 82 at n=200, 124 at n=500 (ratio 1.51 vs n-ratio 2.5).
