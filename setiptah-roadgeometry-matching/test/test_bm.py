@@ -260,3 +260,39 @@ def test_objectives():
     xs = -5, -.5, 1
     cs = [obj_fn(x) for x in xs]
     assert cs == [44., 5., 16.]
+
+
+def test_measure_and_objective():
+    """Sanity check MEASURE and OBJECTIVE on a known example.
+
+    Road of length 1, one supply at y=0.3, one demand at y=0.7.
+
+    MEASURE should give flow level 0 for intervals [0,0.3] and [0.7,1]
+    (total length 0.6) and flow level 1 for [0.3,0.7] (length 0.4).
+
+    The resulting cost function has breakpoints at z=-1 and z=0:
+      z < -1 : slope=-1, intercept=-0.4  →  f(-1.5) = 1.5 - 0.4 = 1.1
+      -1<=z<0: slope=-0.2, intercept=0.4 →  f(-0.5) = 0.1 + 0.4 = 0.5
+      z >= 0 : slope=1,  intercept=0.4   →  f(0.5)  = 0.5 + 0.4 = 0.9
+    """
+    from collections import deque
+    from setiptah.roadgeometry.matching.bm import MEASURE, OBJECTIVE, _pwl_from_objective, BiPartite
+
+    def make_q(supply, demand):
+        q = BiPartite.create_with(deque)
+        q.supply.extend(supply)
+        q.demand.extend(demand)
+        return q
+
+    segment = [
+        (0.3, make_q([0], [])),
+        (0.7, make_q([], [0])),
+    ]
+
+    measure = MEASURE(segment, 1.0)
+    assert dict(measure.items()) == {0: pytest.approx(0.6), 1: pytest.approx(0.4)}
+
+    obj_fn = _pwl_from_objective(OBJECTIVE(measure))
+    assert obj_fn(-1.5) == pytest.approx(1.1)
+    assert obj_fn(-0.5) == pytest.approx(0.5)
+    assert obj_fn(0.5)  == pytest.approx(0.9)
