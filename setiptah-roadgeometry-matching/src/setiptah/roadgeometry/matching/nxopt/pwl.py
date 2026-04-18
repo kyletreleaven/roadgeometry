@@ -49,6 +49,53 @@ class PWL:
 
 
 
+class IntPWL:
+    """Piecewise-linear function with contiguous integer breakpoints.
+
+    Segments are indexed by integer i in [offset, offset + size), so evaluation
+    is O(1): look up int(floor(x)) directly into the slope/intercept arrays.
+
+    This is a special case of PWL arising in road matching, where flow levels
+    are always integers.  Maps naturally to two parallel C++ std::vector<double>
+    plus an int offset — no binary search needed.
+    """
+
+    def __init__(self, offset: int, slopes: list[float], intercepts: list[float]) -> None:
+        assert len(slopes) == len(intercepts)
+        self._offset = offset
+        self._slopes = slopes
+        self._intercepts = intercepts
+
+    def __call__(self, x: float) -> float:
+        i = max(0, min(len(self._slopes) - 1, int(math.floor(x)) - self._offset))
+        return self._slopes[i] * x + self._intercepts[i]
+
+    @property
+    def segments(self) -> list[Segment]:
+        """Convert to PWL segment format for use with negate/shift."""
+        result = []
+        for k, (slope, intercept) in enumerate(zip(self._slopes, self._intercepts)):
+            left = -math.inf if k == 0 else float(self._offset + k)
+            result.append((left, slope, intercept))
+        return result
+
+    @property
+    def offset(self) -> int:
+        return self._offset
+
+    @property
+    def size(self) -> int:
+        return len(self._slopes)
+
+    @property
+    def slopes(self) -> list[float]:
+        return self._slopes
+
+    @property
+    def intercepts(self) -> list[float]:
+        return self._intercepts
+
+
 def negate(pwl: PWL) -> PWL:
     """Return a PWL for g(x) = f(-x).
 
