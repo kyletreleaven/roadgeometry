@@ -537,25 +537,6 @@ def OBJECTIVE(measure):
         slopes     = list(ALPHA[::-1])
         intercepts = list(KAPPA[::-1])
 
-        class _IntPWLWithLines(IntPWL):
-            """IntPWL subclass exposing a .lines shim for legacy call sites.
-
-            .lines returns self so that obj_fn.lines.keys() and
-            obj_fn.lines.floor_item() work the same way they do on a costWrapper
-            wrapping an RBTree.
-            """
-
-            @property
-            def lines(self):
-                return self
-
-            def keys(self):
-                return range(self.offset, self.offset + self.size)
-
-            def floor_item(self, z):
-                i = max(0, min(self.size - 1, int(math.floor(z)) - self.offset))
-                return self.offset + i, LineData(self.slopes[i], self.intercepts[i])
-
         return _IntPWLWithLines(offset, slopes, intercepts)
 
     Cz = bintrees.RBTree()
@@ -576,6 +557,26 @@ class LineData:
 
     def __repr__(self):
         return f"<{self.slope} z + {self.offset}>"
+
+
+class _IntPWLWithLines(IntPWL):
+    """IntPWL subclass exposing a .lines shim for legacy call sites.
+
+    .lines returns self so that obj_fn.lines.keys() and
+    obj_fn.lines.floor_item() work the same way they do on a costWrapper
+    wrapping an RBTree.
+    """
+
+    @property
+    def lines(self):
+        return self
+
+    def keys(self):
+        return range(self.offset, self.offset + self.size)
+
+    def floor_item(self, z):
+        i = max(0, min(self.size - 1, int(math.floor(z)) - self.offset))
+        return self.offset + i, LineData(self.slopes[i], self.intercepts[i])
 
 
 def write_objectives(P, Q, roadnet: Roadnet):
