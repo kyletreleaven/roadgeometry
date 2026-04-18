@@ -444,7 +444,7 @@ except ImportError:
     _cpp_fragile_mccf = None
     CppPiecewiseLinear = None
 
-from .pwl import PWL as _PWL
+from .pwl import PWL as _PWL, IntPWL as _IntPWL
 
 
 # A cost function accepted by the C++ binding: a Python PWL,
@@ -455,11 +455,11 @@ CostEntry = _PWL | Callable[[float], float]
 def _to_cpp_cost(fn: CostEntry) -> "CppPiecewiseLinear | Callable[[float], float]":
     """Normalise a cost entry for the C++ binding.
 
-    - PWL                → CppPiecewiseLinear  (no Python callback at eval time)
+    - PWL / IntPWL       → CppPiecewiseLinear  (no Python callback at eval time)
     - CppPiecewiseLinear → pass through  (already the fast path)
     - any callable       → pass through  (wrapped as std::function in C++)
     """
-    if isinstance(fn, _PWL):
+    if isinstance(fn, (_PWL, _IntPWL)):
         return CppPiecewiseLinear(fn.segments)
     return fn
 
