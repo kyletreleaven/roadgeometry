@@ -262,21 +262,9 @@ def test_objectives():
     assert cs == [44., 5., 16.]
 
 
-def test_measure_and_objective():
-    """Sanity check MEASURE and OBJECTIVE on a known example.
-
-    Road of length 1, one supply at y=0.3, one demand at y=0.7.
-
-    MEASURE should give flow level 0 for intervals [0,0.3] and [0.7,1]
-    (total length 0.6) and flow level 1 for [0.3,0.7] (length 0.4).
-
-    The resulting cost function has breakpoints at z=-1 and z=0:
-      z < -1 : slope=-1, intercept=-0.4  →  f(-1.5) = 1.5 - 0.4 = 1.1
-      -1<=z<0: slope=-0.2, intercept=0.4 →  f(-0.5) = 0.1 + 0.4 = 0.5
-      z >= 0 : slope=1,  intercept=0.4   →  f(0.5)  = 0.5 + 0.4 = 0.9
-    """
+def _make_measure_dev():
     from collections import deque
-    from setiptah.roadgeometry.matching.bm import MEASURE, OBJECTIVE, _pwl_from_objective, BiPartite
+    from setiptah.roadgeometry.matching.bm import MEASURE, BiPartite
 
     def make_q(supply, demand):
         q = BiPartite.create_with(deque)
@@ -284,15 +272,39 @@ def test_measure_and_objective():
         q.demand.extend(demand)
         return q
 
-    segment = [
-        (0.3, make_q([0], [])),
-        (0.7, make_q([], [0])),
-    ]
+    segment = [(0.3, make_q([0], [])), (0.7, make_q([], [0]))]
+    return MEASURE(segment, 1.0)
 
-    measure = MEASURE(segment, 1.0)
+
+def _make_measure_rbtree():
+    import bintrees
+    return bintrees.RBTree({0: 0.6, 1: 0.4})
+
+
+@pytest.mark.parametrize("make_measure", [_make_measure_dev, _make_measure_rbtree])
+def test_objective(make_measure):
+    """Sanity check OBJECTIVE on a known example.
+
+    Road of length 1, one supply at y=0.3, one demand at y=0.7.
+    MEASURE gives flow level 0 with total length 0.6, level 1 with length 0.4.
+
+    The resulting cost function has breakpoints at z=-1 and z=0:
+      z < -1 : slope=-1,   intercept=-0.4  →  f(-1.5) = 1.1
+      -1<=z<0: slope=-0.2, intercept=0.4   →  f(-0.5) = 0.5
+      z >= 0 : slope=1,    intercept=0.4   →  f(0.5)  = 0.9
+    """
+    from setiptah.roadgeometry.matching.bm import OBJECTIVE_FUNC
+    from setiptah.roadgeometry.matching.util.double_ended_vector import DoubleEndedVector
+    from setiptah.roadgeometry.matching.nxopt.pwl import IntPWL
+
+    measure = make_measure()
     assert dict(measure.items()) == {0: pytest.approx(0.6), 1: pytest.approx(0.4)}
 
-    obj_fn = _pwl_from_objective(OBJECTIVE(measure))
-    assert obj_fn(-1.5) == pytest.approx(1.1)
-    assert obj_fn(-0.5) == pytest.approx(0.5)
-    assert obj_fn(0.5)  == pytest.approx(0.9)
+    obj = OBJECTIVE_FUNC(measure)
+
+    if isinstance(measure, DoubleEndedVector):
+        assert isinstance(obj, IntPWL)
+
+    assert obj(-1.5) == pytest.approx(1.1)
+    assert obj(-0.5) == pytest.approx(0.5)
+    assert obj(0.5)  == pytest.approx(0.9)

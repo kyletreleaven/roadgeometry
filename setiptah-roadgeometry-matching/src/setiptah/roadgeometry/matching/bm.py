@@ -18,7 +18,7 @@ from setiptah.roadgeometry.dijkstra import RoadnetMetric
 from setiptah.roadgeometry.graphs import IntRoadnet, int_map_to_seq
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
 from setiptah.roadgeometry.matching.util.double_ended_vector import DoubleEndedVector
-from setiptah.roadgeometry.matching.nxopt.pwl import PWL, negate as pwl_negate, shift as pwl_shift
+from setiptah.roadgeometry.matching.nxopt.pwl import PWL, IntPWL, negate as pwl_negate, shift as pwl_shift
 from setiptah.roadgeometry.matching.protocol import FlowSolver
 
 # Module-level default solver. Replace this to globally swap in a different
@@ -432,7 +432,7 @@ def compute_optimal_flow(
         supply[j] += surplus[road]
         measure = measure_dict[road]
 
-        fobj = _pwl_from_objective(OBJECTIVE(measure))
+        fobj = OBJECTIVE_FUNC(measure)
 
         # edge construction
         if roadnet.is_oneway(road):
@@ -506,9 +506,13 @@ def OBJECTIVE_FUNC(measure):
 
 def OBJECTIVE(measure):
     """
-    produces the objective LineData()s RBTree arrangement
-    given the dictionary of interval measures;
-    N levels => N+1 LineData()s (verify?)
+    produces the objective LineData()s arrangement given the interval measures.
+    N levels => N+1 segments.
+
+    If measure is a DoubleEndedVector (integer flow levels), returns an IntPWL
+    with O(1) evaluation.  Otherwise returns a bintrees.RBTree for the general case.
+    TODO: always return a callable — fold the RBTree path into costWrapper or similar,
+    eliminating the _pwl_from_objective helper used in tests.
     """
 
     def sweep(x):
@@ -524,6 +528,35 @@ def OBJECTIVE(measure):
 
     PREKAPPA = np.array([0.] + [f * w for f, w in measure.items()])
     KAPPA = sweep(PREKAPPA)
+
+    if isinstance(measure, DoubleEndedVector):
+        ff = list(measure)  # ascending integer flow levels
+        assert ff, "measure must not be empty"
+        max_f = ff[-1]
+        offset = -(max_f + 1)
+        slopes     = list(ALPHA[::-1])
+        intercepts = list(KAPPA[::-1])
+
+        class _IntPWLWithLines(IntPWL):
+            """IntPWL subclass exposing a .lines shim for legacy call sites.
+
+            .lines returns self so that obj_fn.lines.keys() and
+            obj_fn.lines.floor_item() work the same way they do on a costWrapper
+            wrapping an RBTree.
+            """
+
+            @property
+            def lines(self):
+                return self
+
+            def keys(self):
+                return range(self.offset, self.offset + self.size)
+
+            def floor_item(self, z):
+                i = max(0, min(self.size - 1, int(math.floor(z)) - self.offset))
+                return self.offset + i, LineData(self.slopes[i], self.intercepts[i])
+
+        return _IntPWLWithLines(offset, slopes, intercepts)
 
     Cz = bintrees.RBTree()
     ff = [f for f in measure] + [np.inf]  # should be in order
@@ -570,14 +603,26 @@ def compute_roadnet_objective_fns(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[
 
 class costWrapper :
     """
-    wrap an RBTree arrangement of LineData()s to obtain a piece-wise linear callable function 
+    wrap an RBTree arrangement of LineData()s to obtain a piece-wise linear callable function.
+
+    If called with something that is already callable (e.g. IntPWL), returns it unchanged —
+    no wrapper is constructed.
     """
+    def __new__(cls, lines):
+        if not isinstance(lines, bintrees.RBTree):
+            if not callable(lines):
+                raise TypeError(f"costWrapper requires an RBTree or callable, got {type(lines)}")
+            return lines
+        return super().__new__(cls)
+
     def __init__(self, lines ) :
+        if not isinstance(lines, bintrees.RBTree):
+            return
         self.lines = lines
-        
+
     def __call__(self, z ) :
         """
-        this is an O(log n) query function (although, probably an O(1) expected hash map), 
+        this is an O(log n) query function (although, probably an O(1) expected hash map),
         can be reduced to O(1) by random access after floor operation """
         _, line = self.lines.floor_item( z )
         return line( z )
