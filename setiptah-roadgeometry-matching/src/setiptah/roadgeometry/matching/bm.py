@@ -242,6 +242,23 @@ class Measure(Protocol):
         ...
 
 
+_SUPPLY, _DEMAND = 0, 1
+
+
+def sort_points2(P, Q):
+    """Return points from P and Q sorted by (road, y, side, index).
+
+    Each entry is (road, y, side, index) where side=_SUPPLY(0) or _DEMAND(1).
+    Lexicographic sort gives supply before demand at the same position, and
+    ascending indices within each side.
+    """
+    points = []
+    points.extend((r, y, _SUPPLY, i) for i, p in enumerate(P) for r, y in (tuple(p),))
+    points.extend((r, y, _DEMAND, j) for j, q in enumerate(Q) for r, y in (tuple(q),))
+    points.sort()
+    return points
+
+
 def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segment]:
     """
 
@@ -249,18 +266,24 @@ def compute_segments2(P, Q, roadnet: Roadnet[TRoad, TVert]) -> dict[TRoad, Segme
         a dictionary of segment data structures for each road
 
     """
-    tree = sort_points(P, Q)
+    points = sort_points2(P, Q)
 
     segments = {road: [] for road in roadnet.edges()}
 
-    prev_road, segment = None, None
-    for key, qs in tree.iter_items():
-        road, y = key
-        if segment is None or road != prev_road:
-            assert road in roadnet.edges(), (road, roadnet.edges())
-            segment = segments[road]
-            prev_road = road
-        segment.append((y, qs))
+    # Linear groupby pass: group consecutive entries at the same (road, y).
+    i = 0
+    while i < len(points):
+        road, y = points[i][0], points[i][1]
+        assert road in roadnet.edges(), (road, roadnet.edges())
+        qs = BiPartite.create_with(deque)
+        while i < len(points) and points[i][0] == road and points[i][1] == y:
+            _, _, side, idx = points[i]
+            if side == _SUPPLY:
+                qs.supply.append(idx)
+            else:
+                qs.demand.append(idx)
+            i += 1
+        segments[road].append((y, qs))
 
     return segments
 
