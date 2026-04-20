@@ -62,7 +62,12 @@ cpp_fragile at n=100: **12ms** (was 16ms — `sort_points2` batch sort replaces 
 | C++ `fragile_mccf` solver | ~16ms |
 | `TRAVERSE2` + networkx topograph | ~246ms |
 
-**Next bottleneck:** `TRAVERSE2` + networkx topograph (246ms) — pure Python/networkx overhead.
+**On flow computation alone:** `_compute_optimal_flow` takes 165ms, of which the C++ solver
+is only 16ms. The remaining ~150ms is entirely instance translation — `compute_segments2` +
+PREMATCH + MEASURE + OBJECTIVE. The solver is essentially free; Python overhead building its
+input is the whole cost.
+
+**Next bottleneck (end-to-end):** `TRAVERSE2` + networkx topograph (246ms) — pure Python/networkx overhead.
 `compute_segments2` groupby (94ms) will be eliminated by C++ port of sort+segment.
 
 ---
