@@ -1,6 +1,6 @@
 # Matching Algorithm Profile Report
 
-**Date:** 2026-04-18  
+**Date:** 2026-04-19  
 **Platform:** darwin (Apple Silicon assumed)  
 **Python:** 3.13  
 **Network:** 10×10 grid, unit-length edges (180 edges, 100 vertices)  
@@ -12,74 +12,58 @@
 
 | n | py | cpp_dijkstra | cpp_fragile |
 |--:|--:|--:|--:|
-| 10 | 0.0248 | 0.0248 | 0.0088 |
-| 25 | 0.0365 | 0.0386 | 0.0108 |
-| 50 | 0.0557 | 0.0508 | 0.0129 |
-| 100 | 0.0740 | 0.0747 | 0.0159 |
-| 200 | 0.1072 | 0.0965 | 0.0211 |
+| 10 | 0.0285 | 0.0318 | 0.0097 |
+| 25 | 0.0418 | 0.0463 | 0.0109 |
+| 50 | 0.0966 | 0.0982 | 0.0276 |
+| 100 | 0.1261 | 0.1186 | 0.0122 |
+| 200 | 0.1096 | 0.0973 | 0.0158 |
 
-cpp_fragile at n=100: **16ms** (was 31ms — 2× improvement from eliminating bintrees in MEASURE and OBJECTIVE).
+cpp_fragile at n=100: **12ms** (was 16ms — `sort_points2` batch sort replaces bintrees, 28× faster at n=10000).
 
 ---
 
-## cProfile (n=100, 0.033s with cProfile overhead)
+## cProfile (n=10000, cpp_fragile, 0.43s total)
 
 ```
-         95976 function calls (95614 primitive calls) in 0.033 seconds
+         1250769 function calls in 0.425 seconds
 
    Ordered by: cumulative time
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        1    0.000    0.000    0.033    0.033 profile_matching.py:68(run_once)
-        1    0.000    0.000    0.031    0.031 bm.py:111(compute_optimal_results)
-        1    0.000    0.000    0.028    0.028 bm.py:141(_compute_optimal_flow)
-        1    0.000    0.000    0.023    0.023 bm.py:415(compute_optimal_flow)
-        1    0.000    0.000    0.016    0.016 cvxcostflow.py:508(CppMinConvexCostFlow)
-        1    0.000    0.000    0.015    0.015 cvxcostflow.py:467(cpp_fragile_mccf)
-        1    0.008    0.008    0.014    0.014 {built-in method _cpp.fragile_mccf}
+        1    0.000    0.000    0.246    0.246 bm.py:175(_compute_matching)
+        1    0.000    0.000    0.246    0.246 bm.py:779(compute_matching_for_acyclic_flow)
+        1    0.045    0.045    0.152    0.152 bm.py:816(TRAVERSE2)
+        1    0.001    0.001    0.165    0.165 bm.py:141(_compute_optimal_flow)
+        1    0.043    0.043    0.094    0.094 bm.py:262(compute_segments2)
+        1    0.016    0.016    0.094    0.094 bm.py:711(create_topograph)
+    20180    0.006    0.000    0.074    0.000 bm.py:717(add_edge)
+    18842    0.059    0.000    0.068    0.000 networkx/classes/digraph.py:677(add_edge)
 ```
-> C++ solver accounts for 8ms tottime + 6ms Python callback overhead = 14ms cumtime.
+> `TRAVERSE2` + networkx topograph dominates at 246ms.
+> `compute_segments2` groupby is 94ms (43ms Python loop + BiPartite creation).
 
 ```
-     6892    0.004    0.000    0.006    0.000 pwl.py:69(IntPWL.__call__)    # NEW bottleneck
-      180    0.000    0.000    0.004    0.000 bm.py:502(OBJECTIVE_FUNC)
-      180    0.001    0.000    0.004    0.000 bm.py:507(OBJECTIVE)
-      181    0.001    0.000    0.001    0.000 {built-in method __build_class__}  # inline subclass
+        1    0.000    0.000    0.021    0.021 bm.py:248(sort_points2)   # was 567ms with bintrees
+      180    0.009    0.000    0.022    0.022 bm.py:330(MEASURE)
+    20000    0.012    0.000    0.013    0.000 bm.py:205(create_with)    # BiPartite creation
+      180    0.008    0.000    0.012    0.012 bm.py:313(PREMATCH)
+        1    0.015    0.015    0.016    0.016 {built-in method _cpp.fragile_mccf}
 ```
-> `IntPWL.__call__` is called 6892 times (4ms) — the C++ solver calls back into Python for every
-> cost evaluation. This is the main remaining Python bottleneck.
-> `__build_class__` fires 181 times: the `_IntPWLWithLines` subclass is re-defined inside
-> `OBJECTIVE` once per road (180 roads). Easy fix: hoist it out.
+> `sort_points2` dropped from 567ms to 21ms — 27× improvement from batch sort.
+> C++ solver (16ms) is now cheaper than MEASURE (22ms) and PREMATCH (12ms).
 
-```
-      400    0.001    0.000    0.002    0.000 bintrees/rbtree.py:123(insert)   # sort_points only
-      200    0.000    0.000    0.002    0.000 bintrees/abctree.py:371(set_default)
-      200    0.000    0.000    0.001    0.000 bintrees/abctree.py:317(__setitem__)
-```
-> bintrees is down to 400 inserts (was 1646) — only `sort_points` remains.
-
-```
-        1    0.000    0.000    0.004    0.004 bm.py:245(compute_segments2)
-        1    0.000    0.000    0.003    0.003 bm.py:268(sort_points)
-        1    0.000    0.000    0.003    0.003 bm.py:175(_compute_matching)
-        1    0.001    0.001    0.002    0.002 bm.py:792(TRAVERSE2)
-        1    0.000    0.000    0.001    0.001 profile_matching.py:58(make_instance)
-```
-> Everything else is small. `make_instance` is 1ms — sampling is free.
-
-### Summary
+### Summary (n=10000)
 
 | Phase | Time |
 |---|---:|
-| Benchmark setup (`make_instance`) | 1ms |
-| `OBJECTIVE` + `MEASURE` (DoubleEndedVector + IntPWL) | ~4ms |
-| `IntPWL.__call__` callbacks from C++ solver | ~6ms |
-| C++ `fragile_mccf` solver (pure C++ time) | ~8ms |
-| Everything else (sort, marshal, topograph, matching) | ~5ms |
+| `sort_points2` (batch sort) | 21ms |
+| `compute_segments2` groupby + BiPartite creation | 94ms |
+| PREMATCH + SURPLUS + MEASURE + OBJECTIVE | ~60ms |
+| C++ `fragile_mccf` solver | ~16ms |
+| `TRAVERSE2` + networkx topograph | ~246ms |
 
-**Next opportunity:** wire `IntPWL` directly to C++ as a `CppPiecewiseLinear` so the solver
-evaluates cost in C++ without Python callbacks. This would eliminate the 6ms callback overhead.
-Also hoist `_IntPWLWithLines` out of `OBJECTIVE` to avoid 180 `__build_class__` calls.
+**Next bottleneck:** `TRAVERSE2` + networkx topograph (246ms) — pure Python/networkx overhead.
+`compute_segments2` groupby (94ms) will be eliminated by C++ port of sort+segment.
 
 ---
 
@@ -98,4 +82,4 @@ Empirical log-log regression over n=100..10000 on a fixed 10×10 grid:
 | 10000 | 0.806 | 8.40 | 200.00 | 100.0 | 7.15 |
 
 **Empirical exponent: n^0.43** — sub-linear, fitting the data well.
-(Scaling law measured before bintrees removal; re-run pending.)
+(Scaling law measured before bintrees/sort_points2 optimisations; re-run pending.)
