@@ -1,7 +1,6 @@
 #pragma once
 #include <algorithm>
 #include <deque>
-#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -9,11 +8,14 @@
 namespace roadgeometry {
 
 // ---------------------------------------------------------------------------
-// sort_and_segment
+// sort_and_segment<Road>
 //
-// Given supply points P and demand points Q, each a list of (road, y) pairs
-// with integer road indices, returns a map from road index to a sorted list
-// of (y, supply_indices, demand_indices) groups.
+// Given supply points P and demand points Q, each a list of (road, y) pairs,
+// returns a map from road to a sorted list of YGroups.
+//
+// Road must be:
+//   - strictly ordered (operator<) for sorting
+//   - equality-comparable and hashable (std::hash<Road>) for the result map
 //
 // Within each road, groups are sorted by y.  Within a group at the same y,
 // supply indices precede demand indices, both in ascending order.
@@ -25,18 +27,19 @@ struct YGroup {
     std::deque<int> demand;
 };
 
-using RoadSegments = std::unordered_map<int, std::vector<YGroup>>;
+template <typename Road>
+using RoadSegments = std::unordered_map<Road, std::vector<YGroup>>;
 
-inline RoadSegments sort_and_segment(
-    const std::vector<std::pair<int, double>>& P,
-    const std::vector<std::pair<int, double>>& Q
+template <typename Road>
+RoadSegments<Road> sort_and_segment(
+    const std::vector<std::pair<Road, double>>& P,
+    const std::vector<std::pair<Road, double>>& Q
 ) {
-    // Encode side: 0=supply, 1=demand — so supply sorts before demand at equal y.
     struct Point {
-        int   road;
+        Road   road;
         double y;
-        int   side;   // 0=supply, 1=demand
-        int   index;
+        int    side;   // 0=supply, 1=demand — supply sorts before demand at equal y
+        int    index;
     };
 
     std::vector<Point> points;
@@ -54,13 +57,12 @@ inline RoadSegments sort_and_segment(
         return a.index < b.index;
     });
 
-    RoadSegments result;
+    RoadSegments<Road> result;
 
-    // Linear groupby pass.
     int n = (int)points.size();
     int i = 0;
     while (i < n) {
-        int    road = points[i].road;
+        Road   road = points[i].road;
         double y    = points[i].y;
         YGroup group;
         group.y = y;
