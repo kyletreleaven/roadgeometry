@@ -11,9 +11,21 @@
 #include "roadgeometry/input_graph.hpp"
 #include "roadgeometry/fragile_mccf.hpp"
 #include "roadgeometry/piecewise_linear.hpp"
+#include "roadgeometry/segment.hpp"
 
 namespace py = pybind11;
+using namespace pybind11::literals;
 using namespace roadgeometry;
+
+// std::hash specialization for py::object — delegates to Python's hash().
+namespace std {
+template <>
+struct hash<py::object> {
+    size_t operator()(const py::object& obj) const {
+        return py::hash(obj);
+    }
+};
+} // namespace std
 
 // Build a CostFn from a Python object: unwrap PiecewiseLinear directly,
 // or wrap an arbitrary Python callable.
@@ -116,5 +128,59 @@ PYBIND11_MODULE(_cpp, m) {
     py::arg("capacity"),
     py::arg("U"),
     py::arg("epsilon") = 1.0
+    );
+
+    // ------------------------------------------------------------------
+    // sort_and_segment(P, Q, road_ids)
+    //
+    // P, Q     : list of (road_id, float y); road_id is any comparable+hashable
+    // road_ids : all road ids in the network (pre-populates result keys)
+    //
+    // Returns dict[road_id, list[tuple[float, SimpleNamespace(supply, demand)]]]
+    // where supply and demand are collections.deque[int] — drop-in for the
+    // Python BiPartite[deque] returned by compute_segments2.
+    // ------------------------------------------------------------------
+    m.def("sort_and_segment", [](
+        const py::sequence& P,
+        const py::sequence& Q,
+        const py::sequence& road_ids
+    ) {
+        std::vector<std::pair<py::object, double>> P_cpp, Q_cpp;
+        P_cpp.reserve(py::len(P));
+        Q_cpp.reserve(py::len(Q));
+        for (auto p : P) {
+            auto t = p.cast<py::tuple>();
+            P_cpp.push_back({t[0].cast<py::object>(), t[1].cast<double>()});
+        }
+        for (auto q : Q) {
+            auto t = q.cast<py::tuple>();
+            Q_cpp.push_back({t[0].cast<py::object>(), t[1].cast<double>()});
+        }
+
+        auto segs = sort_and_segment<py::object>(P_cpp, Q_cpp);
+
+        auto deque_cls = py::module_::import("collections").attr("deque");
+        auto ns_cls    = py::module_::import("types").attr("SimpleNamespace");
+
+        py::dict out;
+        for (auto r : road_ids)
+            out[r] = py::list();
+
+        for (auto& [road, groups] : segs) {
+            py::list seg;
+            for (auto& g : groups) {
+                py::object qs = ns_cls(
+                    "supply"_a = deque_cls(py::cast(g.supply)),
+                    "demand"_a = deque_cls(py::cast(g.demand))
+                );
+                seg.append(py::make_tuple(g.y, qs));
+            }
+            out[road] = seg;
+        }
+        return out;
+    },
+    py::arg("P"),
+    py::arg("Q"),
+    py::arg("road_ids")
     );
 }
