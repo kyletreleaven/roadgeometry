@@ -20,10 +20,11 @@ from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
 from setiptah.roadgeometry.matching.util.double_ended_vector import DoubleEndedVector
 from setiptah.roadgeometry.matching.nxopt.pwl import PWL, IntPWL, negate as pwl_negate, shift as pwl_shift
 from setiptah.roadgeometry.matching.protocol import FlowSolver
+try:
+    from setiptah.roadgeometry.matching import _cpp
+except ImportError:
+    _cpp = None
 
-# Module-level default solver. Replace this to globally swap in a different
-# implementation (e.g. the C++ backend) without changing call sites.
-default_flow_solver: FlowSolver = MinConvexCostFlow
 from setiptah.roadgeometry.matching.range_queues import *
 from setiptah.roadgeometry.matching.util import inner_class
 from setiptah.roadgeometry.matching.util.mygraph import mygraph
@@ -89,6 +90,52 @@ class RoadnetMatchingInstance(Generic[TRoad, TVert]):
 BasicPoint = tuple[TRoad, float]
 
 
+@dataclass
+class BiPartite(Generic[T]):
+    supply: T
+    demand: T
+
+    def __repr__(self) :
+        return f"<S:{self.supply},D:{self.demand}>"
+
+    @classmethod
+    def create_with(cls, factory: Factory[T]):
+        return cls(factory(), factory())
+
+    @classmethod
+    def factory(cls, factory: Factory[T]) -> Factory["BiPartite[T]"]:
+
+        def fn():
+            return cls.create_with(factory)
+
+        return fn
+
+    def map(self, fn: Callable[[T], U]) -> "BiPartite[U]":
+        return self.__class__(fn(self.supply), fn(self.demand))
+
+
+Segment = Iterable[tuple[float, BiPartite[deque[int]]]]
+
+
+class SegmentSorter(Protocol[TRoad, TVert]):
+    """Callable that segments supply/demand points by road."""
+    def __call__(
+        self,
+        P: tuple[BasicPoint[TRoad], ...],
+        Q: tuple[BasicPoint[TRoad], ...],
+        roadnet: Roadnet[TRoad, TVert],
+    ) -> dict[TRoad, Segment]: ...
+
+
+# Module-level defaults. Replace to globally swap implementations.
+default_flow_solver: FlowSolver = MinConvexCostFlow
+
+def default_compute_segments(P, Q, roadnet):
+    if _cpp is not None:
+        return _cpp.sort_and_segment(P, Q, list(roadnet.edges()))
+    return compute_segments2(P, Q, roadnet)
+
+
 class MatchingResult(enum.Enum):
     FLOW = auto()
     MATCHING = auto()
@@ -103,6 +150,7 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
     _: dataclasses.KW_ONLY
     use_ranges: bool = False
     flow_solver: FlowSolver = dataclasses.field(default_factory=lambda: default_flow_solver)
+    compute_segments: SegmentSorter = dataclasses.field(default_factory=lambda: default_compute_segments)
 
     def compute_optimal(self, result: MatchingResult):
         out, = self.compute_optimal_results(result)
@@ -141,7 +189,11 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
         def _compute_optimal_flow(self):
             roadnet = self.instance.roadnet
 
-            self.segment_dict = segment_dict = compute_segments2(self.instance.P, self.instance.Q, roadnet)
+            self.segment_dict = segment_dict = self.instance.compute_segments(
+                self.instance.P,
+                self.instance.Q,
+                roadnet
+            )
 
             surplus_dict = dict()
             measure_dict = dict()
@@ -194,31 +246,6 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
 """ Phase I: Transcription """
 
 
-@dataclass
-class BiPartite(Generic[T]):
-    supply: T
-    demand: T
-
-    def __repr__(self) :
-        return f"<S:{self.supply},D:{self.demand}>"
-
-    @classmethod
-    def create_with(cls, factory: Factory[T]):
-        return cls(factory(), factory())
-
-    @classmethod
-    def factory(cls, factory: Factory[T]) -> Factory["BiPartite[T]"]:
-
-        def fn():
-            return cls.create_with(factory)
-
-        return fn
-
-    def map(self, fn: Callable[[T], U]) -> "BiPartite[U]":
-        return self.__class__(fn(self.supply), fn(self.demand))
-
-
-Segment = Iterable[tuple[float, BiPartite[deque[int]]]]
 
 
 class Measure(Protocol):
