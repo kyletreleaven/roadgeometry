@@ -3,6 +3,8 @@ import networkx as nx
 import setiptah.roadgeometry.probability as roadprob
 from setiptah.roadgeometry.formats import to_networkx, from_networkx
 from setiptah.roadgeometry.matching.nx_legacy import *
+from setiptah.roadgeometry.matching.bm import compute_segments2, default_compute_segments
+from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow, CppMinConvexCostFlow
 
 import pytest
 
@@ -142,7 +144,11 @@ def test_index_range_equivalence():
     assert within_tolerance([cost, cost_shortest_path, cost_from_ranges])
 
 
-def test_roadnet_matching_int():
+@pytest.mark.parametrize("compute_segments,flow_solver", [
+    (compute_segments2,       MinConvexCostFlow),
+    (default_compute_segments, CppMinConvexCostFlow),
+], ids=["py", "cpp"])
+def test_roadnet_matching_int(compute_segments, flow_solver):
 
     roadnet = nx.MultiDiGraph()
     if True:
@@ -165,8 +171,11 @@ def test_roadnet_matching_int():
     PP_ = [sampler.sample() for i in range(NUMPOINT)]
     QQ_ = [sampler.sample() for i in range(NUMPOINT)]
 
+    def make_problem(P, Q, rn):
+        return RoadnetMatchingProblem(P, Q, rn, flow_solver=flow_solver, compute_segments=compute_segments)
+
     roadnet_, roadnet_graph_ = MultiDiGraphRoadnet(roadnet), roadnet
-    matching1, cost_ctd1 = RoadnetMatchingProblem(PP_, QQ_, roadnet_).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
+    matching1, cost_ctd1 = make_problem(PP_, QQ_, roadnet_).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
     cost_sp1 = ROADMATCHCOST(matching1, PP_, QQ_, roadnet_graph_)
 
     inst, _roads, __ = RoadnetMatchingInstance.normalize(PP_, QQ_, roadnet_)
@@ -174,7 +183,7 @@ def test_roadnet_matching_int():
     assert inst.is_valid()
 
     PP, QQ = inst.P, inst.Q
-    matching2, cost_ctd2 = RoadnetMatchingProblem(PP, QQ, roadnet).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
+    matching2, cost_ctd2 = make_problem(PP, QQ, roadnet).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
 
     roadnet_graph = to_networkx(roadnet)
     cost_sp2 = ROADMATCHCOST(matching2, PP, QQ, roadnet_graph)
