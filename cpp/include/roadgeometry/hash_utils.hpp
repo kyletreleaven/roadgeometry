@@ -20,4 +20,14 @@ struct PairHash {
     }
 };
 
+// ---------------------------------------------------------------------------
+// hash_combine
+//
+// Boost-style hash combine for building composite hashes.
+// ---------------------------------------------------------------------------
+inline std::size_t hash_combine(std::size_t h, std::size_t v) noexcept {
+    return h ^ (v + 0x9e3779b9u + (h << 6) + (h >> 2));
+}
+
+
 } // namespace roadgeometry
