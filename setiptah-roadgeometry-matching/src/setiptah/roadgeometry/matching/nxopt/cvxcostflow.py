@@ -464,6 +464,30 @@ def _to_cpp_cost(fn: CostEntry) -> "CppPiecewiseLinear | Callable[[float], float
     return fn
 
 
+def _normalize_for_cpp(network, capacity_in, supply, cost):
+    """Normalize a mygraph flow instance to int-indexed arrays for C++ solvers.
+
+    Returns (nodes, edges, out_edges_arr, endpoints_arr, supply_arr, cost_arr, capacity_arr).
+    `nodes` and `edges` are the ordered lists needed to de-normalize the result.
+    """
+    nodes = list(network.nodes())
+    edges = list(network.edges())
+    node_to_int = {n: i for i, n in enumerate(nodes)}
+
+    out_edges_arr = [[] for _ in range(len(nodes))]
+    endpoints_arr = []
+    for ei, e in enumerate(edges):
+        u, v = network.endpoints(e)
+        out_edges_arr[node_to_int[u]].append(ei)
+        endpoints_arr.append((node_to_int[u], node_to_int[v]))
+
+    supply_arr   = [supply.get(n, 0.0) for n in nodes]
+    cost_arr     = [_to_cpp_cost(cost[e]) for e in edges]
+    capacity_arr = [capacity_in.get(e, math.inf) for e in edges]
+
+    return nodes, edges, out_edges_arr, endpoints_arr, supply_arr, cost_arr, capacity_arr
+
+
 def cpp_fragile_mccf(
     network: mygraph,
     capacity_in: Mapping[TRoad, float],
@@ -483,20 +507,8 @@ def cpp_fragile_mccf(
     if _cpp_fragile_mccf is None:
         raise ImportError("C++ extension not available; build setiptah-roadgeometry-matching-cpp")
 
-    nodes = list(network.nodes())
-    edges = list(network.edges())
-    node_to_int = {n: i for i, n in enumerate(nodes)}
-
-    out_edges_arr = [[] for _ in range(len(nodes))]
-    endpoints_arr = []
-    for ei, e in enumerate(edges):
-        u, v = network.endpoints(e)
-        out_edges_arr[node_to_int[u]].append(ei)
-        endpoints_arr.append((node_to_int[u], node_to_int[v]))
-
-    supply_arr   = [supply.get(n, 0.0) for n in nodes]
-    cost_arr     = [_to_cpp_cost(cost[e]) for e in edges]
-    capacity_arr = [capacity_in.get(e, math.inf) for e in edges]
+    (nodes, edges, out_edges_arr, endpoints_arr, supply_arr, cost_arr, capacity_arr) = (
+        _normalize_for_cpp(network, capacity_in, supply, cost))
 
     flow_arr = _cpp_fragile_mccf(
         out_edges_arr, endpoints_arr, supply_arr, cost_arr, capacity_arr, U, epsilon
