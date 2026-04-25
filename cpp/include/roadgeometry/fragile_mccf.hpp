@@ -25,22 +25,24 @@ namespace roadgeometry {
 //      scaling sequence.  (Use a robust-instance wrapper if not guaranteed.)
 //
 // Template parameters:
-//   G       — InputGraph satisfying the InputGraph concept.
-//   CostFn  — Callable: double(double).  cost[e](x) is the convex cost of
-//             sending flow x on edge e.  Missing entries treated as zero cost.
-//   RG      — ResidualGraph type; defaults to residual_graph_traits<G>::type.
+//   G    — InputGraph satisfying the InputGraph concept.
+//   Cap  — Map-like: Edge → double.  Needs find(Edge).
+//   Cost — Map-like: Edge → callable double(double).  Needs find(Edge).
+//          Missing entries treated as zero cost.
+//   RG   — ResidualGraph type; defaults to residual_graph_traits<G>::type.
 //
 // Returns: flow map edge → double (same key set as network.edges()).
 // ---------------------------------------------------------------------------
 template <InputGraph G,
-          typename CostFn,
+          typename Cap,
+          typename Cost,
           typename RG = typename residual_graph_traits<G>::type>
 std::unordered_map<typename G::edge_type, double>
 fragile_mccf(
     const G& network,
-    const std::unordered_map<typename G::edge_type,  double>& capacity_in,
-    const std::unordered_map<typename G::node_type,  double>& supply,
-    const std::unordered_map<typename G::edge_type,  CostFn>& cost,
+    const Cap&  capacity_in,
+    const std::unordered_map<typename G::node_type, double>& supply,
+    const Cost& cost,
     double U,
     double epsilon = 1.0
 )
