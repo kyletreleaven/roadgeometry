@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -55,6 +56,16 @@ fragile_mccf(
         auto it = m.find(k);
         return it != m.end() ? it->second : def;
     };
+
+    // Check supply conservation.
+    // TODO: iterate supply directly rather than network.nodes() — supply is
+    // typically much smaller (only nodes with nonzero supply are keyed).
+    {
+        double total = 0.0;
+        for (const Node& i : network.nodes()) total += map_get(supply, i, 0.0);
+        if (std::abs(total) > epsilon)
+            throw std::invalid_argument("fragile_mccf: supply is not epsilon-conservative (|sum| > epsilon)");
+    }
 
     // ---- Initialize flow and capacity ------------------------------------
 
