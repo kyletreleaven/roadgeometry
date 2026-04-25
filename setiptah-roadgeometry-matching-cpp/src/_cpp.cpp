@@ -1,3 +1,6 @@
+// TODO: downgrade C++ standard from C++20 to C++11/17 for broader compatibility.
+// This affects: concepts, ranges, structured bindings, std::optional, if-constexpr, etc.
+
 #include <functional>
 #include <vector>
 #include <utility>
@@ -8,6 +11,7 @@
 #include <pybind11/functional.h>
 
 #include "roadgeometry/dijkstra.hpp"
+#include "roadgeometry/robust_mccf.hpp"
 #include "roadgeometry/input_graph.hpp"
 #include "roadgeometry/fragile_mccf.hpp"
 #include "roadgeometry/piecewise_linear.hpp"
@@ -79,6 +83,10 @@ PYBIND11_MODULE(_cpp, m) {
     //          callback at evaluation time).  Other callables are wrapped
     //          in std::function.  None means zero cost.
     // ------------------------------------------------------------------
+    // TODO: both fragile_mccf and robust_mccf bindings build a HashMapGraph<int,int>
+    // from compact int arrays, which is wasteful — nodes are already 0..n-1.
+    // Replace with a flat-array graph representation for better cache performance.
+
     m.def("fragile_mccf", [](
         const std::vector<std::vector<int>>&    out_edges,
         const std::vector<std::pair<int, int>>& endpoints,
@@ -115,6 +123,64 @@ PYBIND11_MODULE(_cpp, m) {
                 capacity[e] = capacity_arr[e];
 
         auto flow_map = fragile_mccf(network, capacity, supply, cost, U, epsilon);
+
+        std::vector<double> flow_arr(m, 0.0);
+        for (auto& [e, x] : flow_map)
+            flow_arr[e] = x;
+        return flow_arr;
+    },
+    py::arg("out_edges"),
+    py::arg("endpoints"),
+    py::arg("supply"),
+    py::arg("cost"),
+    py::arg("capacity"),
+    py::arg("U"),
+    py::arg("epsilon") = 1.0
+    );
+
+    // ------------------------------------------------------------------
+    // robust_mccf(out_edges, endpoints, supply, cost, capacity, U, epsilon)
+    //
+    // Same interface as fragile_mccf but wraps the network in a Hamiltonian
+    // cycle to guarantee strong connectivity.  Returns only original edge flows
+    // (cycle edges filtered out).  Raises RuntimeError if infeasible.
+    // ------------------------------------------------------------------
+    m.def("robust_mccf", [](
+        const std::vector<std::vector<int>>&    out_edges,
+        const std::vector<std::pair<int, int>>& endpoints,
+        const std::vector<double>&              supply_arr,
+        const std::vector<py::object>&          cost_arr,
+        const std::vector<double>&              capacity_arr,
+        double U,
+        double epsilon
+    ) -> std::vector<double> {
+        int n = static_cast<int>(out_edges.size());
+        int m = static_cast<int>(endpoints.size());
+
+        HashMapGraph<int, int> network;
+        for (int i = 0; i < n; ++i) network.add_node(i);
+        for (int e = 0; e < m; ++e) {
+            auto [u, v] = endpoints[e];
+            network.add_edge(e, u, v);
+        }
+
+        std::unordered_map<int, double> supply;
+        for (int i = 0; i < n; ++i)
+            if (supply_arr[i] != 0.0) supply[i] = supply_arr[i];
+
+        using CostFn = std::function<double(double)>;
+        std::unordered_map<int, CostFn> cost;
+        for (int e = 0; e < m; ++e) {
+            if (!cost_arr[e].is_none())
+                cost[e] = cost_fn_from_py(cost_arr[e]);
+        }
+
+        std::unordered_map<int, double> capacity;
+        for (int e = 0; e < m; ++e)
+            if (std::isfinite(capacity_arr[e]))
+                capacity[e] = capacity_arr[e];
+
+        auto flow_map = robust_mccf(network, capacity, supply, cost, U, epsilon);
 
         std::vector<double> flow_arr(m, 0.0);
         for (auto& [e, x] : flow_map)
