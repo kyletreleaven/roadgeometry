@@ -16,7 +16,7 @@ import numpy as np
 
 from setiptah.roadgeometry.dijkstra import RoadnetMetric
 from setiptah.roadgeometry.graphs import IntRoadnet, int_map_to_seq
-from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
+from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow, CppRobustMinConvexCostFlow
 from setiptah.roadgeometry.matching.util.double_ended_vector import DoubleEndedVector
 from setiptah.roadgeometry.matching.nxopt.pwl import PWL, IntPWL, negate as pwl_negate, shift as pwl_shift
 from setiptah.roadgeometry.matching.protocol import FlowSolver
@@ -128,7 +128,11 @@ class SegmentSorter(Protocol[TRoad, TVert]):
 
 
 # Module-level defaults. Replace to globally swap implementations.
-default_flow_solver: FlowSolver = MinConvexCostFlow
+def default_flow_solver(network, capacity, supply, cost, U, epsilon=None):
+    try:
+        return CppRobustMinConvexCostFlow(network, capacity, supply, cost, U, epsilon)
+    except ImportError:
+        return MinConvexCostFlow(network, capacity, supply, cost, U)
 
 def default_compute_segments(P, Q, roadnet):
     if _cpp is not None:

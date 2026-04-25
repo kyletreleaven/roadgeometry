@@ -438,10 +438,12 @@ def FragileMCCF( network, capacity_in, supply, cost, U, epsilon=None, *, dijkstr
 try:
     from setiptah.roadgeometry.matching._cpp import (
         fragile_mccf as _cpp_fragile_mccf,
+        robust_mccf as _cpp_robust_mccf,
         PiecewiseLinear as CppPiecewiseLinear,
     )
 except ImportError:
     _cpp_fragile_mccf = None
+    _cpp_robust_mccf = None
     CppPiecewiseLinear = None
 
 from .pwl import PWL as _PWL, IntPWL as _IntPWL
@@ -529,3 +531,25 @@ def CppMinConvexCostFlow(network, capacity, supply, cost, U, epsilon=None):
     network_aug, capacity_rename, cost_aug = MCCFRobustInstance(network, capacity, supply, cost, U)
     flow = cpp_fragile_mccf(network_aug, capacity_rename, supply, cost_aug, U, epsilon)
     return {e: x for (type_, e), x in flow.items() if type_ == ALGGLOBAL.REGULAR}
+
+
+def CppRobustMinConvexCostFlow(network, capacity, supply, cost, U, epsilon=None):
+    """MinConvexCostFlow using the C++ robust_mccf solver.
+
+    Normalizes the network to int-indexed arrays and delegates entirely to the
+    C++ robust_mccf, which handles robustification internally.
+    Raises ImportError if the C++ extension is not available.
+    """
+    if _cpp_robust_mccf is None:
+        raise ImportError("C++ extension not available; build setiptah-roadgeometry-matching-cpp")
+    if epsilon is None:
+        epsilon = 1
+
+    (nodes, edges, out_edges_arr, endpoints_arr, supply_arr, cost_arr, capacity_arr) = (
+        _normalize_for_cpp(network, capacity, supply, cost))
+
+    flow_arr = _cpp_robust_mccf(
+        out_edges_arr, endpoints_arr, supply_arr, cost_arr, capacity_arr, U, epsilon
+    )
+
+    return {e: flow_arr[ei] for ei, e in enumerate(edges)}

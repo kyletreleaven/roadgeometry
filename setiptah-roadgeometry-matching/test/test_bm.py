@@ -4,7 +4,7 @@ import setiptah.roadgeometry.probability as roadprob
 from setiptah.roadgeometry.formats import to_networkx, from_networkx
 from setiptah.roadgeometry.matching.nx_legacy import *
 from setiptah.roadgeometry.matching.bm import compute_segments2, default_compute_segments
-from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow, CppMinConvexCostFlow
+from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow, CppMinConvexCostFlow, CppRobustMinConvexCostFlow
 
 import pytest
 
@@ -145,9 +145,10 @@ def test_index_range_equivalence():
 
 
 @pytest.mark.parametrize("compute_segments,flow_solver", [
-    (compute_segments2,       MinConvexCostFlow),
+    (compute_segments2,        MinConvexCostFlow),
     (default_compute_segments, CppMinConvexCostFlow),
-], ids=["py", "cpp"])
+    (default_compute_segments, CppRobustMinConvexCostFlow),
+], ids=["py", "cpp", "cpp_robust"])
 def test_roadnet_matching_int(compute_segments, flow_solver):
 
     roadnet = nx.MultiDiGraph()
