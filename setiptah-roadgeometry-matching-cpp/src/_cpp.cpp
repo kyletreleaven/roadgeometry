@@ -16,6 +16,7 @@
 #include "roadgeometry/fragile_mccf.hpp"
 #include "roadgeometry/piecewise_linear.hpp"
 #include "roadgeometry/segment.hpp"
+#include "roadgeometry/optimal_flow.hpp"
 
 namespace py = pybind11;
 using namespace pybind11::literals;
@@ -248,5 +249,159 @@ PYBIND11_MODULE(_cpp, m) {
     py::arg("P"),
     py::arg("Q"),
     py::arg("road_ids")
+    );
+
+    // ------------------------------------------------------------------
+    // build_flow_reduction(segments, endpoints, lengths, is_oneway)
+    //
+    // Returns a dict with keys: supply (dict), U (float), num_edges (int),
+    // edge_to_road (list of [road, sign]), oneway_zmin (list of float).
+    // Useful for debugging: compare supply/U against the Python-built instance.
+    // ------------------------------------------------------------------
+    m.def("build_flow_reduction", [](
+        const py::dict& segments_py,
+        const py::dict& endpoints_py,
+        const py::dict& lengths_py,
+        const py::dict& is_oneway_py
+    ) -> py::dict {
+        using Road = py::object;
+        using Vertex = py::object;
+
+        RoadSegments<Road> segments;
+        for (auto [road, seg_list] : segments_py) {
+            std::vector<YGroup> groups;
+            for (auto item : seg_list.cast<py::list>()) {
+                auto t = item.cast<py::tuple>();
+                YGroup g;
+                g.y = t[0].cast<double>();
+                auto ns = t[1];
+                for (auto x : ns.attr("supply")) g.supply.push_back(x.cast<int>());
+                for (auto x : ns.attr("demand")) g.demand.push_back(x.cast<int>());
+                groups.push_back(std::move(g));
+            }
+            segments[road.cast<Road>()] = std::move(groups);
+        }
+
+        std::unordered_map<Road, std::pair<Vertex, Vertex>> endpoints;
+        for (auto [road, uv] : endpoints_py) {
+            auto t = uv.cast<py::tuple>();
+            endpoints[road.cast<Road>()] = {t[0].cast<Vertex>(), t[1].cast<Vertex>()};
+        }
+
+        std::unordered_map<Road, double> lengths;
+        for (auto [road, length] : lengths_py)
+            lengths[road.cast<Road>()] = length.cast<double>();
+
+        std::unordered_map<Road, bool> is_oneway;
+        for (auto [road, ow] : is_oneway_py)
+            is_oneway[road.cast<Road>()] = ow.cast<bool>();
+
+        auto red = build_flow_reduction<Road, Vertex>(segments, endpoints, lengths, is_oneway);
+
+        py::dict supply_py;
+        for (auto& [v, s] : red.instance.vertex_supply)
+            supply_py[v] = s;
+
+        py::list edge_to_road_py;
+        for (auto& [road, sign] : red.edge_to_road)
+            edge_to_road_py.append(py::make_tuple(road, sign));
+
+        py::list oneway_zmin_py;
+        for (auto z : red.oneway_zmin)
+            oneway_zmin_py.append(z);
+
+        py::list cost_py;
+        for (auto& pwl : red.instance.edge_cost)
+            cost_py.append(pwl);
+
+        py::list edge_endpoints_py;
+        for (auto& [road, sign] : red.edge_to_road) {
+            (void)sign;
+            // endpoints indexed by edge_id — same order as edge_to_road
+        }
+        // expose network edge endpoints in edge_id order
+        for (int e = 0; e < (int)red.edge_to_road.size(); ++e) {
+            auto [u, v] = red.instance.network.endpoints(e);
+            edge_endpoints_py.append(py::make_tuple(u, v));
+        }
+
+        py::dict result;
+        result["supply"]          = supply_py;
+        result["U"]               = red.instance.U;
+        result["edge_to_road"]    = edge_to_road_py;
+        result["oneway_zmin"]     = oneway_zmin_py;
+        result["cost"]            = cost_py;
+        result["edge_endpoints"]  = edge_endpoints_py;
+        return result;
+    },
+    py::arg("segments"),
+    py::arg("endpoints"),
+    py::arg("lengths"),
+    py::arg("is_oneway")
+    );
+
+    // ------------------------------------------------------------------
+    // compute_optimal_flow(segments, endpoints, lengths, is_oneway, epsilon)
+    //
+    // segments  : dict[road, list[tuple[float, SimpleNamespace(supply, demand)]]]
+    //             as returned by sort_and_segment (post-prematch)
+    // endpoints : dict[road, (u, v)]
+    // lengths   : dict[road, float]
+    // is_oneway : dict[road, bool]
+    //
+    // Returns dict[road, float] — integer-valued optimal flow per road.
+    // ------------------------------------------------------------------
+    m.def("compute_optimal_flow", [](
+        const py::dict& segments_py,
+        const py::dict& endpoints_py,
+        const py::dict& lengths_py,
+        const py::dict& is_oneway_py,
+        double epsilon
+    ) -> py::dict {
+        using Road = py::object;
+        using Vertex = py::object;
+
+        RoadSegments<Road> segments;
+        for (auto [road, seg_list] : segments_py) {
+            std::vector<YGroup> groups;
+            for (auto item : seg_list.cast<py::list>()) {
+                auto t = item.cast<py::tuple>();
+                YGroup g;
+                g.y = t[0].cast<double>();
+                auto ns = t[1];
+                for (auto x : ns.attr("supply")) g.supply.push_back(x.cast<int>());
+                for (auto x : ns.attr("demand")) g.demand.push_back(x.cast<int>());
+                groups.push_back(std::move(g));
+            }
+            segments[road.cast<Road>()] = std::move(groups);
+        }
+
+        std::unordered_map<Road, std::pair<Vertex, Vertex>> endpoints;
+        for (auto [road, uv] : endpoints_py) {
+            auto t = uv.cast<py::tuple>();
+            endpoints[road.cast<Road>()] = {t[0].cast<Vertex>(), t[1].cast<Vertex>()};
+        }
+
+        std::unordered_map<Road, double> lengths;
+        for (auto [road, length] : lengths_py)
+            lengths[road.cast<Road>()] = length.cast<double>();
+
+        std::unordered_map<Road, bool> is_oneway;
+        for (auto [road, ow] : is_oneway_py)
+            is_oneway[road.cast<Road>()] = ow.cast<bool>();
+
+        auto flow = compute_optimal_flow<Road, Vertex>(
+            segments, endpoints, lengths, is_oneway, epsilon);
+
+        py::dict result;
+        for (auto& [road, x] : flow)
+            result[road] = x;
+        return result;
+    },
+    py::arg("segments"),
+    py::arg("endpoints"),
+    py::arg("lengths"),
+    py::arg("is_oneway"),
+    py::arg("epsilon") = 1.0
     );
 }
