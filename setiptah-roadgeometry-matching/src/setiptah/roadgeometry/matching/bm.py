@@ -17,6 +17,11 @@ import numpy as np
 from setiptah.roadgeometry.dijkstra import RoadnetMetric
 from setiptah.roadgeometry.graphs import IntRoadnet, int_map_to_seq
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow, CppRobustMinConvexCostFlow
+
+try:
+    from setiptah.roadgeometry.matching._cpp import compute_optimal_flow as _cpp_compute_optimal_flow
+except ImportError:
+    _cpp_compute_optimal_flow = None
 from setiptah.roadgeometry.matching.util.double_ended_vector import DoubleEndedVector
 from setiptah.roadgeometry.matching.nxopt.pwl import PWL, IntPWL, negate as pwl_negate, shift as pwl_shift
 from setiptah.roadgeometry.matching.protocol import FlowSolver
@@ -459,7 +464,18 @@ def flow_from_segments(
         roadnet: 'Roadnet[TRoad, TVert]',
         flow_solver: 'FlowSolver' = None,
 ) -> dict:
-    """Compute optimal flow from pre-matched segments, delegating to flow_solver."""
+    """Compute optimal flow from pre-matched segments.
+
+    Uses the C++ implementation when available (flow_solver is ignored in that
+    case).  Falls back to the Python path, which derives surplus and measure
+    from segments and delegates to flow_solver.
+    """
+    if _cpp_compute_optimal_flow is not None and flow_solver is None:
+        endpoints = {road: roadnet.endpoints(road) for road in segments}
+        lengths   = {road: roadnet.length(road)    for road in segments}
+        is_oneway = {road: roadnet.is_oneway(road) for road in segments}
+        return _cpp_compute_optimal_flow(segments, endpoints, lengths, is_oneway)
+
     surplus_dict = {road: SURPLUS(seg) for road, seg in segments.items()}
     measure_dict = {road: MEASURE(seg, roadnet.length(road)) for road, seg in segments.items()}
     return compute_optimal_flow(roadnet, surplus_dict, measure_dict, flow_solver=flow_solver)
