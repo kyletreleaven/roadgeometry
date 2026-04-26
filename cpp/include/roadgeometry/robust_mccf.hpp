@@ -271,7 +271,7 @@ struct RobustCost {
         if (const auto* r = std::get_if<RegularEdge<Edge>>(&e)) {
             auto it = cost_.find(r->e);
             if (it == cost_.end()) return end();
-            return {value_type{e, it->second}};
+            return {value_type{e, (*it).second}};
         }
         // cycle edge: return prohibit by value
         return {value_type{e, [s = slope_, o = offset_](double x) { return s * x + o; }}};
@@ -280,7 +280,7 @@ struct RobustCost {
 private:
     static double make_cbound(const Cost& cost, double U) {
         double cbound = 0.0;
-        for (auto& [e, fn] : cost) cbound += fn(U);
+        for (auto [e, fn] : cost) cbound += fn(U);
         return cbound;
     }
 };
