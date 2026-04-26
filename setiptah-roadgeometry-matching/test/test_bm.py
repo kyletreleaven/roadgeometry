@@ -148,7 +148,8 @@ def test_index_range_equivalence():
     (compute_segments2,        MinConvexCostFlow),
     (default_compute_segments, CppMinConvexCostFlow),
     (default_compute_segments, CppRobustMinConvexCostFlow),
-], ids=["py", "cpp", "cpp_robust"])
+    (default_compute_segments, None),
+], ids=["py", "cpp", "cpp_robust", "cpp_optimal_flow"])
 def test_roadnet_matching_int(compute_segments, flow_solver):
 
     roadnet = nx.MultiDiGraph()
@@ -318,3 +319,86 @@ def test_objective(make_measure):
     assert obj(-1.5) == pytest.approx(1.1)
     assert obj(-0.5) == pytest.approx(0.5)
     assert obj(0.5)  == pytest.approx(0.9)
+
+
+def test_flow_reduction_parity():
+    """C++ build_flow_reduction must produce the same supply and U as Python."""
+    try:
+        from setiptah.roadgeometry.matching._cpp import build_flow_reduction as cpp_build
+    except ImportError:
+        pytest.skip("C++ extension not available")
+
+    from setiptah.roadgeometry.matching.bm import (
+        PREMATCH, SURPLUS, MEASURE, OBJECTIVE_FUNC,
+    )
+    from setiptah.roadgeometry.matching.nxopt.pwl import negate as pwl_negate, shift as pwl_shift
+
+    roadnet_nx = nx.MultiDiGraph()
+    roadnet_nx.add_edge(0, 1, 'N', length=1.)
+    roadnet_nx.add_edge(1, 2, 'E', length=1.)
+    roadnet_nx.add_edge(2, 3, 'S', length=1.)
+    roadnet_nx.add_edge(3, 0, 'W', length=1.)
+    roadnet_nx.add_edge(0, 4, 'dangler', length=1.)
+
+    roadnet = MultiDiGraphRoadnet(roadnet_nx)
+    sampler = roadprob.UniformDist(roadnet_nx)
+    PP = [sampler.sample() for _ in range(50)]
+    QQ = [sampler.sample() for _ in range(50)]
+
+    segments = default_compute_segments(PP, QQ, roadnet)
+    for seg in segments.values():
+        PREMATCH(seg)
+
+    # C++ instance
+    endpoints = {road: roadnet.endpoints(road) for road in segments}
+    lengths   = {road: roadnet.length(road)    for road in segments}
+    is_oneway = {road: roadnet.is_oneway(road) for road in segments}
+    cpp_red = cpp_build(segments, endpoints, lengths, is_oneway)
+
+    # Python instance
+    surplus_dict = {road: SURPLUS(seg) for road, seg in segments.items()}
+    measure_dict = {road: MEASURE(seg, roadnet.length(road)) for road, seg in segments.items()}
+
+    py_supply = {v: 0. for v in roadnet.nodes()}
+    for road in roadnet.edges():
+        i, j = roadnet.endpoints(road)
+        py_supply[j] += surplus_dict[road]
+        if roadnet.is_oneway(road):
+            zmin = -measure_dict[road].min_index
+            py_supply[i] -= zmin
+            py_supply[j] += zmin
+
+    py_U = sum(len(m) - 1 for m in measure_dict.values()) + 1
+
+    # Compare supply (ignoring zero entries)
+    cpp_supply = {k: v for k, v in cpp_red['supply'].items() if v != 0.}
+    py_supply_nz = {k: v for k, v in py_supply.items() if v != 0.}
+    assert cpp_supply == pytest.approx(py_supply_nz)
+
+    assert cpp_red['U'] == pytest.approx(py_U)
+
+    # Compare edge endpoints and cost functions.
+    sample_xs = [-2.0, -0.5, 0.0, 0.5, 2.0]
+    for e, ((road, sign), (eu, ev), zmin, cpp_cost) in enumerate(zip(
+        cpp_red['edge_to_road'],
+        cpp_red['edge_endpoints'],
+        cpp_red['oneway_zmin'],
+        cpp_red['cost'],
+    )):
+        py_i, py_j = roadnet.endpoints(road)
+        if sign == +1:
+            assert (eu, ev) == (py_i, py_j), f"edge {e}: endpoint mismatch"
+        else:
+            assert (eu, ev) == (py_j, py_i), f"edge {e}: reverse endpoint mismatch"
+
+        obj = OBJECTIVE_FUNC(measure_dict[road])
+        if zmin != 0.0:
+            py_cost = pwl_shift(obj, zmin)
+        elif sign == -1:
+            py_cost = pwl_negate(obj)
+        else:
+            py_cost = obj
+
+        for x in sample_xs:
+            assert cpp_cost(x) == pytest.approx(py_cost(x), abs=1e-9), \
+                f"edge {e} (road={road}, sign={sign}): cost({x}) mismatch"
