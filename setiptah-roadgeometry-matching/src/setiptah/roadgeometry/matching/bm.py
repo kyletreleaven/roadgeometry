@@ -199,32 +199,20 @@ class RoadnetMatchingProblem(Generic[TRoad, TVert]):
                 roadnet
             )
 
-            surplus_dict = dict()
-            measure_dict = dict()
-
             self.matching = matching = []
             for road, segment in segment_dict.items():
                 matching_ = PREMATCH(segment)
                 matching.extend(matching_)
 
-                surplus_dict[road] = SURPLUS(segment)
-
-                road_len = roadnet.length(road)
-                measure = MEASURE(segment, road_len)
-                measure_dict[road] = measure
-
-            self.flow = flow = compute_optimal_flow(
-                roadnet, surplus_dict, measure_dict,
+            self.flow = flow = flow_from_segments(
+                segment_dict, roadnet,
                 flow_solver=self.instance.flow_solver,
             )
 
-            # TODO: Create unit test to detect infeasibility...
-            imbalance = check_flow(flow, roadnet, surplus_dict)
-            try:
-                assert len(imbalance) <= 0
-            except Exception as ex:
-                ex.imbal = imbalance
-                raise ex
+            if __debug__:
+                surplus_dict = {road: SURPLUS(seg) for road, seg in segment_dict.items()}
+                imbalance = check_flow(flow, roadnet, surplus_dict)
+                assert len(imbalance) <= 0, imbalance
 
             self.results[MatchingResult.FLOW] = flow
 
@@ -464,6 +452,17 @@ def _pwl_from_objective(lines: bintrees.RBTree) -> PWL:
     segments = [(-math.inf if i == 0 else float(k), line.slope, line.offset)
                 for i, (k, line) in enumerate(lines.items())]
     return PWL(segments)
+
+
+def flow_from_segments(
+        segments: dict,
+        roadnet: 'Roadnet[TRoad, TVert]',
+        flow_solver: 'FlowSolver' = None,
+) -> dict:
+    """Compute optimal flow from pre-matched segments, delegating to flow_solver."""
+    surplus_dict = {road: SURPLUS(seg) for road, seg in segments.items()}
+    measure_dict = {road: MEASURE(seg, roadnet.length(road)) for road, seg in segments.items()}
+    return compute_optimal_flow(roadnet, surplus_dict, measure_dict, flow_solver=flow_solver)
 
 
 def compute_optimal_flow(
