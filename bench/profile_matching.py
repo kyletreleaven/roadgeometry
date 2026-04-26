@@ -28,13 +28,15 @@ from setiptah.roadgeometry.matching.nx_legacy import (
     MatchingResult,
 )
 from setiptah.roadgeometry.matching.nxopt.cvxcostflow import (
-    MinConvexCostFlow, py_dijkstra, CppMinConvexCostFlow,
+    MinConvexCostFlow, py_dijkstra, CppMinConvexCostFlow, CppRobustMinConvexCostFlow,
 )
 
 SOLVERS = {
-    "py":           partial(MinConvexCostFlow, dijkstra=py_dijkstra),
-    "cpp_dijkstra": None,   # default: C++ Dijkstra inside Python FragileMCCF
-    "cpp_fragile":  CppMinConvexCostFlow,
+    "py":                partial(MinConvexCostFlow, dijkstra=py_dijkstra),
+    "cpp_dijkstra":      MinConvexCostFlow,   # Python FragileMCCF with C++ Dijkstra
+    "cpp_fragile":       CppMinConvexCostFlow,
+    "cpp_robust":        CppRobustMinConvexCostFlow,
+    "cpp_optimal_flow":  None,   # C++ compute_optimal_flow (flow_solver=None)
 }
 
 
@@ -123,6 +125,13 @@ def profile_line(n: int, solver_name: str):
 
     from setiptah.roadgeometry.matching.nxopt.cvxcostflow import (
         MinConvexCostFlow, FragileMCCF, cpp_fragile_mccf,
+        CppRobustMinConvexCostFlow, _normalize_for_cpp,
+    )
+    from setiptah.roadgeometry.matching.bm import (
+        RoadnetMatchingProblem, compute_segments2, default_compute_segments,
+    )
+    from setiptah.roadgeometry.matching.bm import (
+        compute_optimal_flow as bm_compute_optimal_flow,
     )
 
     solver = SOLVERS[solver_name]
@@ -131,8 +140,14 @@ def profile_line(n: int, solver_name: str):
     lp = LineProfiler()
     lp.add_function(MinConvexCostFlow)
     lp.add_function(FragileMCCF)
+    lp.add_function(compute_segments2)
+    lp.add_function(default_compute_segments)
+    lp.add_function(bm_compute_optimal_flow)
     if solver_name == "cpp_fragile":
         lp.add_function(cpp_fragile_mccf)
+    if solver_name == "cpp_robust":
+        lp.add_function(CppRobustMinConvexCostFlow)
+        lp.add_function(_normalize_for_cpp)
 
     @lp
     def wrapped():
