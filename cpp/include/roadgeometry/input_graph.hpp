@@ -69,4 +69,35 @@ private:
 
 static_assert(InputGraph<HashMapGraph<int, int>>);
 
+// ---------------------------------------------------------------------------
+// normalize_road_network
+//
+// Assigns a stable int index to every Road and every Vertex appearing in
+// endpoints.  Roads are indexed in iteration order of endpoints; each
+// distinct Vertex is assigned the next available int on first encounter.
+//
+// Returns {road_to_int, int_to_road, vert_to_int}.
+// int_to_road[i] == road  iff  road_to_int[road] == i.
+// ---------------------------------------------------------------------------
+template <typename Road, typename Vertex>
+inline std::tuple<
+    std::unordered_map<Road,int>,
+    std::vector<Road>,
+    std::unordered_map<Vertex,int>
+>
+normalize_road_network(
+    const std::unordered_map<Road, std::pair<Vertex,Vertex>>& endpoints
+) {
+    std::unordered_map<Road,   int> road_to_int;
+    std::vector<Road>               int_to_road;
+    std::unordered_map<Vertex, int> vert_to_int;
+    for (auto& [road, uv] : endpoints) {
+        if (road_to_int.emplace(road, (int)int_to_road.size()).second)
+            int_to_road.push_back(road);
+        vert_to_int.emplace(uv.first,  (int)vert_to_int.size());
+        vert_to_int.emplace(uv.second, (int)vert_to_int.size());
+    }
+    return {std::move(road_to_int), std::move(int_to_road), std::move(vert_to_int)};
+}
+
 } // namespace roadgeometry
