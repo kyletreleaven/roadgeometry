@@ -31,12 +31,31 @@ from setiptah.roadgeometry.matching.nxopt.cvxcostflow import (
     MinConvexCostFlow, py_dijkstra, CppMinConvexCostFlow, CppRobustMinConvexCostFlow,
 )
 
+def _run_rmp(flow_solver):
+    def run(P, Q, roadnet):
+        RoadnetMatchingProblem(P, Q, roadnet, flow_solver=flow_solver).compute_optimal_results(
+            MatchingResult.MATCHING, MatchingResult.COST)
+    return run
+
+
+def _run_cpp_matching():
+    from setiptah.roadgeometry.matching._cpp import compute_matching as _cpp_compute_matching
+    def run(P, Q, roadnet):
+        roads = list(roadnet.edges())
+        endpoints = {r: roadnet.endpoints(r) for r in roads}
+        lengths   = {r: roadnet.length(r)    for r in roads}
+        is_oneway = {r: roadnet.is_oneway(r) for r in roads}
+        _cpp_compute_matching(P, Q, endpoints, lengths, is_oneway)
+    return run
+
+
 SOLVERS = {
-    "py":                partial(MinConvexCostFlow, dijkstra=py_dijkstra),
-    "cpp_dijkstra":      MinConvexCostFlow,   # Python FragileMCCF with C++ Dijkstra
-    "cpp_fragile":       CppMinConvexCostFlow,
-    "cpp_robust":        CppRobustMinConvexCostFlow,
-    "cpp_optimal_flow":  None,   # C++ compute_optimal_flow (flow_solver=None)
+    "py":                _run_rmp(partial(MinConvexCostFlow, dijkstra=py_dijkstra)),
+    "cpp_dijkstra":      _run_rmp(MinConvexCostFlow),
+    "cpp_fragile":       _run_rmp(CppMinConvexCostFlow),
+    "cpp_robust":        _run_rmp(CppRobustMinConvexCostFlow),
+    "cpp_optimal_flow":  _run_rmp(None),
+    "cpp_matching":      _run_cpp_matching(),
 }
 
 
@@ -67,10 +86,9 @@ def make_instance(n: int, rows: int = 10, cols: int = 10):
     return P, Q, roadnet
 
 
-def run_once(n: int, flow_solver):
+def run_once(n: int, solver):
     P, Q, roadnet = make_instance(n)
-    prob = RoadnetMatchingProblem(P, Q, roadnet, flow_solver=flow_solver)
-    prob.compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
+    solver(P, Q, roadnet)
 
 
 def profile_cprofile(n: int, solver_name: str, top_n: int = 30):
