@@ -402,3 +402,45 @@ def test_flow_reduction_parity():
         for x in sample_xs:
             assert cpp_cost(x) == pytest.approx(py_cost(x), abs=1e-9), \
                 f"edge {e} (road={road}, sign={sign}): cost({x}) mismatch"
+
+
+def test_matching_parity():
+    """C++ compute_matching must produce the same cost as the Python pipeline."""
+    try:
+        from setiptah.roadgeometry.matching._cpp import compute_matching as cpp_compute_matching
+    except ImportError:
+        pytest.skip("C++ extension not available")
+
+    roadnet_nx = nx.MultiDiGraph()
+    roadnet_nx.add_edge(0, 1, 'N', length=1.)
+    roadnet_nx.add_edge(1, 2, 'E', length=1.)
+    roadnet_nx.add_edge(2, 3, 'S', length=1.)
+    roadnet_nx.add_edge(3, 0, 'W', length=1.)
+    roadnet_nx.add_edge(0, 4, 'dangler', length=1.)
+
+    roadnet = MultiDiGraphRoadnet(roadnet_nx)
+    sampler = roadprob.UniformDist(roadnet_nx)
+    NUMPOINT = 50
+    PP = [sampler.sample() for _ in range(NUMPOINT)]
+    QQ = [sampler.sample() for _ in range(NUMPOINT)]
+
+    # Python reference
+    py_matching, py_cost = RoadnetMatchingProblem(
+        PP, QQ, roadnet
+    ).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.COST)
+
+    # C++ compute_matching
+    roads = list(roadnet.edges())
+    endpoints = {road: roadnet.endpoints(road) for road in roads}
+    lengths   = {road: roadnet.length(road)    for road in roads}
+    is_oneway = {road: roadnet.is_oneway(road) for road in roads}
+    cpp_matching, cpp_cost = cpp_compute_matching(PP, QQ, endpoints, lengths, is_oneway)
+
+    # Verify cpp cost against shortest-path cost of the cpp matching.
+    cpp_cost_sp = ROADMATCHCOST(cpp_matching, PP, QQ, roadnet_nx)
+
+    assert within_tolerance([py_cost, cpp_cost, cpp_cost_sp])
+
+    # Both matchings must be valid bijections over 0..NUMPOINT-1.
+    assert sorted(i for i, j in cpp_matching) == list(range(NUMPOINT))
+    assert sorted(j for i, j in cpp_matching) == list(range(NUMPOINT))
