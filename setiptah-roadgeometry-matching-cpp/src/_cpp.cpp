@@ -17,6 +17,7 @@
 #include "roadgeometry/piecewise_linear.hpp"
 #include "roadgeometry/segment.hpp"
 #include "roadgeometry/optimal_flow.hpp"
+#include "roadgeometry/matching.hpp"
 
 namespace py = pybind11;
 using namespace pybind11::literals;
@@ -403,5 +404,58 @@ PYBIND11_MODULE(_cpp, m) {
     py::arg("lengths"),
     py::arg("is_oneway"),
     py::arg("epsilon") = 1.0
+    );
+
+    m.def("compute_matching", [](
+        const py::list& P_py,
+        const py::list& Q_py,
+        const py::dict& endpoints_py,
+        const py::dict& lengths_py,
+        const py::dict& is_oneway_py
+    ) -> py::tuple {
+        using Road   = py::object;
+        using Vertex = py::object;
+
+        auto to_points = [](const py::list& pts) {
+            std::vector<std::pair<Road, double>> out;
+            out.reserve(pts.size());
+            for (auto item : pts) {
+                auto t = item.cast<py::tuple>();
+                out.push_back({t[0].cast<Road>(), t[1].cast<double>()});
+            }
+            return out;
+        };
+
+        auto P = to_points(P_py);
+        auto Q = to_points(Q_py);
+
+        std::unordered_map<Road, std::pair<Vertex, Vertex>> endpoints;
+        for (auto [road, uv] : endpoints_py) {
+            auto t = uv.cast<py::tuple>();
+            endpoints[road.cast<Road>()] = {t[0].cast<Vertex>(), t[1].cast<Vertex>()};
+        }
+
+        std::unordered_map<Road, double> lengths;
+        for (auto [road, length] : lengths_py)
+            lengths[road.cast<Road>()] = length.cast<double>();
+
+        std::unordered_map<Road, bool> is_oneway;
+        for (auto [road, ow] : is_oneway_py)
+            is_oneway[road.cast<Road>()] = ow.cast<bool>();
+
+        auto [matching, cost] = compute_matching<Road, Vertex>(
+            P, Q, endpoints, lengths, is_oneway);
+
+        py::list matching_py;
+        for (auto& [i, j] : matching)
+            matching_py.append(py::make_tuple(i, j));
+
+        return py::make_tuple(matching_py, cost);
+    },
+    py::arg("P"),
+    py::arg("Q"),
+    py::arg("endpoints"),
+    py::arg("lengths"),
+    py::arg("is_oneway")
     );
 }
