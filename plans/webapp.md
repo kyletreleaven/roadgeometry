@@ -161,12 +161,13 @@ as `[[lat, lon]]` for Leaflet.
 
 ## Implementation Order
 
-1. `network.py` — load graph, wrap as `GeoFramesNetwork`, pin snapping
-2. `state.py` — `MatchingSession`, `RelevantSubgraph`, pin balance logic
-3. `network.py` — early-termination Dijkstra, subgraph maintenance
-4. `matching.py` — run matching, compute trail geometries
-5. `app.py` — wire endpoints, startup background load
-6. Frontend — Leaflet map, click handler, trail rendering, spinner
+1. ~~Frontend scaffold~~ ✓ — Vite + React + TypeScript, Leaflet map centered on Cambridge
+2. `network.py` — load graph, wrap as `GeoFramesNetwork`, pin snapping
+3. `state.py` — `MatchingSession`, `RelevantSubgraph`, pin balance logic
+4. `network.py` — early-termination Dijkstra, subgraph maintenance
+5. `matching.py` — run matching, compute trail geometries
+6. `app.py` — wire endpoints, startup background load
+7. Frontend — click handler, pin markers, trail rendering, spinner
 
 ---
 
