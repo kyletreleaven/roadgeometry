@@ -116,7 +116,20 @@ export default function App() {
           Loading road network…
         </div>
       )}
-      {/* Reset button — restore when backend is ready */}
+      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, display: 'flex', gap: 6 }}>
+        <button onClick={() => map.current!.setView(CAMBRIDGE_CENTER, DEFAULT_ZOOM)} style={{
+          padding: '6px 14px', fontSize: 14, cursor: 'pointer',
+          background: 'white', border: '1px solid #aaa', borderRadius: 4,
+        }}>
+          Re-center
+        </button>
+        <button onClick={handleReset} style={{
+          padding: '6px 14px', fontSize: 14, cursor: 'pointer',
+          background: 'white', border: '1px solid #aaa', borderRadius: 4,
+        }}>
+          Reset
+        </button>
+      </div>
     </div>
   )
 }
