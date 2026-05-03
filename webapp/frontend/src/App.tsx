@@ -28,6 +28,7 @@ export default function App() {
   const map = useRef<L.Map | null>(null)
   const pinLayer = useRef<L.LayerGroup | null>(null)
   const trailLayer = useRef<L.LayerGroup | null>(null)
+  const markers = useRef<Map<string, L.CircleMarker>>(new Map())
   const readyRef = useRef(false)
   const [ready, setReady] = useState(false)
 
@@ -85,9 +86,27 @@ export default function App() {
 
   function placeMarker(pin: Pin) {
     const color = PIN_COLOR[pin.kind]
-    L.circleMarker([pin.lat, pin.lon], {
+    const marker = L.circleMarker([pin.lat, pin.lon], {
       radius: 8, color, fillColor: color, fillOpacity: 0.9, weight: 2,
     }).addTo(pinLayer.current!)
+    marker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e)
+      removePin(pin.id, marker)
+    })
+    markers.current.set(pin.id, marker)
+  }
+
+  async function removePin(id: string, marker: L.CircleMarker) {
+    try {
+      const res = await fetch(`/pins/${id}`, { method: 'DELETE' })
+      if (!res.ok) return
+      const data: { matching: Matching } = await res.json()
+      marker.remove()
+      markers.current.delete(id)
+      renderTrails(data.matching.trails)
+    } catch (err) {
+      console.error('DELETE /pins failed:', err)
+    }
   }
 
   function renderTrails(trails: Trail[]) {
@@ -102,6 +121,7 @@ export default function App() {
     } catch {}
     pinLayer.current!.clearLayers()
     trailLayer.current!.clearLayers()
+    markers.current.clear()
   }
 
   return (
