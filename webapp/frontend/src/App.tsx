@@ -33,7 +33,7 @@ export default function App() {
 
   useEffect(() => {
     if (!map.current && mapDiv.current) {
-      map.current = L.map(mapDiv.current).setView(CAMBRIDGE_CENTER, DEFAULT_ZOOM)
+      map.current = L.map(mapDiv.current, { dragging: false, zoomControl: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false, boxZoom: false, keyboard: false }).setView(CAMBRIDGE_CENTER, DEFAULT_ZOOM)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 19,
