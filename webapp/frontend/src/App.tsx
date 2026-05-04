@@ -19,6 +19,14 @@ interface Trail {
   coordinates: [number, number][]
 }
 
+interface Timing {
+  flow_ms: number
+  path_network_ms: number
+  trails_ms: number
+  matching_ms: number
+  total_ms: number
+}
+
 interface Matching {
   trails: Trail[]
 }
@@ -31,6 +39,7 @@ export default function App() {
   const markers = useRef<Map<string, L.CircleMarker>>(new Map())
   const readyRef = useRef(false)
   const [ready, setReady] = useState(false)
+  const [timing, setTiming] = useState<Timing | null>(null)
 
   useEffect(() => {
     if (!map.current && mapDiv.current) {
@@ -69,9 +78,10 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lat: e.latlng.lat, lon: e.latlng.lng }),
         })
-        const data: { pin: Pin; matching: Matching } = await res.json()
+        const data: { pin: Pin; matching: Matching; timing: Timing } = await res.json()
         placeMarker(data.pin)
         renderTrails(data.matching.trails)
+        setTiming(data.timing)
       } catch (err) {
         console.error('POST /pins failed:', err)
       }
@@ -136,7 +146,20 @@ export default function App() {
           Loading road network…
         </div>
       )}
-      {/* Reset button — restore when backend is ready */}
+      {timing && (
+        <div style={{
+          position: 'absolute', bottom: 12, left: 12, zIndex: 1000,
+          background: 'rgba(255,255,255,0.85)', padding: '4px 8px',
+          fontFamily: 'monospace', fontSize: 12, borderRadius: 3,
+          border: '1px solid #ccc', lineHeight: 1.6,
+        }}>
+          flow: {timing.flow_ms.toFixed(1)}ms<br />
+          path network: {timing.path_network_ms.toFixed(1)}ms<br />
+          trails: {timing.trails_ms.toFixed(1)}ms<br />
+          matching: {timing.matching_ms.toFixed(1)}ms<br />
+          total: {timing.total_ms.toFixed(1)}ms
+        </div>
+      )}
     </div>
   )
 }

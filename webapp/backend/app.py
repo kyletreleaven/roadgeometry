@@ -1,11 +1,12 @@
 from contextlib import asynccontextmanager
+import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 import network
 import matching as matching_module
-from models import ClickRequest, AddPinResponse, PinResponse, Matching
+from models import ClickRequest, AddPinResponse, PinResponse, Matching, Timing
 from state import session
 
 
@@ -31,14 +32,18 @@ def status():
 
 @app.post('/pins', response_model=AddPinResponse)
 def add_pin(req: ClickRequest):
+    t0 = time.perf_counter()
     snapped = network.snap_pin(req.lat, req.lon)
     pin = session.add_pin(snapped['lat'], snapped['lon'])
     pin.road = snapped['road']
     pin.y = snapped['y']
+    t1 = time.perf_counter()
     result = matching_module.run_matching(session)
+    t2 = time.perf_counter()
     return AddPinResponse(
         pin=PinResponse(id=pin.id, kind=pin.kind, lat=pin.lat, lon=pin.lon),
         matching=Matching(**result),
+        timing=Timing(**result['timing'], matching_ms=(t2 - t1) * 1000, total_ms=(t2 - t0) * 1000),
     )
 
 

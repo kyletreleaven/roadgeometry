@@ -28,6 +28,15 @@ class Matching(BaseModel):
     trails: list[Trail]
 
 
+class Timing(BaseModel):
+    flow_ms: float             # compute_optimal (flow + matching)
+    path_network_ms: float     # create_path_network_with_surplus
+    trails_ms: float           # shortest path + coord extraction
+    matching_ms: float         # total run_matching()
+    total_ms: float            # full request
+
+
 class AddPinResponse(BaseModel):
     pin: PinResponse
     matching: Matching
+    timing: Timing
