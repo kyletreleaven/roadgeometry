@@ -40,6 +40,8 @@ def _load():
     from_utm = pyproj.Transformer.from_crs(crs, 'EPSG:4326', always_xy=True)
     _, edges = ox.graph_to_gdfs(G)
 
+    _ = edges.sindex  # build spatial index once at load time
+
     _G = G
     _edges = edges
     _to_utm = to_utm
