@@ -162,12 +162,15 @@ least justified.
 
 **Practical assessment:**
 
-Pin pairs can be far apart (across the city), so the Dijkstra wavefront is
-not guaranteed to be small even after lazy evaluation. The ALT approach is
-potentially worthwhile for long-distance queries where heuristic guidance
-is strong. Whether the landmark maintenance cost (O(k × path_length) per
-augmentation) is justified depends on measured benefit; the O(k) pre-check
-above makes it easy to skip when it isn't.
+On a planar graph with node density ρ, Dijkstra settles O(ρ d²) nodes (disk
+of radius d). A* with a tight heuristic confines the search to a corridor of
+width w around the src–dst path, settling O(ρ d w) nodes. The speedup is
+O(d/w) — it grows with the distance d between the pin pair, not a constant
+factor. For far-apart pins (cross-city), this is a substantial win; for
+nearby pins, it degrades toward 1. So A* is most valuable exactly where the
+Dijkstra wavefront is most expensive, making the ALT approach worthwhile
+despite its maintenance complexity. The O(k) pre-check naturally gates it
+off for the easy (nearby-pin) cases where Dijkstra is already fast.
 
 **Where A* does apply cleanly:** the pure road-graph distance oracle (no
 residual arcs) used for precomputation or the initial all-pairs distance
