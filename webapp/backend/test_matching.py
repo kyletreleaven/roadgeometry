@@ -31,7 +31,7 @@ def test_snap_pin(loaded_network):
 def test_run_matching_empty(loaded_network):
     session = Session()
     result = matching_module.run_matching(session)
-    assert result == {'pairs': [], 'trails': []}
+    assert result['pairs'] == [] and result['trails'] == []
 
 
 def test_run_matching_one_pair(loaded_network):

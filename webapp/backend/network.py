@@ -14,6 +14,7 @@ _POINT = (42.373, -71.109)
 _DIST = 2500
 
 _G = None
+_nodes = None       # nodes GeoDataFrame
 _edges = None       # edges GeoDataFrame, indexed by (u, v, k)
 _roadnet = None     # GeoFramesNetwork wrapping _G
 _to_utm = None      # pyproj Transformer: WGS84 → graph UTM CRS
@@ -28,7 +29,7 @@ def _cache_fresh() -> bool:
 
 
 def _load():
-    global _G, _edges, _roadnet, _to_utm, _from_utm, _ready
+    global _G, _nodes, _edges, _roadnet, _to_utm, _from_utm, _ready
 
     if _cache_fresh():
         G = ox.load_graphml(CACHE_PATH)
@@ -55,6 +56,7 @@ def _load():
     )
 
     _G = G
+    _nodes = nodes
     _edges = edges
     _roadnet = roadnet
     _to_utm = to_utm
