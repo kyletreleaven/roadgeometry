@@ -1,10 +1,19 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+import network
 from models import ClickRequest, AddPinResponse, PinResponse, Matching
 from state import session
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    network.start()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,7 +25,7 @@ app.add_middleware(
 
 @app.get('/status')
 def status():
-    return {'ready': True}
+    return {'ready': network.is_ready()}
 
 
 @app.post('/pins', response_model=AddPinResponse)
