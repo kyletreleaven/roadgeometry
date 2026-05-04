@@ -30,7 +30,10 @@ def status():
 
 @app.post('/pins', response_model=AddPinResponse)
 def add_pin(req: ClickRequest):
-    pin = session.add_pin(req.lat, req.lon)
+    snapped = network.snap_pin(req.lat, req.lon)
+    pin = session.add_pin(snapped['lat'], snapped['lon'])
+    pin.road = snapped['road']
+    pin.y = snapped['y']
     return AddPinResponse(
         pin=PinResponse(id=pin.id, kind=pin.kind, lat=pin.lat, lon=pin.lon),
         matching=Matching(pairs=[], trails=[]),

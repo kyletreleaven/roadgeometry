@@ -9,6 +9,8 @@ class Pin:
     kind: Literal['supply', 'demand']
     lat: float
     lon: float
+    road: tuple | None = None  # (u, v, k)
+    y: float | None = None     # arc-length offset in metres
 
 
 @dataclass
