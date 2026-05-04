@@ -1,0 +1,186 @@
+# Large-Graph Optimization: Lazy Evaluation of Edgeless Roads
+
+## Problem
+
+The Cambridge driving graph has ~10 000 edges. For a matching instance with
+n ≪ 10 000 pins, nearly all edges carry zero flow and contain no pins. The
+current pipeline pays O(|E|) work in several places even though the
+*useful* subgraph is O(n).
+
+Profiled costs with 2 pins on the Cambridge graph:
+
+| step | time |
+|------|------|
+| `compute_optimal_flow` (= `sort_and_segment` + BFR + `fragile_mccf`) | ~2 050 ms |
+| `create_path_network_with_surplus` (after relevant-subgraph fix) | ~7 ms |
+| trail extraction | < 1 ms |
+
+The bottleneck is the flow computation itself, driven by `sort_and_segment`
+and `build_flow_reduction` iterating over all edges.
+
+---
+
+## Key Insight: Implicit Structure for Edgeless Roads
+
+An edge that contains no supply or demand pins has a completely determined
+(and trivially computable) structure at every stage of the pipeline:
+
+| stage | implicit value | cost to compute |
+|-------|----------------|-----------------|
+| `sort_and_segment` | empty point list → single segment spanning full edge | O(1) |
+| BFR node/arc construction | zero-weight arc of capacity n, cost = edge length | O(1) |
+| `fragile_mccf` / Dijkstra | arc exists but is only entered if the wavefront reaches it | lazy |
+| `create_path_network_with_surplus` | already fixed to skip non-flow edges | done |
+
+The pipeline can be restructured so that edgeless roads are **never
+materialized** in the segment or BFR data structures. They are represented
+implicitly and only instantiated on demand when the Dijkstra wavefront
+reaches them.
+
+---
+
+## Per-Stage Plan
+
+### `sort_and_segment`
+
+Current: iterates all edges to build a sorted list of breakpoints per edge.
+
+Optimization: build only the edges that appear in the pin set.
+Edgeless edges are not placed in the segment dictionary at all.
+Any lookup for a missing edge returns the implicit single-segment result.
+
+Estimated speedup: ~linear in |E| → |pins|.
+
+### `build_flow_reduction` (BFR)
+
+Current: creates BFR nodes and arcs for every segment on every edge.
+
+Optimization: for each edge not in the segment dictionary, emit a single
+implicit arc (u → v) of cost = edge length, capacity = n, flow = 0.
+These arcs are **never written to memory** — instead, the Dijkstra
+relaxation accesses them through a virtual adjacency iterator that reads
+directly from the edges GeoDataFrame.
+
+The BFR graph thereby has:
+- **Dense region**: O(n) segment-nodes for edges that carry pins.
+- **Implicit region**: remaining ~|E| road arcs, accessed via the virtual
+  iterator only if the wavefront reaches them.
+
+Estimated speedup: BFR construction O(n) instead of O(|E|).
+
+### `fragile_mccf` / Dijkstra
+
+Current: already limits work to the Dijkstra wavefront — it never touches
+arcs that are not relaxed. No change needed here provided the implicit
+arc iterator is wired in.
+
+For the typical small-n case (n ≪ diameter), the Dijkstra wave stays
+confined to a small neighborhood around the supply/demand pins. Most of
+the implicit road arcs are never relaxed.
+
+### `create_path_network_with_surplus`
+
+Already fixed in the previous session: only processes edges in
+`pin_roads ∪ flow_roads`. No further work needed.
+
+---
+
+## Implementation Sequence
+
+1. **Segment dictionary with lazy fallback** — modify `sort_and_segment`
+   (or its caller) to return the implicit single-segment for missing edges.
+   Add a unit test: an edge with no pins should yield `[(0, length)]`.
+
+2. **Virtual arc iterator for BFR** — replace the full-edge loop in
+   `build_flow_reduction` with an iterator that:
+   a. Yields real BFR arcs for edges in the segment dictionary.
+   b. Yields a single implicit arc for each remaining graph edge.
+   Keep the rest of `fragile_mccf` unchanged.
+
+3. **Dijkstra integration** — ensure the Dijkstra relaxation step calls
+   the virtual arc iterator for each settled node. No change to the
+   priority queue or potential update logic.
+
+4. **Verify correctness** with existing integration tests and web app
+   profiling. Target: flow computation < 50 ms for 2–10 pins on Cambridge.
+
+---
+
+## Relation to SSP
+
+The SSP plan (`ssp.md`) calls for replacing `fragile_mccf` with successive
+single-unit Dijkstra augmentations. The lazy evaluation plan is orthogonal:
+
+- In **batch SSP**, each Dijkstra query benefits from the implicit arc
+  iterator — the wavefront expands only as far as needed.
+- In **incremental SSP** (one Dijkstra per new pin), the wavefront is
+  even smaller; the implicit region is barely touched.
+- In **capacity scaling** (if retained), the large-Δ early phases use a
+  sparse subgraph anyway; lazy eval ensures the dense final phase is also
+  bounded by the actual wavefront.
+
+The virtual arc iterator is the single shared primitive that unlocks
+O(wavefront) work in all three algorithms.
+
+---
+
+## Note on A* / Pluggable Shortest-Path (In Review)
+
+A natural question is whether A* with a Euclidean heuristic could replace
+Dijkstra inside SSP, exploiting the planar structure of road networks.
+
+**Why it does not extend cleanly to the residual graph:**
+
+After the first SSP augmentation, backward arcs appear with reduced cost
+**exactly 0** — they were on the previous augmenting path, which was tight,
+so the Johnson potential update `π(v) += d[v]` sets their reduced cost to
+zero. A path that uses such an arc costs 0 in reduced terms regardless of
+its geometric length. The Euclidean heuristic, which lower-bounds physical
+road distance, has no way to know this shortcut exists and can overestimate
+`d_π(v, t)` arbitrarily — violating admissibility and producing incorrect
+(non-optimal) augmentations.
+
+**Could we evolve the heuristic alongside the residual graph?**
+
+An ALT-style approach (A*, Landmarks, Triangle inequality) could maintain
+admissibility: precompute distances from/to k landmark nodes, and after each
+augmentation re-propagate along the changed arcs. Cost: O(k × path_length)
+per SSP step. Admissibility is preserved; the heuristic degrades gracefully
+as the residual graph diverges from the road graph. But this adds real
+complexity and the benefit is uncertain.
+
+**Natural cutoff for the ALT heuristic:**
+
+Before starting each A* query, compute `h_L(src)` in O(k). If
+`h_L(src) / euclidean_dist(src, t) < ε` (e.g. ε = 0.1), the heuristic is
+too weak to prune meaningfully — fall back to plain Dijkstra and skip the
+landmark maintenance overhead for this step. As backward arcs accumulate
+over many augmentations, the residual-graph landmark distances drift from
+their road-graph values and this ratio naturally decreases, so the fallback
+triggers more often in later SSP steps exactly when the overhead would be
+least justified.
+
+**Practical assessment:**
+
+Pin pairs can be far apart (across the city), so the Dijkstra wavefront is
+not guaranteed to be small even after lazy evaluation. The ALT approach is
+potentially worthwhile for long-distance queries where heuristic guidance
+is strong. Whether the landmark maintenance cost (O(k × path_length) per
+augmentation) is justified depends on measured benefit; the O(k) pre-check
+above makes it easy to skip when it isn't.
+
+**Where A* does apply cleanly:** the pure road-graph distance oracle (no
+residual arcs) used for precomputation or the initial all-pairs distance
+matrix. Euclidean heuristic is admissible there and worth using if that
+oracle becomes a bottleneck.
+
+---
+
+## Open Questions
+
+- Does `build_flow_reduction` own the arc storage, or does `fragile_mccf`?
+  Determines where the virtual iterator is inserted.
+- Are there edges in the osmnx graph with `oneway=True` that need asymmetric
+  treatment in the implicit arc iterator?
+- `sort_and_segment` currently returns a list; should the implicit fallback
+  be a `__missing__` dict subclass or an explicit helper function?
