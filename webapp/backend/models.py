@@ -18,8 +18,13 @@ class Trail(BaseModel):
     coordinates: list[tuple[float, float]]
 
 
+class Pair(BaseModel):
+    supply_id: str
+    demand_id: str
+
+
 class Matching(BaseModel):
-    pairs: list[tuple[str, str]]
+    pairs: list[Pair]
     trails: list[Trail]
 
 

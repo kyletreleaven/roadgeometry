@@ -8,6 +8,8 @@ dependencies = [
     "fastapi>=0.136.1",
     "osmnx>=2.1.0",
     "pyproj>=3.7.2",
+    "setiptah-roadgeometry",
+    "setiptah-roadgeometry-matching",
     "shapely>=2.1.2",
     "uvicorn[standard]>=0.46.0",
 ]
@@ -16,3 +18,7 @@ dependencies = [
 dev = [
     "pytest>=9.0.3",
 ]
+
+[tool.uv.sources]
+setiptah-roadgeometry = { path = "../../setiptah-roadgeometry", editable = true }
+setiptah-roadgeometry-matching = { path = "../../setiptah-roadgeometry-matching", editable = true }

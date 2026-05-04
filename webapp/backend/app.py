@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 import network
+import matching as matching_module
 from models import ClickRequest, AddPinResponse, PinResponse, Matching
 from state import session
 
@@ -34,9 +35,10 @@ def add_pin(req: ClickRequest):
     pin = session.add_pin(snapped['lat'], snapped['lon'])
     pin.road = snapped['road']
     pin.y = snapped['y']
+    result = matching_module.run_matching(session)
     return AddPinResponse(
         pin=PinResponse(id=pin.id, kind=pin.kind, lat=pin.lat, lon=pin.lon),
-        matching=Matching(pairs=[], trails=[]),
+        matching=Matching(**result),
     )
 
 
@@ -44,7 +46,8 @@ def add_pin(req: ClickRequest):
 def remove_pin(pin_id: str):
     if not session.remove_pin(pin_id):
         raise HTTPException(status_code=400, detail='Cannot remove: would exceed imbalance')
-    return {'matching': Matching(pairs=[], trails=[])}
+    result = matching_module.run_matching(session)
+    return {'matching': Matching(**result)}
 
 
 @app.post('/reset')

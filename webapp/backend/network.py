@@ -5,6 +5,7 @@ import threading
 import osmnx as ox
 import pyproj
 from shapely.geometry import Point
+from setiptah.roadgeometry.geopandas import GeoFramesNetwork
 
 CACHE_PATH = os.path.join(os.path.dirname(__file__), 'cambridge.graphml')
 TTL_SECONDS = 30 * 24 * 3600  # 30 days
@@ -14,6 +15,7 @@ _DIST = 2500
 
 _G = None
 _edges = None       # edges GeoDataFrame, indexed by (u, v, k)
+_roadnet = None     # GeoFramesNetwork wrapping _G
 _to_utm = None      # pyproj Transformer: WGS84 → graph UTM CRS
 _from_utm = None    # pyproj Transformer: graph UTM CRS → WGS84
 _ready = False
@@ -26,7 +28,7 @@ def _cache_fresh() -> bool:
 
 
 def _load():
-    global _G, _edges, _to_utm, _from_utm, _ready
+    global _G, _edges, _roadnet, _to_utm, _from_utm, _ready
 
     if _cache_fresh():
         G = ox.load_graphml(CACHE_PATH)
@@ -38,12 +40,23 @@ def _load():
     crs = G.graph['crs']
     to_utm = pyproj.Transformer.from_crs('EPSG:4326', crs, always_xy=True)
     from_utm = pyproj.Transformer.from_crs(crs, 'EPSG:4326', always_xy=True)
-    _, edges = ox.graph_to_gdfs(G)
+    nodes, edges = ox.graph_to_gdfs(G)
+    edges['u'] = edges.index.get_level_values('u')
+    edges['v'] = edges.index.get_level_values('v')
 
     _ = edges.sindex  # build spatial index once at load time
 
+    roadnet = GeoFramesNetwork(
+        edges_gdf=edges,
+        nodes_gdf=nodes,
+        left_col='u',
+        right_col='v',
+        oneway_col='oneway',
+    )
+
     _G = G
     _edges = edges
+    _roadnet = roadnet
     _to_utm = to_utm
     _from_utm = from_utm
     _ready = True
