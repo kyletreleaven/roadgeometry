@@ -51,6 +51,7 @@ dependencies = [
     { name = "pyproj" },
     { name = "setiptah-roadgeometry" },
     { name = "setiptah-roadgeometry-matching" },
+    { name = "setiptah-roadgeometry-matching-cpp" },
     { name = "shapely" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -67,6 +68,7 @@ requires-dist = [
     { name = "pyproj", specifier = ">=3.7.2" },
     { name = "setiptah-roadgeometry", editable = "../../setiptah-roadgeometry" },
     { name = "setiptah-roadgeometry-matching", editable = "../../setiptah-roadgeometry-matching" },
+    { name = "setiptah-roadgeometry-matching-cpp", editable = "../../setiptah-roadgeometry-matching-cpp" },
     { name = "shapely", specifier = ">=2.1.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.46.0" },
 ]
@@ -1188,6 +1190,11 @@ requires-dist = [
     { name = "tqdm", marker = "extra == 'dev'" },
 ]
 provides-extras = ["test", "dev"]
+
+[[package]]
+name = "setiptah-roadgeometry-matching-cpp"
+version = "0.1.0"
+source = { editable = "../../setiptah-roadgeometry-matching-cpp" }
 
 [[package]]
 name = "shapely"

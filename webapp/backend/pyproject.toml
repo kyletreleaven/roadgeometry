@@ -10,6 +10,7 @@ dependencies = [
     "pyproj>=3.7.2",
     "setiptah-roadgeometry",
     "setiptah-roadgeometry-matching",
+    "setiptah-roadgeometry-matching-cpp",
     "shapely>=2.1.2",
     "uvicorn[standard]>=0.46.0",
 ]
@@ -22,3 +23,4 @@ dev = [
 [tool.uv.sources]
 setiptah-roadgeometry = { path = "../../setiptah-roadgeometry", editable = true }
 setiptah-roadgeometry-matching = { path = "../../setiptah-roadgeometry-matching", editable = true }
+setiptah-roadgeometry-matching-cpp = { path = "../../setiptah-roadgeometry-matching-cpp", editable = true }
