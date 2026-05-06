@@ -31,6 +31,13 @@ interface Matching {
   trails: Trail[]
 }
 
+interface BackendEntry {
+  current: string
+  available: string[]
+}
+
+type BackendState = Record<string, BackendEntry>
+
 export default function App() {
   const mapDiv = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
@@ -40,7 +47,7 @@ export default function App() {
   const readyRef = useRef(false)
   const [ready, setReady] = useState(false)
   const [timing, setTiming] = useState<Timing | null>(null)
-  const [backend, setBackend] = useState<Record<string, string> | null>(null)
+  const [backend, setBackend] = useState<BackendState | null>(null)
 
   useEffect(() => {
     if (!map.current && mapDiv.current) {
@@ -63,7 +70,6 @@ export default function App() {
           if (data.ready) {
             readyRef.current = true
             setReady(true)
-            setBackend(data.matching_backend ?? null)
             break
           }
         } catch {}
@@ -71,6 +77,9 @@ export default function App() {
       }
     }
     pollStatus()
+
+    fetch('/reset', { method: 'POST' }).catch(() => {})
+    fetch('/backend').then(r => r.json()).then(setBackend).catch(() => {})
 
     const onClick = async (e: L.LeafletMouseEvent) => {
       if (!readyRef.current) return
@@ -95,6 +104,19 @@ export default function App() {
       map.current!.off('click', onClick)
     }
   }, [])
+
+  async function selectBackend(key: string, value: string) {
+    try {
+      const res = await fetch('/backend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value }),
+      })
+      setBackend(await res.json())
+    } catch (err) {
+      console.error('POST /backend failed:', err)
+    }
+  }
 
   function placeMarker(pin: Pin) {
     const color = PIN_COLOR[pin.kind]
@@ -151,12 +173,23 @@ export default function App() {
       {(timing || backend) && (
         <div style={{
           position: 'absolute', bottom: 12, left: 12, zIndex: 1000,
-          background: 'rgba(255,255,255,0.85)', padding: '4px 8px',
+          background: 'rgba(255,255,255,0.85)', padding: '6px 8px',
           fontFamily: 'monospace', fontSize: 12, borderRadius: 3,
-          border: '1px solid #ccc', lineHeight: 1.6,
+          border: '1px solid #ccc', lineHeight: 1.8,
         }}>
-          {backend && Object.entries(backend).map(([k, v]) => (
-            <div key={k}>{k}: <span style={{ color: v === 'cpp' ? '#080' : '#a00' }}>{v}</span></div>
+          {backend && Object.entries(backend).map(([key, { current, available }]) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ marginRight: 4, color: '#555' }}>{key}:</span>
+              {available.map(v => (
+                <button key={v} onClick={() => selectBackend(key, v)} style={{
+                  padding: '0px 5px', fontSize: 11, cursor: 'pointer',
+                  background: v === current ? '#333' : '#eee',
+                  color: v === current ? '#fff' : '#555',
+                  border: '1px solid #aaa', borderRadius: 2,
+                  fontFamily: 'monospace',
+                }}>{v}</button>
+              ))}
+            </div>
           ))}
           {timing && backend && <div style={{ borderTop: '1px solid #ddd', margin: '3px 0' }} />}
           {timing && <>

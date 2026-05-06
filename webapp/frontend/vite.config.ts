@@ -10,6 +10,7 @@ export default defineConfig({
       '/pins': 'http://localhost:8000',
       '/reset': 'http://localhost:8000',
       '/state': 'http://localhost:8000',
+      '/backend': 'http://localhost:8000',
     },
   },
 })

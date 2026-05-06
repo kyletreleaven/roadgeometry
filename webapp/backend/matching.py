@@ -2,7 +2,10 @@ import time
 
 from setiptah.roadgeometry.geopandas import GeoFramesNetwork
 from setiptah.roadgeometry.matching import RoadnetMatchingProblem, MatchingResult
-from setiptah.roadgeometry.matching.bm import _cpp, _cpp_compute_optimal_flow
+from setiptah.roadgeometry.matching.bm import (
+    _cpp, _cpp_compute_optimal_flow,
+    compute_segments2, default_compute_segments, default_flow_solver,
+)
 from setiptah.roadgeometry.matching.geopandas import create_path_network_with_surplus
 from setiptah.roadgeometry.dijkstra import RoadnetMetric, PointNode
 
@@ -10,11 +13,22 @@ import network
 from state import Session
 
 
-def backend_info() -> dict:
-    return {
-        'sort_and_segment': 'cpp' if _cpp is not None else 'python',
-        'compute_optimal_flow': 'cpp' if _cpp_compute_optimal_flow is not None else 'python',
-    }
+_AVAILABLE: dict[str, list[str]] = {
+    'sort_and_segment': (['cpp', 'python'] if _cpp is not None else ['python']),
+    'compute_optimal_flow': (['cpp', 'python'] if _cpp_compute_optimal_flow is not None else ['python']),
+}
+
+_selection: dict[str, str] = {k: 'python' for k in _AVAILABLE}
+
+
+def backend_state() -> dict:
+    return {k: {'current': _selection[k], 'available': _AVAILABLE[k]} for k in _AVAILABLE}
+
+
+def set_backend(key: str, value: str) -> None:
+    if key not in _AVAILABLE or value not in _AVAILABLE[key]:
+        raise ValueError(f"invalid backend: {key}={value!r}")
+    _selection[key] = value
 
 
 def run_matching(session: Session) -> dict:
@@ -32,9 +46,21 @@ def run_matching(session: Session) -> dict:
     edges_gdf = network._edges
     from_utm = network._from_utm
 
+    compute_segments = (
+        default_compute_segments if _selection['sort_and_segment'] == 'cpp'
+        else compute_segments2
+    )
+    flow_solver = (
+        None if _selection['compute_optimal_flow'] == 'cpp'
+        else default_flow_solver
+    )
+
     t0 = time.perf_counter()
-    matching, flow = RoadnetMatchingProblem(P, Q, roadnet).compute_optimal_results(
-        MatchingResult.MATCHING, MatchingResult.FLOW)
+    matching, flow = RoadnetMatchingProblem(
+        P, Q, roadnet,
+        compute_segments=compute_segments,
+        flow_solver=flow_solver,
+    ).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.FLOW)
     t1 = time.perf_counter()
 
     pin_roads = {road for road, _ in P + Q}

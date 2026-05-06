@@ -27,7 +27,22 @@ app.add_middleware(
 
 @app.get('/status')
 def status():
-    return {'ready': network.is_ready(), 'matching_backend': matching_module.backend_info()}
+    return {'ready': network.is_ready()}
+
+
+@app.get('/backend')
+def get_backend():
+    return matching_module.backend_state()
+
+
+@app.post('/backend')
+def update_backend(req: dict[str, str]):
+    for key, value in req.items():
+        try:
+            matching_module.set_backend(key, value)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    return matching_module.backend_state()
 
 
 @app.post('/pins', response_model=AddPinResponse)
