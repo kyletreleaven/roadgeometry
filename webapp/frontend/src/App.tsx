@@ -40,6 +40,7 @@ export default function App() {
   const readyRef = useRef(false)
   const [ready, setReady] = useState(false)
   const [timing, setTiming] = useState<Timing | null>(null)
+  const [backend, setBackend] = useState<Record<string, string> | null>(null)
 
   useEffect(() => {
     if (!map.current && mapDiv.current) {
@@ -62,6 +63,7 @@ export default function App() {
           if (data.ready) {
             readyRef.current = true
             setReady(true)
+            setBackend(data.matching_backend ?? null)
             break
           }
         } catch {}
@@ -146,18 +148,24 @@ export default function App() {
           Loading road network…
         </div>
       )}
-      {timing && (
+      {(timing || backend) && (
         <div style={{
           position: 'absolute', bottom: 12, left: 12, zIndex: 1000,
           background: 'rgba(255,255,255,0.85)', padding: '4px 8px',
           fontFamily: 'monospace', fontSize: 12, borderRadius: 3,
           border: '1px solid #ccc', lineHeight: 1.6,
         }}>
-          flow: {timing.flow_ms.toFixed(1)}ms<br />
-          path network: {timing.path_network_ms.toFixed(1)}ms<br />
-          trails: {timing.trails_ms.toFixed(1)}ms<br />
-          matching: {timing.matching_ms.toFixed(1)}ms<br />
-          total: {timing.total_ms.toFixed(1)}ms
+          {backend && Object.entries(backend).map(([k, v]) => (
+            <div key={k}>{k}: <span style={{ color: v === 'cpp' ? '#080' : '#a00' }}>{v}</span></div>
+          ))}
+          {timing && backend && <div style={{ borderTop: '1px solid #ddd', margin: '3px 0' }} />}
+          {timing && <>
+            flow: {timing.flow_ms.toFixed(1)}ms<br />
+            path network: {timing.path_network_ms.toFixed(1)}ms<br />
+            trails: {timing.trails_ms.toFixed(1)}ms<br />
+            matching: {timing.matching_ms.toFixed(1)}ms<br />
+            total: {timing.total_ms.toFixed(1)}ms
+          </>}
         </div>
       )}
     </div>

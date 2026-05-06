@@ -27,7 +27,7 @@ app.add_middleware(
 
 @app.get('/status')
 def status():
-    return {'ready': network.is_ready()}
+    return {'ready': network.is_ready(), 'matching_backend': matching_module.backend_info()}
 
 
 @app.post('/pins', response_model=AddPinResponse)

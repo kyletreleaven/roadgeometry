@@ -2,11 +2,19 @@ import time
 
 from setiptah.roadgeometry.geopandas import GeoFramesNetwork
 from setiptah.roadgeometry.matching import RoadnetMatchingProblem, MatchingResult
+from setiptah.roadgeometry.matching.bm import _cpp, _cpp_compute_optimal_flow
 from setiptah.roadgeometry.matching.geopandas import create_path_network_with_surplus
 from setiptah.roadgeometry.dijkstra import RoadnetMetric, PointNode
 
 import network
 from state import Session
+
+
+def backend_info() -> dict:
+    return {
+        'sort_and_segment': 'cpp' if _cpp is not None else 'python',
+        'compute_optimal_flow': 'cpp' if _cpp_compute_optimal_flow is not None else 'python',
+    }
 
 
 def run_matching(session: Session) -> dict:
