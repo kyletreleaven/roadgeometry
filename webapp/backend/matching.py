@@ -37,7 +37,7 @@ def run_matching(session: Session) -> dict:
     n = min(len(supply_pins), len(demand_pins))
 
     if n == 0:
-        return {'pairs': [], 'trails': [], 'timing': {'flow_ms': 0, 'path_network_ms': 0, 'trails_ms': 0}}
+        return {'pairs': [], 'trails': [], 'timing': {'translate_ms': 0, 'flow_ms': 0, 'path_network_ms': 0, 'trails_ms': 0}}
 
     P = [(p.road, p.y) for p in supply_pins[:n]]
     Q = [(p.road, p.y) for p in demand_pins[:n]]
@@ -52,10 +52,12 @@ def run_matching(session: Session) -> dict:
         endpoints = {road: roadnet.endpoints(road) for road in roadnet.edges()}
         lengths   = {road: roadnet.length(road)    for road in roadnet.edges()}
         is_oneway = {road: roadnet.is_oneway(road) for road in roadnet.edges()}
+        t_translated = time.perf_counter()
         matching, _ = _cpp.compute_matching(list(P), list(Q), endpoints, lengths, is_oneway)
         t1 = time.perf_counter()
         pathnet, segments_gdf = create_path_network_with_surplus(P, Q, roadnet, edges_gdf)
     else:
+        t_translated = t0
         compute_segments = (
             default_compute_segments if _selection['sort_and_segment'] == 'cpp'
             else compute_segments2
@@ -102,7 +104,8 @@ def run_matching(session: Session) -> dict:
         'pairs': pairs,
         'trails': trails,
         'timing': {
-            'flow_ms': (t1 - t0) * 1000,
+            'translate_ms': (t_translated - t0) * 1000,
+            'flow_ms': (t1 - t_translated) * 1000,
             'path_network_ms': (t2 - t1) * 1000,
             'trails_ms': (t3 - t2) * 1000,
         },

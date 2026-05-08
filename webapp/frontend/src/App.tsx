@@ -20,6 +20,7 @@ interface Trail {
 }
 
 interface Timing {
+  translate_ms: number
   flow_ms: number
   path_network_ms: number
   trails_ms: number
@@ -193,6 +194,7 @@ export default function App() {
           ))}
           {timing && backend && <div style={{ borderTop: '1px solid #ddd', margin: '3px 0' }} />}
           {timing && <>
+            {timing.translate_ms > 0 && <>translate: {timing.translate_ms.toFixed(1)}ms<br /></>}
             flow: {timing.flow_ms.toFixed(1)}ms<br />
             path network: {timing.path_network_ms.toFixed(1)}ms<br />
             trails: {timing.trails_ms.toFixed(1)}ms<br />
