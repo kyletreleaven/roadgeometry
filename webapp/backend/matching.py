@@ -15,7 +15,7 @@ from state import Session
 
 _AVAILABLE: dict[str, list[str]] = {
     'sort_and_segment': (['cpp', 'python'] if _cpp is not None else ['python']),
-    'compute_optimal_flow': (['cpp', 'python'] if _cpp_compute_optimal_flow is not None else ['python']),
+    'compute_optimal_flow': (['cpp', 'python'] if _cpp is not None else ['python']),
 }
 
 _selection: dict[str, str] = {k: 'python' for k in _AVAILABLE}
@@ -46,34 +46,38 @@ def run_matching(session: Session) -> dict:
     edges_gdf = network._edges
     from_utm = network._from_utm
 
-    compute_segments = (
-        default_compute_segments if _selection['sort_and_segment'] == 'cpp'
-        else compute_segments2
-    )
-    flow_solver = (
-        None if _selection['compute_optimal_flow'] == 'cpp'
-        else default_flow_solver
-    )
-
     t0 = time.perf_counter()
-    matching, flow = RoadnetMatchingProblem(
-        P, Q, roadnet,
-        compute_segments=compute_segments,
-        flow_solver=flow_solver,
-    ).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.FLOW)
-    t1 = time.perf_counter()
 
-    pin_roads = {road for road, _ in P + Q}
-    flow_roads = {road for road, f in flow.items() if f != 0}
-    relevant = pin_roads | flow_roads
-    sub_edges = edges_gdf.loc[sorted(relevant, key=lambda r: edges_gdf.index.get_loc(r))]
-    sub_nodes = network._nodes.loc[list(set(sub_edges['u']) | set(sub_edges['v']))]
-    sub_roadnet = GeoFramesNetwork(
-        edges_gdf=sub_edges, nodes_gdf=sub_nodes,
-        left_col='u', right_col='v', oneway_col='oneway',
-    )
+    if _selection['compute_optimal_flow'] == 'cpp' and _cpp is not None:
+        endpoints = {road: roadnet.endpoints(road) for road in roadnet.edges()}
+        lengths   = {road: roadnet.length(road)    for road in roadnet.edges()}
+        is_oneway = {road: roadnet.is_oneway(road) for road in roadnet.edges()}
+        matching, _ = _cpp.compute_matching(list(P), list(Q), endpoints, lengths, is_oneway)
+        t1 = time.perf_counter()
+        pathnet, segments_gdf = create_path_network_with_surplus(P, Q, roadnet, edges_gdf)
+    else:
+        compute_segments = (
+            default_compute_segments if _selection['sort_and_segment'] == 'cpp'
+            else compute_segments2
+        )
+        matching, flow = RoadnetMatchingProblem(
+            P, Q, roadnet,
+            compute_segments=compute_segments,
+            flow_solver=default_flow_solver,
+        ).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.FLOW)
+        t1 = time.perf_counter()
 
-    pathnet, segments_gdf = create_path_network_with_surplus(P, Q, sub_roadnet, sub_edges)
+        pin_roads = {road for road, _ in P + Q}
+        flow_roads = {road for road, f in flow.items() if f != 0}
+        relevant = pin_roads | flow_roads
+        sub_edges = edges_gdf.loc[sorted(relevant, key=lambda r: edges_gdf.index.get_loc(r))]
+        sub_nodes = network._nodes.loc[list(set(sub_edges['u']) | set(sub_edges['v']))]
+        sub_roadnet = GeoFramesNetwork(
+            edges_gdf=sub_edges, nodes_gdf=sub_nodes,
+            left_col='u', right_col='v', oneway_col='oneway',
+        )
+        pathnet, segments_gdf = create_path_network_with_surplus(P, Q, sub_roadnet, sub_edges)
+
     path_metric = RoadnetMetric(pathnet)
     t2 = time.perf_counter()
 
