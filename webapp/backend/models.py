@@ -31,7 +31,7 @@ class Matching(BaseModel):
 class Timing(BaseModel):
     translate_ms: float        # building endpoints/lengths/is_oneway dicts (cpp path only)
     flow_ms: float             # compute_optimal (flow + matching)
-    path_network_ms: float     # create_path_network_with_surplus
+    trails_build_ms: float     # trails_from_flow
     trails_ms: float           # shortest path + coord extraction
     matching_ms: float         # total run_matching()
     total_ms: float            # full request

@@ -22,7 +22,7 @@ interface Trail {
 interface Timing {
   translate_ms: number
   flow_ms: number
-  path_network_ms: number
+  trails_build_ms: number
   trails_ms: number
   matching_ms: number
   total_ms: number
@@ -196,7 +196,7 @@ export default function App() {
           {timing && <>
             {timing.translate_ms > 0 && <>translate: {timing.translate_ms.toFixed(1)}ms<br /></>}
             flow: {timing.flow_ms.toFixed(1)}ms<br />
-            path network: {timing.path_network_ms.toFixed(1)}ms<br />
+            trails build: {timing.trails_build_ms.toFixed(1)}ms<br />
             trails: {timing.trails_ms.toFixed(1)}ms<br />
             matching: {timing.matching_ms.toFixed(1)}ms<br />
             total: {timing.total_ms.toFixed(1)}ms
