@@ -1,10 +1,11 @@
 import time
 
-from setiptah.roadgeometry.matching import RoadnetMatchingProblem, MatchingResult
 from setiptah.roadgeometry.matching.bm import (
     _cpp, _cpp_compute_optimal_flow,
-    compute_segments2, default_compute_segments, default_flow_solver,
+    compute_segments2, PREMATCH,
+    flow_from_segments, compute_matching_for_acyclic_flow,
 )
+from setiptah.roadgeometry.matching.nxopt.cvxcostflow import MinConvexCostFlow
 from setiptah.roadgeometry.matching.geopandas import trails_from_flow
 
 import network
@@ -12,7 +13,7 @@ from state import Session
 
 
 _AVAILABLE: dict[str, list[str]] = {
-    'sort_and_segment': (['cpp', 'python'] if _cpp is not None else ['python']),
+    'sort_and_segment':    (['cpp', 'python'] if _cpp is not None else ['python']),
     'compute_optimal_flow': (['cpp', 'python'] if _cpp_compute_optimal_flow is not None else ['python']),
 }
 
@@ -40,28 +41,45 @@ def run_matching(session: Session) -> dict:
     P = [(p.road, p.y) for p in supply_pins[:n]]
     Q = [(p.road, p.y) for p in demand_pins[:n]]
 
-    roadnet = network._roadnet
-    from_utm = network._from_utm
-
-    compute_segments = (
-        default_compute_segments if _selection['sort_and_segment'] == 'cpp'
-        else compute_segments2
-    )
-    flow_solver = (
-        None if _selection['compute_optimal_flow'] == 'cpp'
-        else default_flow_solver
-    )
+    roadnet   = network._roadnet
+    from_utm  = network._from_utm
 
     t0 = time.perf_counter()
 
-    matching, flow = RoadnetMatchingProblem(
-        P, Q, roadnet,
-        compute_segments=compute_segments,
-        flow_solver=flow_solver,
-    ).compute_optimal_results(MatchingResult.MATCHING, MatchingResult.FLOW)
+    # --- sort and segment ---
+    if _selection['sort_and_segment'] == 'cpp':
+        segment_dict = _cpp.sort_and_segment(P, Q, list(roadnet.edges()))
+    else:
+        segment_dict = compute_segments2(P, Q, roadnet)
+
+    # --- prematch ---
+    matching = []
+    for seg in segment_dict.values():
+        matching.extend(PREMATCH(seg))
+
+    # --- optimal flow ---
+    if _selection['compute_optimal_flow'] == 'cpp':
+        flow = _cpp_compute_optimal_flow(
+            segment_dict,
+            {r: roadnet.endpoints(r) for r in segment_dict},
+            {r: roadnet.length(r)    for r in segment_dict},
+            {r: roadnet.is_oneway(r) for r in segment_dict},
+        )
+    else:
+        flow = flow_from_segments(segment_dict, roadnet, flow_solver=MinConvexCostFlow)
+
+    # --- matching from flow ---
+    more_matching, _ = compute_matching_for_acyclic_flow(flow, segment_dict, roadnet)
+    matching.extend(more_matching)
 
     t1 = time.perf_counter()
 
+    # --- trail geometry ---
+    compute_segments = (
+        (lambda P, Q, rn: _cpp.sort_and_segment(P, Q, list(rn.edges())))
+        if _selection['sort_and_segment'] == 'cpp'
+        else compute_segments2
+    )
     trails_gdf = trails_from_flow(flow, P, Q, roadnet, compute_segments=compute_segments)
 
     t2 = time.perf_counter()
@@ -84,9 +102,9 @@ def run_matching(session: Session) -> dict:
         'pairs': pairs,
         'trails': trails,
         'timing': {
-            'translate_ms': 0,
-            'flow_ms': (t1 - t0) * 1000,
+            'translate_ms':  0,
+            'flow_ms':        (t1 - t0) * 1000,
             'trails_build_ms': (t2 - t1) * 1000,
-            'trails_ms': (t3 - t2) * 1000,
+            'trails_ms':      (t3 - t2) * 1000,
         },
     }
