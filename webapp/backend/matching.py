@@ -59,12 +59,8 @@ def run_matching(session: Session) -> dict:
 
     # --- optimal flow ---
     if _selection['compute_optimal_flow'] == 'cpp':
-        flow = _cpp_compute_optimal_flow(
-            segment_dict,
-            {r: roadnet.endpoints(r) for r in segment_dict},
-            {r: roadnet.length(r)    for r in segment_dict},
-            {r: roadnet.is_oneway(r) for r in segment_dict},
-        )
+        endpoints, lengths, is_oneway = roadnet.graph_props(segment_dict)
+        flow = _cpp_compute_optimal_flow(segment_dict, endpoints, lengths, is_oneway)
     else:
         flow = flow_from_segments(segment_dict, roadnet, flow_solver=MinConvexCostFlow)
 

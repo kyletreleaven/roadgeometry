@@ -46,6 +46,17 @@ class GeoFramesNetwork(Roadnet):
             return self.oneway_default
         return self.edges_gdf[self.oneway_col].loc[road]
 
+    def graph_props(self, roads) -> tuple[dict, dict, dict]:
+        """Return (endpoints, lengths, is_oneway) dicts for roads using vectorized column access."""
+        sub = self.edges_gdf.loc[list(roads)]
+        endpoints = dict(zip(sub.index, zip(sub[self.left_col], sub[self.right_col])))
+        lengths   = sub.geometry.length.to_dict()
+        if self.oneway_col is not None:
+            is_oneway = sub[self.oneway_col].to_dict()
+        else:
+            is_oneway = dict.fromkeys(sub.index, self.oneway_default)
+        return endpoints, lengths, is_oneway
+
 
 @dataclass(frozen=True)
 class GeoFramesRoads:
