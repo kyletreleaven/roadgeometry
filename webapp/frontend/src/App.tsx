@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -7,6 +7,11 @@ const DEFAULT_ZOOM = 14
 
 const PIN_COLOR = { supply: '#e03030', demand: '#3060e0' }
 const TRAIL_STYLE = { color: '#444', weight: 3, opacity: 0.8 }
+const BTN_STYLE: React.CSSProperties = {
+  padding: '0px 5px', fontSize: 11, cursor: 'pointer',
+  background: '#eee', color: '#555', border: '1px solid #aaa',
+  borderRadius: 2, fontFamily: 'monospace',
+}
 
 interface Pin {
   id: string
@@ -159,6 +164,16 @@ export default function App() {
     markers.current.clear()
   }
 
+  async function handleCapture() {
+    try {
+      const res = await fetch('/capture', { method: 'POST' })
+      const data = await res.json()
+      alert(`Saved ${data.saved} (${data.n_supply}S + ${data.n_demand}D)`)
+    } catch (err) {
+      console.error('POST /capture failed:', err)
+    }
+  }
+
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative' }}>
       <div ref={mapDiv} style={{ width: '100%', height: '100%' }} />
@@ -201,6 +216,11 @@ export default function App() {
             matching: {timing.matching_ms.toFixed(1)}ms<br />
             total: {timing.total_ms.toFixed(1)}ms
           </>}
+          <div style={{ borderTop: '1px solid #ddd', margin: '3px 0' }} />
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button onClick={handleReset}   style={BTN_STYLE}>reset</button>
+            <button onClick={handleCapture} style={BTN_STYLE}>capture</button>
+          </div>
         </div>
       )}
     </div>

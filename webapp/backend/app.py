@@ -76,6 +76,22 @@ def reset():
     return {}
 
 
+@app.post('/capture')
+def capture():
+    from setiptah.roadgeometry.matching.io import save_instance_npz
+
+    supply_pins = [p for p in session.pins if p.kind == 'supply' and p.road is not None]
+    demand_pins = [p for p in session.pins if p.kind == 'demand' and p.road is not None]
+    n = min(len(supply_pins), len(demand_pins))
+
+    P = [(p.road, p.y) for p in supply_pins[:n]]
+    Q = [(p.road, p.y) for p in demand_pins[:n]]
+
+    path = 'captured_case.npz'
+    save_instance_npz(path, P, Q, network._roadnet)
+    return {'saved': path, 'n_supply': len(P), 'n_demand': len(Q)}
+
+
 @app.get('/state')
 def get_state():
     return {

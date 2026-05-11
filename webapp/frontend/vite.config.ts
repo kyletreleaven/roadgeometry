@@ -11,6 +11,7 @@ export default defineConfig({
       '/reset': 'http://localhost:8000',
       '/state': 'http://localhost:8000',
       '/backend': 'http://localhost:8000',
+      '/capture': 'http://localhost:8000',
     },
   },
 })
