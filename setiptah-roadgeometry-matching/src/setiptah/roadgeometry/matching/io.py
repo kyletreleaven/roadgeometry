@@ -1,17 +1,11 @@
-"""JSON serialization helpers for road network matching data.
+"""Serialization helpers for road network matching data.
 
-Usage pattern:
-    doc = {
-        "roadnet": roadnet_to_json(rn),
-        "supply":  point_set_to_json(PP, rn),
-        "demand":  point_set_to_json(QQ, rn),
-        "flow":    {edge_to_id[e]: v for e, v in flow.items()},
-    }
-    json.dump(doc, fp)
+JSON helpers (roadnet_to_json / roadnet_from_json / point_set_*) use a
+human-readable dict format suitable for small instances and debugging logs.
 
-    doc = json.load(fp)
-    rn = roadnet_from_json(doc["roadnet"])
-    PP = point_set_from_json(doc["supply"])
+Numpy helpers (save_case / load_case) write a compact .npz archive where
+road and vertex IDs are normalized to contiguous integers.  Use these for
+capturing app sessions as self-contained unit-test fixtures.
 """
 import json
 
@@ -79,3 +73,62 @@ def point_set_to_json(points, edge_to_id: dict) -> list:
 def point_set_from_json(data: list) -> list:
     """Deserialize a point set to a list of (edge_id, offset) pairs."""
     return [(_id_from_json(eid), y) for eid, y in data]
+
+
+# ---------------------------------------------------------------------------
+# Numpy .npz case format
+# ---------------------------------------------------------------------------
+
+def save_instance_npz(path: str, P, Q, roadnet) -> None:
+    """Save a matching instance to a compressed numpy archive.
+
+    Road and vertex IDs are normalized to contiguous integers so the file is
+    self-contained and loadable without the original network object.
+    """
+    import numpy as np
+
+    nodes = list(roadnet.nodes())
+    node_idx = {n: i for i, n in enumerate(nodes)}
+
+    roads = list(roadnet.edges())
+    road_idx = {r: i for i, r in enumerate(roads)}
+
+    edge_u      = np.array([node_idx[roadnet.endpoints(r)[0]] for r in roads], dtype=np.int64)
+    edge_v      = np.array([node_idx[roadnet.endpoints(r)[1]] for r in roads], dtype=np.int64)
+    edge_length = np.array([roadnet.length(r)    for r in roads], dtype=np.float64)
+    edge_oneway = np.array([roadnet.is_oneway(r) for r in roads], dtype=bool)
+
+    np.savez_compressed(
+        path,
+        supply_road=np.array([road_idx[r] for r, _ in P], dtype=np.int64),
+        supply_y   =np.array([y           for _, y in P], dtype=np.float64),
+        demand_road=np.array([road_idx[r] for r, _ in Q], dtype=np.int64),
+        demand_y   =np.array([y           for _, y in Q], dtype=np.float64),
+        edge_u=edge_u,
+        edge_v=edge_v,
+        edge_length=edge_length,
+        edge_oneway=edge_oneway,
+        n_vertices=np.array([len(nodes)], dtype=np.int64),
+    )
+
+
+def load_instance_npz(path: str):
+    """Load a matching instance from a compressed numpy archive.
+
+    Returns (P, Q, roadnet) where roadnet is an IntRoadnet with roads 0..N-1
+    and vertices 0..M-1.
+    """
+    import numpy as np
+    from setiptah.roadgeometry.graphs import IntRoadnet, RoadInfo
+
+    data = np.load(path)
+    roads = tuple(
+        RoadInfo(float(l), int(u), int(v), bool(ow))
+        for l, u, v, ow in zip(
+            data['edge_length'], data['edge_u'], data['edge_v'], data['edge_oneway'],
+        )
+    )
+    roadnet = IntRoadnet(roads=roads, n_vertices=int(data['n_vertices'][0]))
+    P = list(zip(data['supply_road'].tolist(), data['supply_y'].tolist()))
+    Q = list(zip(data['demand_road'].tolist(), data['demand_y'].tolist()))
+    return P, Q, roadnet
