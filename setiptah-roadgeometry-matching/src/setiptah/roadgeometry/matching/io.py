@@ -112,23 +112,55 @@ def save_instance_npz(path: str, P, Q, roadnet) -> None:
     )
 
 
-def load_instance_npz(path: str):
-    """Load a matching instance from a compressed numpy archive.
+# ---------------------------------------------------------------------------
+# GeoFramesNetwork zip archive format  (.zip containing parquet + npz + json)
+# ---------------------------------------------------------------------------
 
-    Returns (P, Q, roadnet) where roadnet is an IntRoadnet with roads 0..N-1
-    and vertices 0..M-1.
+def save_instance_geo(P, Q, roadnet, path: str) -> None:
+    """Save a matching instance to a zip archive.
+
+    The archive contains the GeoFramesNetwork (edges.parquet, nodes.npy,
+    meta.json) plus pins.npz for the point sets.  Loads back via load_instance_geo.
     """
+    import os
+    import zipfile
     import numpy as np
-    from setiptah.roadgeometry.graphs import IntRoadnet, RoadInfo
+    from setiptah.roadgeometry.geopandas import save_geoframes_network
 
-    data = np.load(path)
-    roads = tuple(
-        RoadInfo(float(l), int(u), int(v), bool(ow))
-        for l, u, v, ow in zip(
-            data['edge_length'], data['edge_u'], data['edge_v'], data['edge_oneway'],
-        )
+    save_geoframes_network(roadnet, path)
+
+    staging = os.path.splitext(path)[0]
+    road_pos = {r: i for i, r in enumerate(roadnet.edges_gdf.index)}
+    np.savez_compressed(
+        os.path.join(staging, 'pins.npz'),
+        supply_road=np.array([road_pos[r] for r, _ in P], dtype=np.int64),
+        supply_y   =np.array([y           for _, y in P], dtype=np.float64),
+        demand_road=np.array([road_pos[r] for r, _ in Q], dtype=np.int64),
+        demand_y   =np.array([y           for _, y in Q], dtype=np.float64),
     )
-    roadnet = IntRoadnet(roads=roads, n_vertices=int(data['n_vertices'][0]))
-    P = list(zip(data['supply_road'].tolist(), data['supply_y'].tolist()))
-    Q = list(zip(data['demand_road'].tolist(), data['demand_y'].tolist()))
+
+    with zipfile.ZipFile(path, 'a', compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.write(os.path.join(staging, 'pins.npz'), 'pins.npz')
+
+
+def load_instance_geo(path: str):
+    """Load a matching instance from a save_instance_geo zip archive.
+
+    Returns (P, Q, roadnet) where roadnet is a GeoFramesNetwork with a
+    RangeIndex for road IDs and osmid integers as vertex IDs.
+    """
+    import io
+    import zipfile
+    import numpy as np
+    from setiptah.roadgeometry.geopandas import load_geoframes_network
+
+    roadnet = load_geoframes_network(path)
+
+    with zipfile.ZipFile(path, 'r') as zf:
+        pins = np.load(io.BytesIO(zf.read('pins.npz')))
+
+    road_ids = list(roadnet.edges_gdf.index)
+    P = [(road_ids[int(r)], float(y)) for r, y in zip(pins['supply_road'], pins['supply_y'])]
+    Q = [(road_ids[int(r)], float(y)) for r, y in zip(pins['demand_road'], pins['demand_y'])]
+
     return P, Q, roadnet
