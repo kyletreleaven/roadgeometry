@@ -84,6 +84,55 @@ class GeoFramesRoads:
 
 
 
+def save_geoframes_network(roadnet, path: str) -> None:
+    """Save a GeoFramesNetwork to a zip archive (edges.parquet + nodes.npy + meta.json)."""
+    import json
+    import os
+    import zipfile
+    import numpy as np
+
+    geom_col = roadnet.edges_gdf.geometry.name
+    keep = [c for c in [roadnet.left_col, roadnet.right_col,
+                         roadnet.oneway_col, geom_col] if c is not None]
+    edges_to_save = roadnet.edges_gdf[keep].reset_index(drop=True)
+
+    staging = os.path.splitext(path)[0]
+    os.makedirs(staging, exist_ok=True)
+
+    edges_to_save.to_parquet(os.path.join(staging, 'edges.parquet'))
+    np.save(os.path.join(staging, 'nodes.npy'),
+            roadnet.nodes_gdf.index.to_numpy(dtype=np.int64))
+    with open(os.path.join(staging, 'meta.json'), 'w') as f:
+        json.dump({'left_col':   roadnet.left_col,
+                   'right_col':  roadnet.right_col,
+                   'oneway_col': roadnet.oneway_col}, f)
+
+    with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for name in ('edges.parquet', 'nodes.npy', 'meta.json'):
+            zf.write(os.path.join(staging, name), name)
+
+
+def load_geoframes_network(path: str) -> 'GeoFramesNetwork':
+    """Load a GeoFramesNetwork from a zip archive saved by save_geoframes_network."""
+    import io
+    import json
+    import zipfile
+    import numpy as np
+    import pandas as pd
+
+    with zipfile.ZipFile(path, 'r') as zf:
+        edges_gdf = gpd.read_parquet(io.BytesIO(zf.read('edges.parquet')))
+        node_ids  = np.load(io.BytesIO(zf.read('nodes.npy')))
+        meta      = json.loads(zf.read('meta.json'))
+
+    nodes_gdf = gpd.GeoDataFrame(index=pd.Index(node_ids, name='osmid'))
+    return GeoFramesNetwork(
+        edges_gdf=edges_gdf, nodes_gdf=nodes_gdf,
+        left_col=meta['left_col'], right_col=meta['right_col'],
+        oneway_col=meta['oneway_col'],
+    )
+
+
 def points_to_gdf(
         points,
         edges_gdf: gpd.GeoDataFrame,
