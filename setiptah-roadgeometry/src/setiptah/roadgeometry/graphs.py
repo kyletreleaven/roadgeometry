@@ -179,6 +179,15 @@ class IntRoadnet(Roadnet[int, int]):
     def is_oneway(self, road: TE) -> bool:
         return self.roads[road].oneway
 
+    def graph_props(self, roads) -> tuple[dict, dict, dict]:
+        """Return (endpoints, lengths, is_oneway) dicts for the given roads."""
+        roads = list(roads)
+        return (
+            {r: (self.roads[r].left, self.roads[r].right) for r in roads},
+            {r:  self.roads[r].length                     for r in roads},
+            {r:  self.roads[r].oneway                     for r in roads},
+        )
+
 
 def int_map_to_seq(dict_: dict[T, int]) -> list[T]:
     result = [None] * len(dict_)
