@@ -60,7 +60,12 @@ def run_matching(session: Session) -> dict:
     # --- optimal flow ---
     if _selection['compute_optimal_flow'] == 'cpp':
         endpoints, lengths, is_oneway = roadnet.graph_props(segment_dict)
-        flow = _cpp_compute_optimal_flow(segment_dict, endpoints, lengths, is_oneway)
+        try:
+            flow = _cpp_compute_optimal_flow(segment_dict, endpoints, lengths, is_oneway)
+        except RuntimeError:
+            from setiptah.roadgeometry.matching.io import save_pins
+            save_pins(P, Q, 'captured_pins.json')
+            raise
     else:
         flow = flow_from_segments(segment_dict, roadnet, flow_solver=MinConvexCostFlow)
 
