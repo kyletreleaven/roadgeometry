@@ -192,10 +192,14 @@ fragile_mccf(
             auto [dist, upstream] = dijkstra(rgraph, ArcCost{redcost}, s);
 
             // Trace path from s to t via upstream pointers.
+            // Use upstream.count(j) instead of j != s: the source node s is
+            // never given an upstream entry, so count(j)==0 terminates
+            // correctly even when j and s are different C++ objects for the
+            // same logical node (e.g. distinct PyObject* for the same int).
             std::vector<Arc> path;
             {
                 Node j = t;
-                while (j != s) {
+                while (upstream.count(j)) {
                     Arc arc = upstream.at(j);
                     path.push_back(arc);
                     j = rgraph.endpoints(arc).first;

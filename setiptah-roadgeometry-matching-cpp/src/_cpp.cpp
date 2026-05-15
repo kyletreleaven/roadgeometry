@@ -31,6 +31,12 @@ struct hash<py::object> {
         return py::hash(obj);
     }
 };
+template <>
+struct equal_to<py::object> {
+    bool operator()(const py::object& a, const py::object& b) const {
+        return a.equal(b);
+    }
+};
 } // namespace std
 
 // Build a CostFn from a Python object: unwrap PiecewiseLinear directly,
