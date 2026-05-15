@@ -36,6 +36,18 @@ def roadnet():
     )
 
 
+def test_dijkstra_path_exists(roadnet):
+    from setiptah.roadgeometry.dijkstra import RoadnetMetric
+
+    src = ((61321088, 61321083, 0), 136.0796641919057)
+    dst = ((61325559, 61325634, 0), 39.124008542667696)
+
+    metric = RoadnetMetric(roadnet)
+    dist = metric.distance(src, dst)
+
+    assert dist < float('inf'), f'no finite path between src and dst (dist={dist})'
+
+
 def test_cpp_optimal_flow_matches_python(roadnet):
     if not _PINS.exists():
         pytest.skip('captured_pins.json not present — see module docstring')
