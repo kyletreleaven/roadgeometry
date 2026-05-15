@@ -48,6 +48,35 @@ def test_dijkstra_path_exists(roadnet):
     assert dist < float('inf'), f'no finite path between src and dst (dist={dist})'
 
 
+def test_flow_reduction_supply(roadnet):
+    from setiptah.roadgeometry.matching.bm import SURPLUS
+
+    P = [((61321088, 61321083, 0), 136.0796641919057)]
+    Q = [((61325559, 61325634, 0), 39.124008542667696)]
+
+    seg = _cpp.sort_and_segment(P, Q, list(roadnet.edges()))
+    endpoints, lengths, is_oneway = roadnet.graph_props(seg)
+
+    red = _cpp.build_flow_reduction(seg, endpoints, lengths, is_oneway)
+    supply = red['supply']
+
+    # Python reference: surplus[road] goes to head vertex (v) of each road.
+    py_supply = {}
+    for road, s in seg.items():
+        surp = SURPLUS(s)
+        if surp:
+            _, v = endpoints[road]
+            py_supply[v] = py_supply.get(v, 0) + surp
+
+    print('cpp supply:', {k: v for k, v in supply.items() if v != 0})
+    print('py  supply:', py_supply)
+
+    for v, expected in py_supply.items():
+        assert supply.get(v, 0) == pytest.approx(expected), (
+            f'vertex {v}: cpp supply={supply.get(v, 0)}, expected={expected}'
+        )
+
+
 def test_cpp_optimal_flow_matches_python(roadnet):
     if not _PINS.exists():
         pytest.skip('captured_pins.json not present — see module docstring')
