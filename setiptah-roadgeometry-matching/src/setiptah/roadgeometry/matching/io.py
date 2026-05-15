@@ -12,6 +12,37 @@ import json
 from setiptah.roadgeometry.graphs import RoadNetwork
 
 
+# ---------------------------------------------------------------------------
+# Pin-only JSON format  (.json containing just P and Q, no network)
+# ---------------------------------------------------------------------------
+
+def save_pins(P, Q, path: str) -> None:
+    """Save supply/demand point sets to a JSON file.
+
+    Road IDs must be JSON-serialisable (int, str, or list/tuple of those).
+    Tuples are written as lists; load_pins restores them as tuples.
+    """
+    def enc(points):
+        return [[list(r) if isinstance(r, tuple) else r, y] for r, y in points]
+
+    with open(path, 'w') as f:
+        json.dump({'P': enc(P), 'Q': enc(Q)}, f)
+
+
+def load_pins(path: str):
+    """Load supply/demand point sets from a save_pins JSON file.
+
+    Lists used as road IDs are restored as tuples.
+    """
+    with open(path) as f:
+        data = json.load(f)
+
+    def dec(points):
+        return [(tuple(r) if isinstance(r, list) else r, y) for r, y in points]
+
+    return dec(data['P']), dec(data['Q'])
+
+
 def _id_to_json(id_):
     return id_ if isinstance(id_, (str, int)) else f"{id_}"
 
