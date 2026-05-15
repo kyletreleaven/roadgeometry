@@ -25,6 +25,7 @@ test = [
     "scipy",
     "matplotlib",
     "geopandas",
+    "osmnx",
     "setiptah-roadgeometry-matching-cpp",
     "pyarrow>=18.0.0",
 ]
