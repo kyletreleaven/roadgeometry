@@ -471,14 +471,39 @@ def flow_from_segments(
     from segments and delegates to flow_solver.
     """
     if _cpp_compute_optimal_flow is not None and flow_solver is None:
-        endpoints = {road: roadnet.endpoints(road) for road in segments}
-        lengths   = {road: roadnet.length(road)    for road in segments}
-        is_oneway = {road: roadnet.is_oneway(road) for road in segments}
+        endpoints = {road: roadnet.endpoints(road) for road in roadnet.edges()}
+        lengths   = {road: roadnet.length(road)    for road in roadnet.edges()}
+        is_oneway = {road: roadnet.is_oneway(road) for road in roadnet.edges()}
         return _cpp_compute_optimal_flow(segments, endpoints, lengths, is_oneway)
 
     surplus_dict = {road: SURPLUS(seg) for road, seg in segments.items()}
     measure_dict = {road: MEASURE(seg, roadnet.length(road)) for road, seg in segments.items()}
     return compute_optimal_flow(roadnet, surplus_dict, measure_dict, flow_solver=flow_solver)
+
+
+class WeightedAbs:
+    """Callable cost function weight * |z|, used as implicit cost for edgeless roads."""
+    __slots__ = ('_weight',)
+    def __init__(self, weight: float):
+        self._weight = weight
+    def __call__(self, z: float) -> float:
+        return self._weight * abs(z)
+
+
+class _DefaultCostMap(dict):
+    """Cost dict that returns WeightedAbs(direction * length) for any missing edge key."""
+    def __init__(self, roadnet):
+        super().__init__()
+        self._roadnet = roadnet
+    def __missing__(self, key):
+        # direction * length gives the correct cost for both directions because
+        # |z| is symmetric: pwl_negate(length*|z|)(z) = -length*|-z| = -length*|z|
+        road, direction = key if isinstance(key, tuple) else (key, +1)
+        value = WeightedAbs(direction * self._roadnet.length(road))
+        self[key] = value
+        return value
+    def __contains__(self, key):
+        return True  # full coverage — all network edges have an implicit cost
 
 
 def compute_optimal_flow(
@@ -491,43 +516,45 @@ def compute_optimal_flow(
         flow_solver = default_flow_solver
     network = mygraph()
     supply = {i: 0. for i in roadnet.nodes()}
-    cost = {}  # functions
-    #
-    oneway_offset = {}  # for one-way roads
+    cost = _DefaultCostMap(roadnet)
+    oneway_offset = {}  # only populated for pinned oneway roads with zmin != 0
 
     for road in roadnet.edges():
         i, j = roadnet.endpoints(road)
+        supply[j] += surplus.get(road, 0)
 
-        supply[j] += surplus[road]
-        measure = measure_dict[road]
+        if road in measure_dict:
+            measure = measure_dict[road]
+            fobj = OBJECTIVE_FUNC(measure)
+            if roadnet.is_oneway(road):
+                # if one-way road
 
-        fobj = OBJECTIVE_FUNC(measure)
+                # record minimum allowable flow on road
+                zmin = -measure.min_index  # i.e., z + min index of measure >= 0
+                oneway_offset[road] = zmin
+                # create a 'bias point'
+                supply[i] -= zmin
+                supply[j] += zmin
 
-        # edge construction
-        if roadnet.is_oneway(road):
-            # if one-way road
-
-            # record minimum allowable flow on road
-            zmin = -measure.min_index  # i.e., z + min index of measure >= 0
-            oneway_offset[road] = zmin
-            # create a 'bias point'
-            supply[i] -= zmin
-            supply[j] += zmin
-
-            network.add_edge(road, i, j)
-            cost[road] = pwl_shift(fobj, zmin)
-
+                network.add_edge(road, i, j)
+                cost[road] = pwl_shift(fobj, zmin)
+            else:
+                # if bi-directional road... instantiate pair of edges
+                network.add_edge((road, +1), i, j)
+                cost[(road, +1)] = fobj
+                #
+                network.add_edge((road, -1), j, i)
+                cost[(road, -1)] = pwl_negate(fobj)
         else:
-            # if bi-directional road... instantiate pair of edges
-            network.add_edge((road, +1), i, j)
-            cost[(road, +1)] = fobj
-            #
-            network.add_edge((road, -1), j, i)
-            cost[(road, -1)] = pwl_negate(fobj)
+            if roadnet.is_oneway(road):
+                network.add_edge(road, i, j)
+            else:
+                network.add_edge((road, +1), i, j)
+                network.add_edge((road, -1), j, i)
 
     """
     compute the width U of the first cvxcost algorithm phase;
-    a bound on the optimal flow on any edge; 
+    a bound on the optimal flow on any edge;
     Logic: there cannot be more flow on a given road in the graph
     than there are total intervals between levels in the network
     (Proof Sketch):
@@ -544,8 +571,8 @@ def compute_optimal_flow(
 
     flow = {}
     for road in roadnet.edges():
-        if road in oneway_offset:
-            flow[road] = f[road] + oneway_offset[road]
+        if roadnet.is_oneway(road):
+            flow[road] = f[road] + oneway_offset.get(road, 0)
         else:
             flow[road] = f[(road, +1)] - f[(road, -1)]
 
