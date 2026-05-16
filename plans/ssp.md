@@ -159,22 +159,22 @@ parameter.
 
 **Invariants:**
 
-- **Feasible**: `f` satisfies supply/demand at every node.
-- **Δ-optimal**: every residual arc with residual capacity ≥ Δ has non-negative
-  reduced cost. At Δ=1 this is full optimality; larger Δ is a weaker condition.
+- **Feasible**: all excesses are zero — the flow satisfies supply/demand at every node.
+- **Δ-optimal**: every Δ-residual arc has non-negative reduced cost. At Δ=1 this is full optimality; larger Δ is a weaker condition.
+- **Residual valid**: lincosts are current for the present Δ and cost function.
 
-Dijkstra requires Δ-optimality. The state is fully solved when feasible + Δ=1-optimal.
+Residual validity is required for Δ-optimality to be well-defined; both are required for `augment_step`. The state is fully solved when feasible and Δ-optimal at Δ=1.
 
 **Operations:**
 
 | action | effects on state |
 |---|---|
 | add k pins | breaks feasibility; if α-optimal, degrades to (α+k)-optimal; invalidates lincost on ≤2k roads |
-| change Δ | invalidates lincost on all edges; may break or restore Δ-optimality |
-| re-linearize (edges S) | corrects lincost on S; makes Δ-optimality violations explicit so saturation can resolve them |
-| saturate negative arcs | if lincosts are correct: restores Δ-optimality |
-| find surplus node (excess ≥ Δ) | if found: src for next `augment_step`; if none: all excesses < Δ — halve Δ to make further progress |
-| `augment_step(src, dst)` | routes Δ units along shortest path; updates π; restores feasibility for one pair; maintains Δ-optimality |
+| change Δ | invalidates lincost on all edges; Δ-optimality undefined until re-linearized |
+| re-linearize (edges S) | restores lincost on S; Δ-optimality violations now detectable |
+| saturate negative arcs | requires valid lincosts; restores Δ-optimality |
+| find surplus (excess ≥ Δ) | if found: src for next `augment_step`; if none and Δ > 1: halve Δ; if none and Δ = 1: done |
+| `augment_step(src, dst)` | requires Δ-optimality and valid lincosts; routes Δ units along shortest path; updates π; re-linearizes path edges; reduces excess at src and deficit at dst by Δ; maintains Δ-optimality and residual validity |
 
 Operations with no precondition (add k pins, change Δ, re-linearize) can be
 freely composed in any order before restoring Δ-optimality via saturation. For
@@ -188,6 +188,13 @@ persist. **`π` carries across calls; the search tree does not** — the residua
 changes along the augmenting path, making the wavefront stale for subsequent
 queries even from the same source.
 
+**Termination and feasibility.** The excess at each node — net inflow minus
+outflow, accounting for supply — is the same quantity in both the instance and
+the residual graph; there is no separate notion. Since pin supplies are integers
+and augmentations always move integer Δ units, excesses stay integers throughout.
+When find-surplus returns empty at Δ=1, all excesses are less than 1, hence zero.
+The flow is fully feasible.
+
 **Halving as a runtime optimizer.** Successive halving (Δ = U, U/2, …, 1) is a
 runtime choice, not a correctness requirement. At each scale there are at most
 n/Δ augmenting paths (each carries Δ units of the total supply n), so the total
@@ -196,14 +203,19 @@ O(n) by the geometric series. Any strictly decreasing sequence ending at 1 is
 correct; halving minimizes the number of phases and keeps the total augmentation
 count at 2n.
 
-**SSP**: set Δ=1, then for each surplus/deficit pair call `augment_step`.
+**SSP**: for each supply/demand pair in turn — add it, ensure Δ=1 and re-linearize
+the ≤2 affected roads, then call `augment_step` once to route 1 unit from src to dst.
 
-**Capacity scaling**: set Δ=U; saturate; repeat `augment_step` until no surplus
-with excess ≥ Δ; halve Δ, re-linearize, saturate; repeat until Δ < ε.
+**Capacity scaling**: add all n pins at once, set Δ to the next power of 2 ≥ n,
+re-linearize and saturate; then repeat — `augment_step` until no surplus with
+excess ≥ Δ, halve Δ, re-linearize, saturate — until Δ=1 and no surplus remain.
 
-**Variable batch**: add k pins → change Δ to next power of 2 ≥ k → re-linearize
-→ saturate → augment until all excesses < Δ → halve Δ → repeat. Pure incremental
-(k=1, Δ=1 throughout) and pure batch (k=n, Δ = U…1) are both subsets.
+**Variable batch**: the general form. Adding k pins to an α-optimal flow degrades
+it to (α+k)-optimal; set Δ to the next power of 2 ≥ (α+k), re-linearize dirty
+edges, saturate, and run halving until Δ=1. The next batch can arrive at any
+point — mid-halving or mid-augmentation — not just when the flow is fully optimal.
+SSP (k=1, each batch added from a fully optimal flow) and capacity scaling (k=n,
+added once from zero flow) are both special cases.
 
 ---
 
@@ -218,3 +230,7 @@ with excess ≥ Δ; halve Δ, re-linearize, saturate; repeat until Δ < ε.
 - For the continuous-space road network (pins at arbitrary arc positions), the
   Dijkstra must use `RoadnetQuery` / the existing continuous-space implementation.
   Backward arcs need to be added to that interface.
+- **Variable batch cost updates**: when pins arrive mid-loop, the base cost function
+  on the ≤2 affected roads changes (new breakpoint inserted into the piecewise-linear
+  cost). The data structure for maintaining and updating the base cost function, and
+  then re-linearizing at the current Δ, needs design.
