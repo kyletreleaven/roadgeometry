@@ -54,15 +54,28 @@ offers no advantage over SSP. SSP is the simpler and equivalent algorithm.
 
 This is where SSP is strictly better.
 
+**This section describes a matching-specific algorithm, not general SSP.**
+In general SSP, costs are fixed and only supply/demand changes. In road
+matching, adding a pin also changes the cost function on the road where the
+pin lands — a new breakpoint is inserted into the piecewise linear cost at
+that position. The incremental algorithm works efficiently because this change
+is structurally constrained: local to at most two roads (src and dst), with
+known form.
+
 When a new supply/demand pair is added to the web app:
 
 1. **Map existing flow onto the new instance**: inject breakpoints where the new
    src/dst positions split their respective road edges. Carry existing flow onto
    the sub-edges. O(1) edge splits.
 
-2. **One Dijkstra** from new `src` to new `dst` in the updated residual graph.
+2. **Re-linearize the cost on the (at most two) affected road edges.** Since
+   Δ = 1 is fixed in the incremental case, re-linearization is just evaluating
+   the new marginal cost at the current flow value on those edges — a scalar
+   operation per edge. All other edges are unaffected.
 
-3. **Augment** along the shortest path.
+3. **One Dijkstra** from new `src` to new `dst` in the updated residual graph.
+
+4. **Augment** along the shortest path.
 
 The result is **0-optimal** for the new instance (SSP theorem). No `fragile_mccf`
 call needed. Cost per new pair: **O(1 Dijkstra)**.
@@ -124,31 +137,73 @@ Future: maintain a "reverse flow" structure for efficient decremental updates.
 ## Shared Infrastructure with Capacity Scaling
 
 SSP and capacity scaling operate on the same data structure and differ only in one
-parameter. The core is:
+parameter.
 
-- **Residual graph**: forward arcs `(u,v)` with cost `c(e)` and residual capacity;
-  backward arcs `(v,u)` with cost `-c(e)` and residual capacity equal to current flow.
-- **Potential vector** `π`: maintained across queries so all reduced costs
-  `c(e) + π(u) - π(v) ≥ 0`, enabling plain Dijkstra (no negative arcs).
+**Persistent state** — the residual graph object carries three things:
 
-The three primitive operations:
+- **Flow map** `f`: edge → double, stored sparsely (implicit 0). Determines which
+  residual arcs exist and their capacity. Together with π, fully defines the
+  residual state; both are required to resume correctly from a previous solve.
+- **Potential vector** `π`: node → double, stored sparsely (implicit 0). Maintained
+  across augmentations so all reduced costs `lincost(e) + π(v) - π(u) ≥ 0`,
+  enabling plain Dijkstra. A node enters explicit storage only the first time a
+  Dijkstra wavefront reaches it; nodes outside every augmenting path's wavefront
+  are never stored. For a sparse pin instance this is O(n × avg_path_length)
+  rather than O(V). Reduced costs are computed on-the-fly as
+  `lincost(e, dir) + π.get(head, 0) - π.get(tail, 0)`.
+- **Current Δ**: drives re-linearization decisions:
+  - `last_Δ == new_Δ`: only edges on the augmenting path (or with changed
+    underlying cost) need re-linearization.
+  - `last_Δ != new_Δ`: full re-linearization sweep required.
+  In the incremental case (Δ always 1) re-linearization is always O(affected edges).
 
-```
-dijkstra(src, capacity_threshold=0)  →  distance vector d[]
-augment(path, amount)                →  updates residual capacities
-update_potentials(d[])               →  π(v) += d[v]
-```
+**Invariants:**
 
-**SSP**: call `dijkstra(src, threshold=0)`, augment 1 unit, update potentials. Repeat.
+- **Feasible**: `f` satisfies supply/demand at every node.
+- **Δ-optimal**: every residual arc with residual capacity ≥ Δ has non-negative
+  reduced cost. At Δ=1 this is full optimality; larger Δ is a weaker condition.
 
-**Capacity scaling**: call `dijkstra(src, threshold=Δ)` (only traverse arcs with
-residual capacity ≥ Δ), augment Δ units, update potentials. Stage 1 (saturate
-negative reduced-cost arcs) is just degenerate single-arc augmentations.
+Dijkstra requires Δ-optimality. The state is fully solved when feasible + Δ=1-optimal.
 
-The `capacity_threshold` parameter is the only algorithmic difference. A single
-implementation of the residual graph + Dijkstra + augment serves both. Capacity
-scaling can be layered on top of the SSP infrastructure if ever needed (e.g., if
-pin clustering makes unit-capacity assumption break down).
+**Operations:**
+
+| action | effects on state |
+|---|---|
+| add k pins | breaks feasibility; if α-optimal, degrades to (α+k)-optimal; invalidates lincost on ≤2k roads |
+| change Δ | invalidates lincost on all edges; may break or restore Δ-optimality |
+| re-linearize (edges S) | corrects lincost on S; makes Δ-optimality violations explicit so saturation can resolve them |
+| saturate negative arcs | if lincosts are correct: restores Δ-optimality |
+| find surplus node (excess ≥ Δ) | if found: src for next `augment_step`; if none: all excesses < Δ — halve Δ to make further progress |
+| `augment_step(src, dst)` | routes Δ units along shortest path; updates π; restores feasibility for one pair; maintains Δ-optimality |
+
+Operations with no precondition (add k pins, change Δ, re-linearize) can be
+freely composed in any order before restoring Δ-optimality via saturation. For
+efficiency, track the dirty set of roads needing re-linearization: pin additions
+contribute ≤2 roads each; a Δ change marks all edges dirty and further tracking
+is moot.
+
+`augment_step` combines dijkstra + augment + update π into one atomic operation.
+The distance vector `d[]` is consumed immediately by `π += d[]` and does not
+persist. **`π` carries across calls; the search tree does not** — the residual
+changes along the augmenting path, making the wavefront stale for subsequent
+queries even from the same source.
+
+**Halving as a runtime optimizer.** Successive halving (Δ = U, U/2, …, 1) is a
+runtime choice, not a correctness requirement. At each scale there are at most
+n/Δ augmenting paths (each carries Δ units of the total supply n), so the total
+augmentation count across all phases is n/U + n/(U/2) + … + n/1 ≈ 2n —
+O(n) by the geometric series. Any strictly decreasing sequence ending at 1 is
+correct; halving minimizes the number of phases and keeps the total augmentation
+count at 2n.
+
+**SSP**: set Δ=1, then for each surplus/deficit pair call `augment_step`.
+
+**Capacity scaling**: set Δ=U; saturate; repeat `augment_step` until no surplus
+with excess ≥ Δ; halve Δ, re-linearize, saturate; repeat until Δ < ε.
+
+**Variable batch**: add k pins → change Δ to next power of 2 ≥ k → re-linearize
+→ saturate → augment until all excesses < Δ → halve Δ → repeat. Pure incremental
+(k=1, Δ=1 throughout) and pure batch (k=n, Δ = U…1) are both subsets.
 
 ---
 
