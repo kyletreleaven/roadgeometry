@@ -237,9 +237,6 @@ PYBIND11_MODULE(_cpp, m) {
         auto ns_cls    = py::module_::import("types").attr("SimpleNamespace");
 
         py::dict out;
-        for (auto r : road_ids)
-            out[r] = py::list();
-
         for (auto& [road, groups] : segs) {
             py::list seg;
             for (auto& g : groups) {
