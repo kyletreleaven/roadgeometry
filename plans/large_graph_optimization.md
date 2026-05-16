@@ -70,13 +70,29 @@ Estimated speedup: BFR construction O(n) instead of O(|E|).
 
 ### `fragile_mccf` / Dijkstra
 
-Current: already limits work to the Dijkstra wavefront — it never touches
-arcs that are not relaxed. No change needed here provided the implicit
-arc iterator is wired in.
+**Implicit residual graph.** The current implementation maintains an explicit
+`rgraph` data structure, adding and removing arcs as flow changes. This costs
+O(|E|) to initialize and O(1) per arc update, but requires materializing the
+full residual upfront. Instead, arc presence and arc cost should both be
+computed on-the-fly during Dijkstra relaxation:
 
-For the typical small-n case (n ≪ diameter), the Dijkstra wave stays
-confined to a small neighborhood around the supply/demand pins. Most of
-the implicit road arcs are never relaxed.
+- Forward arc `(u,v)`: present iff `flow[e] + Δ ≤ capacity[e]` (always true
+  for infinite-capacity matching roads); reduced cost =
+  `lincost(e, +1) + π.get(v, 0) - π.get(u, 0)`.
+- Backward arc `(v,u)`: present iff `flow[e] ≥ Δ`; reduced cost =
+  `lincost(e, -1) + π.get(u, 0) - π.get(v, 0)`.
+
+This eliminates both `rgraph` and the explicit `redcost` map. The sparse
+potential vector π (see `ssp.md`) is looked up directly during relaxation;
+nodes with implicit potential 0 cost nothing to handle.
+
+**Sparse flow storage.** The flow map should store only nonzero entries; zero
+is the implicit default. Roads never on any augmenting path are never touched.
+For a sparse pin instance this keeps the flow map at O(n × avg_path_length).
+
+With both changes, Dijkstra works directly over the virtual arc iterator
+(edgeless roads) and the implicit residual predicate (roads with flow), with
+no separate residual graph object to maintain.
 
 ### `create_path_network_with_surplus`
 
@@ -103,6 +119,40 @@ Already fixed in the previous session: only processes edges in
 
 4. **Verify correctness** with existing integration tests and web app
    profiling. Target: flow computation < 50 ms for 2–10 pins on Cambridge.
+
+---
+
+## Matching-Specific MCCF Specializations
+
+The road matching problem has known analytical structure on empty roads that
+allows specializing the MCCF implementation beyond generic lazy evaluation.
+
+### Cost form
+
+An empty road (no pins) has measure equal to `length` at every flow level, so
+its cost function is `length * |z|` — symmetric linear. This means:
+
+- No `PiecewiseLinear` object is needed; cost is represented as a scalar.
+- The linearized cost at any Δ and any flow `x ≠ 0` is just `±length`
+  (sign determined by direction). No per-phase recomputation.
+- At `x = 0` the kink requires care, but for Δ ≥ 1 the linearized slopes
+  are still `+length` (forward) and `+length` (backward) — symmetric.
+
+### Capacity
+
+All roads in the matching problem have effectively infinite capacity — there
+is no hard per-edge flow limit, only the global bound U. This holds regardless
+of whether a road carries pins. In the residual predicate this simplifies to:
+- Forward arc: always present (no saturation possible).
+- Backward arc: present iff `flow > 0`.
+
+No per-edge capacity value needs to be stored or looked up for any road.
+
+### Implication for linearization
+
+Since the cost is already linear, `linearize_cost_edge` is a no-op for empty
+roads at any Δ. This eliminates the dominant term in the per-phase O(|E|)
+sweep for sparse instances where most edges are empty.
 
 ---
 
