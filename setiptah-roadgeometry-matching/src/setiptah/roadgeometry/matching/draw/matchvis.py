@@ -198,7 +198,7 @@ def flow_to_interval_graph(flow, S, T, roadnet: Roadnet) -> tuple[mygraph, dict]
         seg = segments[road]
         u, v = roadnet.endpoints(road)
 
-        z = flow[road]  # start road assistance +0
+        z = flow.get(road, 0)
 
         prev_node = VertexNode(u)
         for y, pts in seg:

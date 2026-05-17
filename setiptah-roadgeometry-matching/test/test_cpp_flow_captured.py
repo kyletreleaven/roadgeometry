@@ -55,7 +55,7 @@ def test_flow_reduction_supply(roadnet):
     Q = [((61325559, 61325634, 0), 39.124008542667696)]
 
     seg = _cpp.sort_and_segment(P, Q, list(roadnet.edges()))
-    endpoints, lengths, is_oneway = roadnet.graph_props(seg)
+    endpoints, lengths, is_oneway = roadnet.graph_props(roadnet.edges())
 
     red = _cpp.build_flow_reduction(seg, endpoints, lengths, is_oneway)
     supply = red['supply']
@@ -92,7 +92,7 @@ def test_cpp_optimal_flow_matches_python(roadnet):
 
     # --- cpp path (under test) ---
     seg_cpp = _cpp.sort_and_segment(P, Q, list(roadnet.edges()))
-    endpoints, lengths, is_oneway = roadnet.graph_props(seg_cpp)
+    endpoints, lengths, is_oneway = roadnet.graph_props(roadnet.edges())
     flow_cpp = _cpp.compute_optimal_flow(seg_cpp, endpoints, lengths, is_oneway)
 
     # --- python path (reference) ---

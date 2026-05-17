@@ -491,19 +491,34 @@ class WeightedAbs:
 
 
 class _DefaultCostMap(dict):
-    """Cost dict that returns WeightedAbs(direction * length) for any missing edge key."""
+    """road → cost. Populated with explicit costs for pinned roads.
+    __missing__ returns WeightedAbs(length) for empty roads (no caching needed)."""
     def __init__(self, roadnet):
         super().__init__()
         self._roadnet = roadnet
+    def __missing__(self, road):
+        return WeightedAbs(self._roadnet.length(road))
+    def __contains__(self, road):
+        return road in self._roadnet.edges()
+
+
+class _BidirCostMap(dict):
+    """(road, ±1) → cost. Eagerly seeds pairs from road_cost (pinned roads).
+    __missing__ delegates to road_cost, which returns WeightedAbs(length) for
+    empty roads.  Direction is ignored in __missing__ because the empty-road cost
+    length*|z| is symmetric: pwl_negate(length*|z|)(z) = length*|-z| = length*|z|."""
+    def __init__(self, road_cost):
+        super().__init__()
+        for road, fobj in road_cost.items():
+            self[(road, +1)] = fobj
+            self[(road, -1)] = pwl_negate(fobj)
+        self._road_cost = road_cost
     def __missing__(self, key):
-        # direction * length gives the correct cost for both directions because
-        # |z| is symmetric: pwl_negate(length*|z|)(z) = -length*|-z| = -length*|z|
-        road, direction = key if isinstance(key, tuple) else (key, +1)
-        value = WeightedAbs(direction * self._roadnet.length(road))
-        self[key] = value
-        return value
+        road, _direction = key  # direction ignored: see class docstring
+        return self._road_cost[road]
     def __contains__(self, key):
-        return True  # full coverage — all network edges have an implicit cost
+        road, _direction = key
+        return road in self._road_cost
 
 
 def compute_optimal_flow(
@@ -516,7 +531,7 @@ def compute_optimal_flow(
         flow_solver = default_flow_solver
     network = mygraph()
     supply = {i: 0. for i in roadnet.nodes()}
-    cost = _DefaultCostMap(roadnet)
+    road_cost = _DefaultCostMap(roadnet)
     oneway_offset = {}  # only populated for pinned oneway roads with zmin != 0
 
     for road in roadnet.edges():
@@ -536,21 +551,19 @@ def compute_optimal_flow(
                 supply[i] -= zmin
                 supply[j] += zmin
 
-                network.add_edge(road, i, j)
-                cost[road] = pwl_shift(fobj, zmin)
+                network.add_edge((road, +1), i, j)
+                road_cost[road] = pwl_shift(fobj, zmin)
             else:
                 # if bi-directional road... instantiate pair of edges
                 network.add_edge((road, +1), i, j)
-                cost[(road, +1)] = fobj
-                #
                 network.add_edge((road, -1), j, i)
-                cost[(road, -1)] = pwl_negate(fobj)
+                road_cost[road] = fobj
         else:
-            if roadnet.is_oneway(road):
-                network.add_edge(road, i, j)
-            else:
-                network.add_edge((road, +1), i, j)
+            network.add_edge((road, +1), i, j)
+            if not roadnet.is_oneway(road):
                 network.add_edge((road, -1), j, i)
+
+    cost = _BidirCostMap(road_cost)
 
     """
     compute the width U of the first cvxcost algorithm phase;
@@ -569,14 +582,12 @@ def compute_optimal_flow(
 
     f = flow_solver(network, {}, supply, cost, U)
 
+    flow_roads = {key[0] for key in f} | oneway_offset.keys()
     flow = {}
-    for road in roadnet.edges():
-        if roadnet.is_oneway(road):
-            flow[road] = f[road] + oneway_offset.get(road, 0)
-        else:
-            flow[road] = f[(road, +1)] - f[(road, -1)]
-
-        flow[road] = int(flow[road])
+    for road in flow_roads:
+        x = f.get((road, +1), 0) - f.get((road, -1), 0) + oneway_offset.get(road, 0)
+        if x:
+            flow[road] = int(x)
 
     return flow
 
@@ -767,9 +778,9 @@ def create_topograph2(
         u, v = roadnet.endpoints(road)
 
         # TODO: Copy to prevent consumption?
-        events = segment_dict[road].events
+        events = segment_dict[road].events if road in segment_dict else ()
 
-        h = assist[road]
+        h = assist.get(road, 0)
         prev_node, prev_y = special[u], 0.
         for curr_y, contents in events:
             curr_node = terminal(contents)
@@ -799,9 +810,9 @@ def create_topograph(
 
     for road in roadnet.edges():
         u, v = roadnet.endpoints(road)
-        segment = segment_dict[road]
+        segment = segment_dict.get(road, ())
 
-        h = assist[road]
+        h = assist.get(road, 0)
         prev_node, prev_y = special[u], 0.
         for curr_y, qs in segment:
             curr_node = terminal(qs, ref=road)
@@ -1039,10 +1050,12 @@ class MatchingInstance:
         return self.roadnet_metric.distance(self.P[i], self.Q[j])
 
 
-def flow_cost_per_road(flow: dict[TRoad, float], obj_dict):
+def flow_cost_per_road(flow: dict[TRoad, float], obj_dict: dict[TRoad, 'Callable[[float], float]']):
+    roads = obj_dict.keys() | flow.keys()
     return {
-        road: obj_dict[road](x)
-        for road, x in flow.items()
+        road: obj_dict[road](flow.get(road, 0))
+        for road in roads
+        if road in obj_dict
     }
 
 
