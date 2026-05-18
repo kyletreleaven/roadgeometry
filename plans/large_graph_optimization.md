@@ -103,22 +103,28 @@ Already fixed in the previous session: only processes edges in
 
 ## Implementation Sequence
 
-1. **Segment dictionary with lazy fallback** — modify `sort_and_segment`
-   (or its caller) to return the implicit single-segment for missing edges.
-   Add a unit test: an edge with no pins should yield `[(0, length)]`.
+1. ✓ **Downstream sparse compatibility** — rather than modifying `sort_and_segment`
+   first, made all consumers handle a sparse segments dict: `flow_from_segments`
+   passes full network metadata to C++; `surplus_dict` and `measure_dict` in the
+   Python path are sparse (only pinned roads); `compute_optimal_flow` uses
+   `_DefaultCostMap` / `WeightedAbs` to provide implicit costs for edgeless roads
+   without calling `OBJECTIVE_FUNC`. `build_flow_reduction` (C++) already fell back
+   to `empty_seg` for missing segments.
 
-2. **Virtual arc iterator for BFR** — replace the full-edge loop in
-   `build_flow_reduction` with an iterator that:
-   a. Yields real BFR arcs for edges in the segment dictionary.
-   b. Yields a single implicit arc for each remaining graph edge.
-   Keep the rest of `fragile_mccf` unchanged.
+2. **Sparse `sort_and_segment`** — now that downstream is ready, modify
+   `sort_and_segment` to only include roads that contain pins. Edgeless roads are
+   absent from the dict; consumers infer the implicit single-segment from road length.
 
-3. **Dijkstra integration** — ensure the Dijkstra relaxation step calls
-   the virtual arc iterator for each settled node. No change to the
-   priority queue or potential update logic.
+3. **Virtual arc iterator for BFR** — replace the full-edge loop in
+   `build_flow_reduction` with an iterator that materializes real BFR arcs only for
+   pinned edges; edgeless roads are visited lazily by Dijkstra via the virtual
+   iterator.
 
-4. **Verify correctness** with existing integration tests and web app
-   profiling. Target: flow computation < 50 ms for 2–10 pins on Cambridge.
+4. **Dijkstra integration** — ensure the Dijkstra relaxation step uses the virtual
+   iterator. No change to the priority queue or potential update logic.
+
+5. **Verify correctness** with existing integration tests and web app profiling.
+   Target: flow computation < 50 ms for 2–10 pins on Cambridge.
 
 ---
 
