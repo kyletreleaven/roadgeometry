@@ -116,6 +116,21 @@ namespace roadgeometry {
 //                                   sweep at every update_potentials.
 //   arc_presence  on demand       — flow + Delta + capacity check per arc; O(1).
 //                                   Eliminates O(|E|) residual rebuild at change_delta.
+// TODO: for an incremental matching algorithm, the persistent state is
+//   (flow, potentials, segment arrangement / cost fns) — enough to resume
+//   augmentation after adding or removing pins.  excess and lincost are scratch:
+//   excess is recomputable from supply + flow; lincost cache is warm-startable
+//   but safe to discard.  SparseResidual and RedcostView remain phase-local
+//   adapters over that state.
+//
+//   Segment arrangement: use a single sorted map<(road, y), group> across all
+//   roads rather than a per-road map.  Better asymptotics: O(N) space and
+//   O(log N) operations vs O(N + R) space for per-road maps (which pay R
+//   overhead even when most roads have no pins).  A road's pins are found via
+//   upper_bound({road, -inf}) and iterated until the road key changes.  Cost
+//   fn on a road is a running integral of surplus along y, so a new pin at y
+//   invalidates the suffix from y onward — recompute O(k) groups after the
+//   insertion point.
 // ===========================================================================
 
 template <InputGraph G, typename Cap, typename Cost>
