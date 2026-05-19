@@ -1,7 +1,15 @@
 #pragma once
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <stdexcept>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "concepts.hpp"
+#include "dijkstra.hpp"
+#include "hash_utils.hpp"
 
 namespace roadgeometry {
 
@@ -109,9 +117,7 @@ namespace roadgeometry {
 //                                   Eliminates O(|E|) residual rebuild at change_delta.
 // ===========================================================================
 
-template <InputGraph G,
-          typename Cap,
-          typename Cost>
+template <InputGraph G, typename Cap, typename Cost>
 std::unordered_map<typename G::edge_type, double>
 fragile_mccf_sparse(
     const G&    network,
@@ -120,6 +126,223 @@ fragile_mccf_sparse(
     const Cost& cost,
     double U,
     double epsilon = 1.0
-);
+)
+{
+    using Node = typename G::node_type;
+    using Edge = typename G::edge_type;
+    using Arc  = std::pair<Edge, int>;
+
+    constexpr double inf = std::numeric_limits<double>::infinity();
+
+    // ---- Supply conservation check --------------------------------------
+
+    {
+        double total = 0.0;
+        for (const auto& [node, val] : supply) total += val;
+        if (std::abs(total) > epsilon)
+            throw std::invalid_argument(
+                "fragile_mccf_sparse: supply is not epsilon-conservative (|sum| > epsilon)");
+    }
+
+    // ---- Helpers --------------------------------------------------------
+
+    auto map_get = [](const auto& m, const auto& k, double def = 0.0) -> double {
+        auto it = m.find(k);
+        return it != m.end() ? it->second : def;
+    };
+
+    auto get_capacity = [&](const Edge& e) -> double {
+        auto it = capacity_in.find(e);
+        return std::min(U, it != capacity_in.end() ? it->second : inf);
+    };
+
+    // ---- Primary state --------------------------------------------------
+
+    std::unordered_map<Edge, double> flow;           // sparse, default 0
+    std::unordered_map<Node, double> excess(supply); // sparse cached, init from supply
+    std::unordered_map<Node, double> potential;      // sparse, default 0
+
+    // ---- Lincost lazy cache (generation counter for change_delta) -------
+
+    struct LincostEntry { double value; int gen; };
+    std::unordered_map<Arc, LincostEntry, PairHash> lincost;
+    int lincost_gen = 0;
+
+    // ---- On-demand lincost query ----------------------------------------
+
+    auto get_lincost = [&](const Arc& arc, double Delta) -> double {
+        auto it = lincost.find(arc);
+        if (it != lincost.end() && it->second.gen == lincost_gen)
+            return it->second.value;
+        auto [e, dir] = arc;
+        double x  = map_get(flow, e, 0.0);
+        auto   ci = cost.find(e);
+        double val = (ci != cost.end())
+            ? (ci->second(x + dir * Delta) - ci->second(x)) / Delta
+            : 0.0;
+        lincost[arc] = {val, lincost_gen};
+        return val;
+    };
+
+    // ---- On-demand redcost query ----------------------------------------
+
+    auto get_redcost = [&](const Arc& arc, double Delta) -> double {
+        auto [e, dir] = arc;
+        auto [u, v]   = network.endpoints(e);
+        double pu = map_get(potential, u, 0.0);
+        double pv = map_get(potential, v, 0.0);
+        return get_lincost(arc, Delta) + (dir == +1 ? pv - pu : pu - pv);
+    };
+
+    // ---- Push flow (excess: incremental; lincost: eager if cached) ------
+
+    auto push_flow = [&](const Arc& arc, double Delta) {
+        auto [e, dir] = arc;
+        flow[e] += dir * Delta;
+        auto [u, v] = network.endpoints(e);
+        excess[u] -= dir * Delta;
+        excess[v] += dir * Delta;
+        for (int d : {+1, -1}) {
+            Arc a{e, d};
+            auto it = lincost.find(a);
+            if (it != lincost.end()) {
+                double x  = flow.at(e);
+                auto   ci = cost.find(e);
+                it->second = {
+                    (ci != cost.end())
+                        ? (ci->second(x + d * Delta) - ci->second(x)) / Delta
+                        : 0.0,
+                    lincost_gen
+                };
+            }
+        }
+    };
+
+    // ---- Sparse residual view (arc_presence on demand) ------------------
+
+    struct SparseResidual {
+        using node_type = Node;
+        using edge_type = Arc;
+
+        const G&                               network;
+        const std::unordered_map<Edge, double>& flow;
+        const Cap&                              capacity_in;
+        double                                  U, Delta;
+
+        std::vector<Arc> out_edges(const Node& u) const {
+            constexpr double inf = std::numeric_limits<double>::infinity();
+            std::vector<Arc> arcs;
+            for (const Edge& e : network.out_edges(u)) {
+                double x   = flow.count(e) ? flow.at(e) : 0.0;
+                auto   it  = capacity_in.find(e);
+                double cap = std::min(U, it != capacity_in.end() ? it->second : inf);
+                if (x + Delta <= cap) arcs.push_back({e, +1});
+            }
+            for (const Edge& e : network.in_edges(u)) {
+                double x = flow.count(e) ? flow.at(e) : 0.0;
+                if (x >= Delta) arcs.push_back({e, -1});
+            }
+            return arcs;
+        }
+
+        std::pair<Node, Node> endpoints(const Arc& arc) const {
+            auto [e, dir] = arc;
+            auto [u, v]   = network.endpoints(e);
+            return dir == +1 ? std::make_pair(u, v) : std::make_pair(v, u);
+        }
+    };
+
+    // ---- Redcost cost wrapper for Dijkstra (caches lincost on miss) -----
+
+    struct RedcostView {
+        const G&                                           network;
+        std::unordered_map<Arc, LincostEntry, PairHash>&  lincost;
+        int                                                lincost_gen;
+        const std::unordered_map<Node, double>&            potential;
+        const Cost&                                        cost_fn;
+        const std::unordered_map<Edge, double>&            flow;
+        double                                             Delta;
+
+        double operator[](const Arc& arc) const {
+            constexpr double inf = std::numeric_limits<double>::infinity();
+            auto [e, dir] = arc;
+            double lc;
+            auto it = lincost.find(arc);
+            if (it != lincost.end() && it->second.gen == lincost_gen) {
+                lc = it->second.value;
+            } else {
+                double x  = flow.count(e) ? flow.at(e) : 0.0;
+                auto   ci = cost_fn.find(e);
+                lc = (ci != cost_fn.end())
+                    ? (ci->second(x + dir * Delta) - ci->second(x)) / Delta
+                    : 0.0;
+                lincost[arc] = {lc, lincost_gen};
+            }
+            auto [u, v] = network.endpoints(e);
+            double pu = potential.count(u) ? potential.at(u) : 0.0;
+            double pv = potential.count(v) ? potential.at(v) : 0.0;
+            return lc + (dir == +1 ? pv - pu : pu - pv);
+        }
+    };
+
+    // ---- Capacity-scaling main loop -------------------------------------
+
+    double Delta = std::pow(2.0, std::floor(std::log2(U)));
+
+    while (Delta >= epsilon) {
+        ++lincost_gen;  // O(1) global invalidation (change_delta)
+
+        // -- Stage 1: saturate every negative reduced-cost residual arc --
+        std::vector<Arc> res_edges;
+        for (const Edge& e : network.edges()) {
+            double x   = map_get(flow, e, 0.0);
+            double cap = get_capacity(e);
+            if (x + Delta <= cap) res_edges.push_back({e, +1});
+            if (x >= Delta)       res_edges.push_back({e, -1});
+        }
+        for (const Arc& arc : res_edges) {
+            if (get_redcost(arc, Delta) >= 0.0) continue;
+            push_flow(arc, Delta);
+        }
+
+        // -- Stage 2: augment Delta-flow along shortest paths ------------
+        while (true) {
+            Node s{}, t{};
+            bool found_s = false, found_t = false;
+            for (const auto& [node, ex] : excess) {
+                if (!found_s && ex >=  Delta) { s = node; found_s = true; }
+                if (!found_t && ex <= -Delta) { t = node; found_t = true; }
+                if (found_s && found_t) break;
+            }
+            if (!found_s || !found_t) break;
+
+            SparseResidual rgraph{network, flow, capacity_in, U, Delta};
+            RedcostView    rcost{network, lincost, lincost_gen, potential, cost, flow, Delta};
+            auto [dist, upstream] = dijkstra(rgraph, rcost, s);
+
+            std::vector<Arc> path;
+            {
+                Node j = t;
+                while (upstream.count(j)) {
+                    Arc arc = upstream.at(j);
+                    path.push_back(arc);
+                    j = rgraph.endpoints(arc).first;
+                }
+                std::reverse(path.begin(), path.end());
+            }
+
+            for (const Arc& arc : path)
+                push_flow(arc, Delta);
+
+            for (const auto& [node, d] : dist)
+                potential[node] -= d;
+        }
+
+        if (Delta <= epsilon) break;
+        Delta /= 2.0;
+    }
+
+    return flow;
+}
 
 } // namespace roadgeometry
