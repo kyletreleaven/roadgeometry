@@ -17,6 +17,8 @@ dependencies = [
     # Should these be here?
     "matplotlib",  # at least while draw is here
     "scipy",
+    "geopandas",
+    "osmnx",
 ]
 
 [project.optional-dependencies]
