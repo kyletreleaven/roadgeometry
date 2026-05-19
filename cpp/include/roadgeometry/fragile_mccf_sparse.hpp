@@ -104,12 +104,13 @@ namespace roadgeometry {
 // -- Selected strategies ----------------------------------------------------
 //
 //   excess        sparse cached   — initialized from supply, ±delta at push_flow
-//   lincost       lazy cached     — hybrid invalidation: generation counter for
-//                                   change_delta (O(1), defers recompute to first
-//                                   access per phase); eager recompute for push_flow
-//                                   (only 2 arcs, always O(cost fn)).  New edges
-//                                   computed on first access.  Per-query cost: one
-//                                   generation check + O(1) hit or O(cost fn) miss.
+//   lincost       lazy cached     — lincost.clear() at change_delta; eager recompute
+//                                   for push_flow (only 2 arcs, always O(cost fn)).
+//                                   New edges computed on first access.  Per-query
+//                                   cost: O(1) hit or O(cost fn) miss.
+//                                   TODO: generation counter would make change_delta
+//                                   truly O(1) if clear()'s O(bucket_count) overhead
+//                                   becomes measurable.
 //   redcost       on demand       — lincost[arc] + potential[v] - potential[u];
 //                                   O(1) given cached lincost.  Eliminates O(|E|)
 //                                   sweep at every update_potentials.
@@ -162,25 +163,25 @@ fragile_mccf_sparse(
     std::unordered_map<Node, double> excess(supply); // sparse cached, init from supply
     std::unordered_map<Node, double> potential;      // sparse, default 0
 
-    // ---- Lincost lazy cache (generation counter for change_delta) -------
+    // ---- Lincost lazy cache (cleared at change_delta) -------------------
+    // TODO: std::unordered_map::clear() is O(bucket_count), not O(entries).
+    //       If bucket count grows large from prior phases, swapping with a
+    //       fresh empty map (lincost = {}) may be faster in practice.
 
-    struct LincostEntry { double value; int gen; };
-    std::unordered_map<Arc, LincostEntry, PairHash> lincost;
-    int lincost_gen = 0;
+    std::unordered_map<Arc, double, PairHash> lincost;
 
     // ---- On-demand lincost query ----------------------------------------
 
     auto get_lincost = [&](const Arc& arc, double Delta) -> double {
         auto it = lincost.find(arc);
-        if (it != lincost.end() && it->second.gen == lincost_gen)
-            return it->second.value;
+        if (it != lincost.end()) return it->second;
         auto [e, dir] = arc;
         double x  = map_get(flow, e, 0.0);
         auto   ci = cost.find(e);
         double val = (ci != cost.end())
             ? (ci->second(x + dir * Delta) - ci->second(x)) / Delta
             : 0.0;
-        lincost[arc] = {val, lincost_gen};
+        lincost[arc] = val;
         return val;
     };
 
@@ -208,12 +209,9 @@ fragile_mccf_sparse(
             if (it != lincost.end()) {
                 double x  = flow.at(e);
                 auto   ci = cost.find(e);
-                it->second = {
-                    (ci != cost.end())
-                        ? (ci->second(x + d * Delta) - ci->second(x)) / Delta
-                        : 0.0,
-                    lincost_gen
-                };
+                it->second = (ci != cost.end())
+                    ? (ci->second(x + d * Delta) - ci->second(x)) / Delta
+                    : 0.0;
             }
         }
     };
@@ -255,28 +253,26 @@ fragile_mccf_sparse(
     // ---- Redcost cost wrapper for Dijkstra (caches lincost on miss) -----
 
     struct RedcostView {
-        const G&                                           network;
-        std::unordered_map<Arc, LincostEntry, PairHash>&  lincost;
-        int                                                lincost_gen;
-        const std::unordered_map<Node, double>&            potential;
-        const Cost&                                        cost_fn;
-        const std::unordered_map<Edge, double>&            flow;
-        double                                             Delta;
+        const G&                                        network;
+        std::unordered_map<Arc, double, PairHash>&      lincost;
+        const std::unordered_map<Node, double>&         potential;
+        const Cost&                                     cost_fn;
+        const std::unordered_map<Edge, double>&         flow;
+        double                                          Delta;
 
         double operator[](const Arc& arc) const {
-            constexpr double inf = std::numeric_limits<double>::infinity();
             auto [e, dir] = arc;
             double lc;
             auto it = lincost.find(arc);
-            if (it != lincost.end() && it->second.gen == lincost_gen) {
-                lc = it->second.value;
+            if (it != lincost.end()) {
+                lc = it->second;
             } else {
                 double x  = flow.count(e) ? flow.at(e) : 0.0;
                 auto   ci = cost_fn.find(e);
                 lc = (ci != cost_fn.end())
                     ? (ci->second(x + dir * Delta) - ci->second(x)) / Delta
                     : 0.0;
-                lincost[arc] = {lc, lincost_gen};
+                lincost[arc] = lc;
             }
             auto [u, v] = network.endpoints(e);
             double pu = potential.count(u) ? potential.at(u) : 0.0;
@@ -290,7 +286,7 @@ fragile_mccf_sparse(
     double Delta = std::pow(2.0, std::floor(std::log2(U)));
 
     while (Delta >= epsilon) {
-        ++lincost_gen;  // O(1) global invalidation (change_delta)
+        lincost.clear();  // invalidate all cached lincost entries for new Delta
 
         // -- Stage 1: saturate every negative reduced-cost residual arc --
         std::vector<Arc> res_edges;
@@ -317,7 +313,7 @@ fragile_mccf_sparse(
             if (!found_s || !found_t) break;
 
             SparseResidual rgraph{network, flow, capacity_in, U, Delta};
-            RedcostView    rcost{network, lincost, lincost_gen, potential, cost, flow, Delta};
+            RedcostView    rcost{network, lincost, potential, cost, flow, Delta};
             auto [dist, upstream] = dijkstra(rgraph, rcost, s);
 
             std::vector<Arc> path;
