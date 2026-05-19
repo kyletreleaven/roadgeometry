@@ -14,6 +14,7 @@
 #include "roadgeometry/robust_mccf.hpp"
 #include "roadgeometry/input_graph.hpp"
 #include "roadgeometry/fragile_mccf.hpp"
+#include "roadgeometry/fragile_mccf_sparse.hpp"
 #include "roadgeometry/piecewise_linear.hpp"
 #include "roadgeometry/segment.hpp"
 #include "roadgeometry/optimal_flow.hpp"
@@ -130,7 +131,7 @@ PYBIND11_MODULE(_cpp, m) {
             if (std::isfinite(capacity_arr[e]))
                 capacity[e] = capacity_arr[e];
 
-        auto flow_map = fragile_mccf(network, capacity, supply, cost, U, epsilon);
+        auto flow_map = fragile_mccf_sparse(network, capacity, supply, cost, U, epsilon);
 
         std::vector<double> flow_arr(m, 0.0);
         for (auto& [e, x] : flow_map)
@@ -360,7 +361,8 @@ PYBIND11_MODULE(_cpp, m) {
         const py::dict& endpoints_py,
         const py::dict& lengths_py,
         const py::dict& is_oneway_py,
-        double epsilon
+        double epsilon,
+        const std::string& solver
     ) -> py::dict {
         using Road = py::object;
         using Vertex = py::object;
@@ -394,19 +396,22 @@ PYBIND11_MODULE(_cpp, m) {
         for (auto [road, ow] : is_oneway_py)
             is_oneway[road.cast<Road>()] = ow.cast<bool>();
 
-        auto flow = compute_optimal_flow<Road, Vertex>(
-            segments, endpoints, lengths, is_oneway, epsilon);
-
         py::dict result;
-        for (auto& [road, x] : flow)
-            result[road] = x;
+        auto emit = [&](auto flow) {
+            for (auto& [road, x] : flow) result[road] = x;
+        };
+        if (solver == "sparse")
+            emit(compute_optimal_flow<Road, Vertex, true>(segments, endpoints, lengths, is_oneway, epsilon));
+        else
+            emit(compute_optimal_flow<Road, Vertex, false>(segments, endpoints, lengths, is_oneway, epsilon));
         return result;
     },
     py::arg("segments"),
     py::arg("endpoints"),
     py::arg("lengths"),
     py::arg("is_oneway"),
-    py::arg("epsilon") = 1.0
+    py::arg("epsilon") = 1.0,
+    py::arg("solver") = "sparse"
     );
 
     m.def("compute_matching", [](
@@ -414,7 +419,8 @@ PYBIND11_MODULE(_cpp, m) {
         const py::list& Q_py,
         const py::dict& endpoints_py,
         const py::dict& lengths_py,
-        const py::dict& is_oneway_py
+        const py::dict& is_oneway_py,
+        const std::string& solver
     ) -> py::tuple {
         using Road   = py::object;
         using Vertex = py::object;
@@ -446,19 +452,24 @@ PYBIND11_MODULE(_cpp, m) {
         for (auto [road, ow] : is_oneway_py)
             is_oneway[road.cast<Road>()] = ow.cast<bool>();
 
-        auto [matching, cost] = compute_matching<Road, Vertex>(
-            P, Q, endpoints, lengths, is_oneway);
+        auto run = [&](auto result) -> py::tuple {
+            auto& [matching, cost] = result;
+            py::list matching_py;
+            for (auto& [i, j] : matching)
+                matching_py.append(py::make_tuple(i, j));
+            return py::make_tuple(matching_py, cost);
+        };
 
-        py::list matching_py;
-        for (auto& [i, j] : matching)
-            matching_py.append(py::make_tuple(i, j));
-
-        return py::make_tuple(matching_py, cost);
+        if (solver == "sparse")
+            return run(compute_matching<Road, Vertex, true>(P, Q, endpoints, lengths, is_oneway));
+        else
+            return run(compute_matching<Road, Vertex, false>(P, Q, endpoints, lengths, is_oneway));
     },
     py::arg("P"),
     py::arg("Q"),
     py::arg("endpoints"),
     py::arg("lengths"),
-    py::arg("is_oneway")
+    py::arg("is_oneway"),
+    py::arg("solver") = "sparse"
     );
 }

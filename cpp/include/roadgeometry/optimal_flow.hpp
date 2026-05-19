@@ -266,7 +266,7 @@ FlowReduction<Road, Vertex> build_flow_reduction(
 // OUTPUT
 //   flow : Road → int  — integer optimal flow per road
 // ---------------------------------------------------------------------------
-template <typename Road, typename Vertex>
+template <typename Road, typename Vertex, bool UseSparse = true>
 std::unordered_map<Road, int> compute_optimal_flow(
     RoadSegments<Road>&                                        segments,
     const std::unordered_map<Road, std::pair<Vertex,Vertex>>& endpoints,
@@ -279,8 +279,8 @@ std::unordered_map<Road, int> compute_optimal_flow(
     int num_edges = static_cast<int>(red.edge_to_road.size());
 
     std::unordered_map<int, double> capacity;  // empty — no explicit capacity bounds
-    auto int_flow = robust_mccf(inst.network, capacity, inst.vertex_supply,
-                                VectorMap{inst.edge_cost}, inst.U, epsilon);
+    auto int_flow = robust_mccf<UseSparse>(inst.network, capacity, inst.vertex_supply,
+                                           VectorMap{inst.edge_cost}, inst.U, epsilon);
 
     // De-normalize: accumulate signed flow back to Road-keyed result.
     // For oneway roads: add back zmin bias.

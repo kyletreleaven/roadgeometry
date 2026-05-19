@@ -53,7 +53,7 @@ void prematch_all(Roads& roads, Out& out) {
 //   pairs (prematch pairs first, then traverse pairs) and cost is the total
 //   weighted transport distance.
 // ---------------------------------------------------------------------------
-template <typename Road, typename Vertex>
+template <typename Road, typename Vertex, bool UseSparse = true>
 std::pair<std::vector<std::pair<int,int>>, double>
 compute_matching(
     const std::vector<std::pair<Road, double>>&                P,
@@ -67,7 +67,7 @@ compute_matching(
     std::vector<std::pair<int,int>> matching;
     prematch_all(segments, matching);
 
-    auto flow = compute_optimal_flow<Road, Vertex>(
+    auto flow = compute_optimal_flow<Road, Vertex, UseSparse>(
         segments, endpoints, lengths, is_oneway);
 
     auto topo = create_topograph<Road, Vertex>(

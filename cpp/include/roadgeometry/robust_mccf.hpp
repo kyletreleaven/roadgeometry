@@ -8,6 +8,7 @@
 
 #include "concepts.hpp"
 #include "fragile_mccf.hpp"
+#include "fragile_mccf_sparse.hpp"
 #include "hash_utils.hpp"
 #include "input_graph.hpp"
 #include "piecewise_linear.hpp"
@@ -293,7 +294,7 @@ private:
 //
 // Returns: flow map Edge → double (only original edges, cycle edges filtered out).
 // ---------------------------------------------------------------------------
-template <InputGraph G, typename Cap, typename Cost>
+template <bool UseSparse = true, InputGraph G, typename Cap, typename Cost>
 std::unordered_map<typename G::edge_type, double>
 robust_mccf(
     const G&                                              network,
@@ -310,7 +311,12 @@ robust_mccf(
     RobustCapacity<Edge, Cap> robust_capacity{capacity};
     RobustCost<Edge, Cost>    robust_cost{cost, U};
 
-    auto flow = fragile_mccf(robust_network, robust_capacity, supply, robust_cost, U, epsilon);
+    auto flow = [&]() {
+        if constexpr (UseSparse)
+            return fragile_mccf_sparse(robust_network, robust_capacity, supply, robust_cost, U, epsilon);
+        else
+            return fragile_mccf(robust_network, robust_capacity, supply, robust_cost, U, epsilon);
+    }();
 
     std::unordered_map<Edge, double> result;
     for (auto& [e, x] : flow) {
