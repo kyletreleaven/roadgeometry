@@ -1,4 +1,11 @@
 #!/bin/bash
+# NOTE: macOS sample deduplicates long C++ template symbols as <deduplicated_symbol>,
+# making flamegraphs hard to interpret. Consider switching to xctrace:
+#   xctrace record --template "Time Profiler" --output bench/bench_matching.trace \
+#     --launch -- setiptah-roadgeometry-matching-cpp/build/bench_matching \
+#     bench/captured_instance.json 3
+#   open bench/bench_matching.trace
+# Or add std::chrono timers inside fragile_mccf_sparse to instrument phases directly.
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 BENCH="${DIR}/../setiptah-roadgeometry-matching-cpp/build/bench_matching"
