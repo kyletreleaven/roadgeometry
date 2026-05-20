@@ -16,9 +16,46 @@ namespace roadgeometry {
 // ===========================================================================
 // fragile_mccf_sparse
 //
-// Sparse/lazy alternative to fragile_mccf.  Same algorithm and preconditions;
-// faster on large graphs by avoiding O(|E|) sweeps.  May carry small constant-
-// factor overhead on small graphs due to hash-map lookups and generation checks.
+// Originally a sparse/lazy alternative to fragile_mccf.  Now being evolved
+// into a matching-aware variant that exploits matching problem structure to
+// make saturation (Stage 1) efficient:
+//
+//   - Roads split into "non-empty" (piecewise-linear cost, pins present) and
+//     "empty" (cost = length × |f|, no pins).
+//   - Flow is always an integer multiple of the current Delta (capacity scaling
+//     invariant).  Therefore on any empty road, a change in flow of ±Delta cannot
+//     straddle zero (because of halving: all remaining phases sum to at most Delta,
+//     so a step already taken cannot be reversed).
+//   - Therefore empty road lincost = ±length, computable on demand, never cached;
+//     lincost.clear() at change_delta remains unconditional (empty road arcs are
+//     simply never in the cache, so clearing doesn't affect them).
+//   - Interface: network input must include road lengths; empty roads are
+//     identified by absence from the cost map.  cost map fallback to 0.0 should
+//     be removed — a missing key means empty road, not zero piecewise-linear cost.
+//   - Replace the O(|E|) Stage 1 sweep with a tracked negative_arcs set:
+//       Arcs enter the set whenever a redcost check finds them negative —
+//       during the per-Delta sweep of non-empty roads at change_delta, and
+//       during rechecks triggered by push_flow and update_potentials.
+//       Arcs leave only when a recheck finds redcost ≥ 0; saturation alone
+//       is not sufficient since the arc may re-enter the residual at smaller Delta.
+//       Invalidation events that require rechecks:
+//         push_flow         — recheck 2 arcs of the pushed edge
+//         update_potentials — recheck arcs incident to visited nodes (already
+//                             iterated per-node during Dijkstra; no O(|E|) phase)
+//         change_delta      — recheck non-empty road arcs only; empty road arcs
+//                             have unchanged redcost (lincost and potentials both
+//                             unaffected by halving Delta)
+//
+// -- Key invariants for negative_arcs ---------------------------------------
+//
+//   At zero flow and zero potentials (algorithm start), no empty arc can be
+//   negative: lincost = length > 0 and potential difference = 0.
+//
+//   TODO (incremental): by convexity of cost, both forward and backward
+//   finite-difference lincosts are non-decreasing in Delta.  Therefore
+//   increasing Delta at fixed flow and potentials makes all redcosts weakly
+//   larger — increasing Delta cannot introduce new negative arcs.  The
+//   incremental algorithm may be able to exploit this when new pins raise Delta.
 //
 // -- State component dependency graph ---------------------------------------
 //
