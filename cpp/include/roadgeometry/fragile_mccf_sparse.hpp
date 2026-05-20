@@ -153,6 +153,18 @@ namespace roadgeometry {
 //                                   sweep at every update_potentials.
 //   arc_presence  on demand       — flow + Delta + capacity check per arc; O(1).
 //                                   Eliminates O(|E|) residual rebuild at change_delta.
+// -- Pending implementation (matching-aware saturation) ---------------------
+//
+//   [ ] optimal_flow.hpp FlowInstance: add std::vector<double> edge_lengths
+//   [ ] optimal_flow.hpp build_flow_reduction: add bool empty_road_cost = true;
+//       when false, skip edge_cost push for empty roads, still push edge_lengths
+//   [ ] optimal_flow.hpp compute_optimal_flow: thread empty_road_cost flag through
+//   [ ] fragile_mccf_sparse: absent key in cost = empty road; look up edge_lengths;
+//       don't cache lincost for empty arcs; replace O(|E|) Stage 1 with
+//       negative_arcs set; maintain on push_flow / update_potentials / change_delta
+//   [ ] SparseResidual::out_edges: eliminate per-call vector allocation
+//   [ ] run tests
+//
 // TODO: for an incremental matching algorithm, the persistent state is
 //   (flow, potentials, segment arrangement / cost fns) — enough to resume
 //   augmentation after adding or removing pins.  excess and lincost are scratch:
