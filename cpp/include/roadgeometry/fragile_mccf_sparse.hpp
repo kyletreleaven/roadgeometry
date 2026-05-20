@@ -279,6 +279,8 @@ fragile_mccf_sparse(
         const Cap&                              capacity_in;
         double                                  U, Delta;
 
+        // TODO: allocates a fresh vector on every Dijkstra node visit; consider
+        // passing an output iterator or reusing a caller-provided buffer.
         std::vector<Arc> out_edges(const Node& u) const {
             constexpr double inf = std::numeric_limits<double>::infinity();
             std::vector<Arc> arcs;
