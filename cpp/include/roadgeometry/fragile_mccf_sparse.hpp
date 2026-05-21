@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -155,15 +156,27 @@ namespace roadgeometry {
 //                                   Eliminates O(|E|) residual rebuild at change_delta.
 // -- Pending implementation (matching-aware saturation) ---------------------
 //
-//   [ ] optimal_flow.hpp FlowInstance: add std::vector<double> edge_lengths
-//   [ ] optimal_flow.hpp build_flow_reduction: add bool empty_road_cost = true;
-//       when false, skip edge_cost push for empty roads, still push edge_lengths
-//   [ ] optimal_flow.hpp compute_optimal_flow: thread empty_road_cost flag through
-//   [ ] fragile_mccf_sparse: absent key in cost = empty road; look up edge_lengths;
-//       don't cache lincost for empty arcs; replace O(|E|) Stage 1 with
-//       negative_arcs set; maintain on push_flow / update_potentials / change_delta
+//   [x] MatchingCostMap (optimal_flow.hpp): bundles fns (non-empty roads only
+//       when EmptyRoadCost=false) + lengths (all roads); exposes find/length/
+//       empty_road_cbound.  FlowInstance.cost replaces edge_cost+edge_lengths.
+//   [x] MatchingCost concept (this file): constrains Cost on find/length/
+//       empty_road_cbound; RobustCost satisfies it via forwarders.
+//   [x] build_flow_reduction: EmptyRoadCost flag; empty roads omitted from fns.
+//   [x] compute_optimal_flow: EmptyRoadCost template param (default !UseSparse).
+//   [x] get_lincost / RedcostView: absent key → cost.length(e) for empty roads;
+//       empty-road lincost computed on demand, not cached.
+//   [x] Stage 1: skips empty-road arcs (non-negative by invariant at each Delta).
+//
+//   [ ] negative_arcs tracked set: replace the Stage 1 sweep of non-empty arcs
+//       with a maintained set of arcs known to have negative redcost.
+//       Like lincost, it is a cached derived quantity and needs invalidation:
+//         push_flow         — recheck 2 arcs of pushed edge; remove if redcost ≥ 0
+//         update_potentials — recheck arcs incident to visited nodes
+//         change_delta      — recheck non-empty road arcs only (empty road
+//                             redcosts are unchanged by halving Delta)
+//       Stage 1 then drains the set in O(|negative_arcs|) instead of O(|E|).
 //   [ ] SparseResidual::out_edges: eliminate per-call vector allocation
-//   [ ] run tests
+//   [ ] run tests (cd setiptah-roadgeometry-matching && nox -s test)
 //
 // TODO: for an incremental matching algorithm, the persistent state is
 //   (flow, potentials, segment arrangement / cost fns) — enough to resume
@@ -182,7 +195,28 @@ namespace roadgeometry {
 //   insertion point.
 // ===========================================================================
 
-template <InputGraph G, typename Cap, typename Cost>
+// ---------------------------------------------------------------------------
+// MatchingCost<C, E>
+//
+// Concept for the cost map accepted by fragile_mccf_sparse.  Extends the
+// basic find/end interface with:
+//   length(key)          — road length for empty-arc lincost (cost = length×|f|)
+//   empty_road_cbound(U) — sum of length×U for roads absent from the cost map;
+//                          added to the cycle-edge prohibitive slope in RobustCost
+//
+// A Cost type without missing arcs satisfies this concept trivially as long as
+// it provides the two extra methods — length() and empty_road_cbound() are only
+// called when cost.find(e) == cost.end(), so they never execute on a full map.
+// ---------------------------------------------------------------------------
+template <typename C, typename E>
+concept MatchingCost = requires(const C& c, E key, double u) {
+    { c.find(key) };
+    { c.end() };
+    { c.length(key) }          -> std::convertible_to<double>;
+    { c.empty_road_cbound(u) } -> std::convertible_to<double>;
+};
+
+template <InputGraph G, typename Cap, MatchingCost<typename G::edge_type> Cost>
 std::unordered_map<typename G::edge_type, double>
 fragile_mccf_sparse(
     const G&    network,
@@ -242,11 +276,15 @@ fragile_mccf_sparse(
         auto [e, dir] = arc;
         double x  = map_get(flow, e, 0.0);
         auto   ci = cost.find(e);
-        double val = (ci != cost.end())
-            ? (ci->second(x + dir * Delta) - ci->second(x)) / Delta
-            : 0.0;
-        lincost[arc] = val;
-        return val;
+        if (ci != cost.end()) {
+            double val = (ci->second(x + dir * Delta) - ci->second(x)) / Delta;
+            lincost[arc] = val;
+            return val;
+        }
+        // Empty road: cost = length×|f|.  Compute on demand; don't cache —
+        // lincost is O(1) and never needs invalidation at change_delta.
+        double len = cost.length(e);
+        return len * (std::abs(x + dir * Delta) - std::abs(x)) / Delta;
     };
 
     // ---- On-demand redcost query ----------------------------------------
@@ -267,15 +305,16 @@ fragile_mccf_sparse(
         auto [u, v] = network.endpoints(e);
         excess[u] -= dir * Delta;
         excess[v] += dir * Delta;
+        // Refresh cached lincost for both arcs.  Empty-road arcs are never
+        // cached (get_lincost skips the insert), so find() will always miss them.
         for (int d : {+1, -1}) {
             Arc a{e, d};
             auto it = lincost.find(a);
             if (it != lincost.end()) {
                 double x  = flow.at(e);
                 auto   ci = cost.find(e);
-                it->second = (ci != cost.end())
-                    ? (ci->second(x + d * Delta) - ci->second(x)) / Delta
-                    : 0.0;
+                assert(ci != cost.end() && "lincost cache hit for empty-road arc — cost map has missing arcs");
+                it->second = (ci->second(x + d * Delta) - ci->second(x)) / Delta;
             }
         }
     };
@@ -335,10 +374,14 @@ fragile_mccf_sparse(
             } else {
                 double x  = flow.count(e) ? flow.at(e) : 0.0;
                 auto   ci = cost_fn.find(e);
-                lc = (ci != cost_fn.end())
-                    ? (ci->second(x + dir * Delta) - ci->second(x)) / Delta
-                    : 0.0;
-                lincost[arc] = lc;
+                if (ci != cost_fn.end()) {
+                    lc = (ci->second(x + dir * Delta) - ci->second(x)) / Delta;
+                    lincost[arc] = lc;
+                } else {
+                    // Empty road: compute on demand; don't cache.
+                    double len = cost_fn.length(e);
+                    lc = len * (std::abs(x + dir * Delta) - std::abs(x)) / Delta;
+                }
             }
             auto [u, v] = network.endpoints(e);
             double pu = potential.count(u) ? potential.at(u) : 0.0;
@@ -354,9 +397,14 @@ fragile_mccf_sparse(
     while (Delta >= epsilon) {
         lincost.clear();  // invalidate all cached lincost entries for new Delta
 
-        // -- Stage 1: saturate every negative reduced-cost residual arc --
+        // -- Stage 1: saturate negative-redcost residual arcs ----------------
+        // Empty road arcs have non-negative redcost at the start of each Delta
+        // level (lincost = ±length, unchanged by halving; potentials unchanged
+        // → redcost unchanged from end of previous level, which was ≥ 0).
+        // cost.find(e) == cost.end() iff road is empty, so skip those.
         std::vector<Arc> res_edges;
         for (const Edge& e : network.edges()) {
+            if (cost.find(e) == cost.end()) continue;  // empty road — non-negative by invariant
             double x   = map_get(flow, e, 0.0);
             double cap = get_capacity(e);
             if (x + Delta <= cap) res_edges.push_back({e, +1});

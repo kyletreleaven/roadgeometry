@@ -228,6 +228,26 @@ struct RobustCapacity {
 };
 
 // ---------------------------------------------------------------------------
+// RobustEdgeLengths<Edge, Lengths>
+//
+// Adapts an inner Lengths map (e.g. VectorMap<double> indexed by edge_id)
+// to the RobustInputGraph edge type.  RegularEdge delegates to the inner map;
+// CycleEdge returns 0.0 (cycle edges always have explicit cost fns, never empty).
+// ---------------------------------------------------------------------------
+template <typename Edge, typename Lengths>
+struct RobustEdgeLengths {
+    const Lengths& inner_;
+
+    double get(const RobustEdge<Edge>& e) const {
+        if (const auto* r = std::get_if<RegularEdge<Edge>>(&e)) {
+            auto it = inner_.find(r->e);
+            if (it != inner_.end()) return (*it).second;
+        }
+        return 0.0;
+    }
+};
+
+// ---------------------------------------------------------------------------
 // RobustCost<Edge, Cost>
 //
 // A cost map view for a RobustInputGraph.  Regular edges delegate to the
@@ -260,9 +280,9 @@ struct RobustCost {
     double      slope_;    // prohibitive slope; TODO: replace with InfiniteSlope type
     double      offset_;   // prohibitive offset (currently 0)
 
-    RobustCost(const Cost& cost, double U)
+    RobustCost(const Cost& cost, double U, double extra_cbound = 0.0)
         : cost_(cost)
-        , slope_(make_cbound(cost, U))
+        , slope_(make_cbound(cost, U) + extra_cbound)
         , offset_(0.0)
     {}
 
