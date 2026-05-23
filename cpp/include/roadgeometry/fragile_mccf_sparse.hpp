@@ -193,18 +193,18 @@ namespace roadgeometry {
 //     allocation.  A separate is_non_empty(e) predicate distinguishes non-
 //     trivial PWL roads from linear ones; used to decide whether to cache
 //     lincost and to restrict Stage 1 iteration.  make_cbound (in RobustCost)
-//     stays unchanged: iterating begin()/end() covers all arcs, yielding the
-//     correct total including empty-road contributions.
+//     stays unchanged: make_cbound(network, cost, U) iterates network.edges()
+//     and sums cost.find(e)->second(U); constructor takes network.
 //
 //   MatchingCostMap API (optimal_flow.hpp):
 //     fns      — unordered_map<int, PiecewiseLinear>: non-empty roads only
 //     lengths  — vector<double>: road length for every edge id
 //     find(e)  — always returns valid entry; empty roads return LinearCost{len}
-//     begin()/end() — two-phase iterator: fns first, then empty roads from
-//                     lengths; both phases yield value types, zero-cost
 //     is_non_empty(e) — fns.count(e) > 0; O(1)
-//     non_empty_edges()  — range over fns; used for change_delta rechecks and
-//                          the future negative_arcs tracked set
+//     non_empty_edges() — range over fns; for change_delta rechecks and
+//                         future negative_arcs tracked set
+//   No begin()/end() for now; consumers iterate the network and query find(e).
+//   Future applications may add domain iteration later.
 //
 //   At change_delta, lincost invalidation depends on which invariant holds:
 //
@@ -229,10 +229,10 @@ namespace roadgeometry {
 //   RobustCost (robust_mccf.hpp):
 //     find()   — cycle edges → prohibitive linear fn; regular edges delegate
 //                to inner cost (inner find() always valid; no end() branch)
-//     begin()/end() — regular arcs from inner cost + cycle arcs
 //     is_non_empty(RobustEdge) — RegularEdge → inner cost.is_non_empty(r->e);
-//                                CycleEdge   → false (linear prohibitive cost)
-//     make_cbound — unchanged; natural iteration now covers all arcs
+//                                CycleEdge   → false
+//     make_cbound(network, cost, U) — iterates network.edges() (original, pre-
+//       wrapping), sums cost.find(e)->second(U); always valid; no special-casing
 //     length() forwarder — no longer needed (find() always valid)
 //
 //   fragile_mccf_sparse (this file):
@@ -242,15 +242,16 @@ namespace roadgeometry {
 //     push_flow — use is_non_empty(e) to guard cache update (replaces assert)
 //     Stage 1   — iterate network.edges(), use is_non_empty(e) to skip empties
 //
-//   [x] FlowInstance.cost: MatchingCostMap replaces edge_cost + edge_lengths
-//   [x] build_flow_reduction: EmptyRoadCost flag; empty roads omitted from fns
-//   [x] compute_optimal_flow: EmptyRoadCost template param (default !UseSparse)
-//   [ ] MatchingCostMap: LinearCost value type; find() always valid; two-phase
-//       iterator; is_non_empty()
-//   [ ] RobustCost: updated find(), begin()/end(), is_non_empty(); drop length()
-//   [ ] MatchingCost concept: replace length(e) with is_non_empty(e)
-//   [ ] get_lincost / RedcostView / push_flow: use find() + is_non_empty()
-//   [ ] Stage 1: use is_non_empty(e) instead of find(e) == end()
+//   [ ] FlowInstance<Vertex, Cost>: make generic on Cost; FlowReduction likewise;
+//       build_flow_reduction: dense → unordered_map, sparse → MatchingCostMap;
+//       remove EmptyRoadCost; remove compute_optimal_flow EmptyRoadCost param
+//   [ ] MatchingCostMap: LinearCost value type; find() always valid;
+//       is_non_empty(e); non_empty_edges()
+//   [ ] RobustCost: find() no end() branch for regular edges; is_non_empty()
+//       forwarder; make_cbound takes network; drop length() forwarder
+//   [ ] MatchingCost concept: length(e) → is_non_empty(e)
+//   [ ] get_lincost / RedcostView / push_flow / Stage 1: use find() +
+//       is_non_empty() throughout (see design above)
 //
 //   [ ] negative_arcs tracked set: replace the Stage 1 sweep of non-empty arcs
 //       with a maintained set of arcs known to have negative redcost.
