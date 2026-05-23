@@ -176,16 +176,47 @@ namespace roadgeometry {
 //                                   Eliminates O(|E|) residual rebuild at change_delta.
 // -- Pending implementation (matching-aware saturation) ---------------------
 //
-//   [x] MatchingCostMap (optimal_flow.hpp): bundles fns (non-empty roads only
-//       when EmptyRoadCost=false) + lengths (all roads); exposes find/length/
-//       empty_road_cbound.  FlowInstance.cost replaces edge_cost+edge_lengths.
-//   [x] MatchingCost concept (this file): constrains Cost on find/length/
-//       empty_road_cbound; RobustCost satisfies it via forwarders.
-//   [x] build_flow_reduction: EmptyRoadCost flag; empty roads omitted from fns.
-//   [x] compute_optimal_flow: EmptyRoadCost template param (default !UseSparse).
-//   [x] get_lincost / RedcostView: absent key → cost.length(e) for empty roads;
-//       empty-road lincost computed on demand, not cached.
-//   [x] Stage 1: skips empty-road arcs (non-negative by invariant at each Delta).
+// Design: MatchingCostMap provides cost for ALL arcs (no missing-key semantic).
+//   Empty roads yield a LinearCost{length} value type (struct with operator()
+//   returning length*|f|), produced by value with no heap allocation.  A
+//   separate is_non_empty(e) predicate distinguishes non-trivial PWL roads from
+//   linear ones; it is used to decide whether to cache lincost and to restrict
+//   Stage 1 iteration.  make_cbound (in RobustCost) stays unchanged: iterating
+//   begin()/end() now naturally covers all arcs and yields the correct total.
+//
+//   MatchingCostMap API (optimal_flow.hpp):
+//     fns      — unordered_map<int, PiecewiseLinear>: non-empty roads only
+//     lengths  — vector<double>: road length for every edge id
+//     find(e)  — always returns valid entry; empty roads return LinearCost{len}
+//     begin()/end() — two-phase iterator: fns first, then empty roads from
+//                     lengths; both phases yield value types, zero-cost
+//     is_non_empty(e) — fns.count(e) > 0; O(1)
+//
+//   RobustCost (robust_mccf.hpp):
+//     find()   — cycle edges → prohibitive linear fn; regular edges always
+//                delegate to inner cost (inner find() always valid now)
+//     begin()/end() — regular arcs from inner cost + cycle arcs
+//     is_non_empty(RobustEdge) — RegularEdge → inner cost.is_non_empty(r->e);
+//                                CycleEdge   → false (linear prohibitive cost)
+//     make_cbound — unchanged; natural iteration now covers all arcs
+//     length() forwarder — no longer needed (find() always valid)
+//
+//   fragile_mccf_sparse (this file):
+//     MatchingCost concept — replace length(e) with is_non_empty(e) → bool
+//     get_lincost / RedcostView — always use find(e)->second(...); use
+//                                 is_non_empty(e) to decide whether to cache
+//     push_flow — use is_non_empty(e) to guard cache update (replaces assert)
+//     Stage 1   — iterate network.edges(), use is_non_empty(e) to skip empties
+//
+//   [x] FlowInstance.cost: MatchingCostMap replaces edge_cost + edge_lengths
+//   [x] build_flow_reduction: EmptyRoadCost flag; empty roads omitted from fns
+//   [x] compute_optimal_flow: EmptyRoadCost template param (default !UseSparse)
+//   [ ] MatchingCostMap: LinearCost value type; find() always valid; two-phase
+//       iterator; is_non_empty()
+//   [ ] RobustCost: updated find(), begin()/end(), is_non_empty(); drop length()
+//   [ ] MatchingCost concept: replace length(e) with is_non_empty(e)
+//   [ ] get_lincost / RedcostView / push_flow: use find() + is_non_empty()
+//   [ ] Stage 1: use is_non_empty(e) instead of find(e) == end()
 //
 //   [ ] negative_arcs tracked set: replace the Stage 1 sweep of non-empty arcs
 //       with a maintained set of arcs known to have negative redcost.
