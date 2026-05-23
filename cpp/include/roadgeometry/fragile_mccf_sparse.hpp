@@ -176,13 +176,25 @@ namespace roadgeometry {
 //                                   Eliminates O(|E|) residual rebuild at change_delta.
 // -- Pending implementation (matching-aware saturation) ---------------------
 //
-// Design: MatchingCostMap provides cost for ALL arcs (no missing-key semantic).
-//   Empty roads yield a LinearCost{length} value type (struct with operator()
-//   returning length*|f|), produced by value with no heap allocation.  A
-//   separate is_non_empty(e) predicate distinguishes non-trivial PWL roads from
-//   linear ones; it is used to decide whether to cache lincost and to restrict
-//   Stage 1 iteration.  make_cbound (in RobustCost) stays unchanged: iterating
-//   begin()/end() now naturally covers all arcs and yields the correct total.
+// Design: FlowInstance<Vertex, Cost> is generic on Cost; fragile_mccf and
+//   fragile_mccf_sparse receive different Cost types suited to each solver.
+//   The EmptyRoadCost template parameter is no longer needed — the cost type
+//   itself encodes the distinction.
+//
+//   Dense (UseSparse=false):
+//     Cost = std::unordered_map<int, PiecewiseLinear>
+//     All roads have explicit PWL cost fns.  Simple map semantics; no matching
+//     structure required.  build_flow_reduction populates every edge.
+//
+//   Sparse (UseSparse=true):
+//     Cost = MatchingCostMap — provides cost for ALL arcs (no missing-key
+//     semantic).  Empty roads yield a LinearCost{length} value type (struct
+//     with operator() returning length*|f|), produced by value with no heap
+//     allocation.  A separate is_non_empty(e) predicate distinguishes non-
+//     trivial PWL roads from linear ones; used to decide whether to cache
+//     lincost and to restrict Stage 1 iteration.  make_cbound (in RobustCost)
+//     stays unchanged: iterating begin()/end() covers all arcs, yielding the
+//     correct total including empty-road contributions.
 //
 //   MatchingCostMap API (optimal_flow.hpp):
 //     fns      — unordered_map<int, PiecewiseLinear>: non-empty roads only
@@ -191,10 +203,32 @@ namespace roadgeometry {
 //     begin()/end() — two-phase iterator: fns first, then empty roads from
 //                     lengths; both phases yield value types, zero-cost
 //     is_non_empty(e) — fns.count(e) > 0; O(1)
+//     non_empty_edges()  — range over fns; used for change_delta rechecks and
+//                          the future negative_arcs tracked set
+//
+//   At change_delta, lincost invalidation depends on which invariant holds:
+//
+//   Capacity scaling (Delta halving): flow is always a multiple of Delta.
+//     When x = k·Delta (k ≠ 0), both arc directions have constant lincost:
+//       dir toward  zero: length·(|x−Delta|−|x|)/Delta = −length
+//       dir away from zero: length·(|x+Delta|−|x|)/Delta = +length
+//     (using |x| ≥ Delta so neither step crosses the cusp at 0).
+//     Neither depends on the value of Delta, so halving Delta does not
+//     invalidate any empty arc lincost.  Only non-empty arcs need
+//     invalidation — iterate non_empty_edges(), O(|fns|).
+//
+//   Incremental (Delta increases between pin batches): existing flow may not
+//     be a multiple of the new Delta, so empty arcs with nonzero flow can
+//     straddle the cusp.  Invalidation requires the union of:
+//       (a) non-empty arcs  — from non_empty_edges()
+//       (b) empty arcs with nonzero flow, toward-zero direction only — from
+//           the flow map
+//     Both sparse; union formed at call site O(|fns| + |flow|), without
+//     coupling the cost map to the flow state.
 //
 //   RobustCost (robust_mccf.hpp):
-//     find()   — cycle edges → prohibitive linear fn; regular edges always
-//                delegate to inner cost (inner find() always valid now)
+//     find()   — cycle edges → prohibitive linear fn; regular edges delegate
+//                to inner cost (inner find() always valid; no end() branch)
 //     begin()/end() — regular arcs from inner cost + cycle arcs
 //     is_non_empty(RobustEdge) — RegularEdge → inner cost.is_non_empty(r->e);
 //                                CycleEdge   → false (linear prohibitive cost)
