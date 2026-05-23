@@ -58,6 +58,26 @@ namespace roadgeometry {
 //   larger — increasing Delta cannot introduce new negative arcs.  The
 //   incremental algorithm may be able to exploit this when new pins raise Delta.
 //
+//   Empty arcs with zero flow are never invalidated by any mutation:
+//     push_flow         — only arcs of the pushed edge are affected; an arc
+//                         with no flow cannot be the pushed arc (residual arc
+//                         (e,-1) requires flow[e] ≥ Delta; (e,+1) is pushed only
+//                         if it was in the residual, after which flow ≠ 0).
+//     update_potentials — Dijkstra optimality guarantees all arcs (including
+//                         empty/zero-flow ones) have non-negative redcost after
+//                         update; no recheck needed.
+//     change_delta      — empty arc lincost at x=0: length·(|±Delta|-0)/Delta =
+//                         length > 0; halving Delta leaves lincost unchanged.
+//   More precisely, for empty arcs with nonzero flow x, only the direction
+//   toward zero (the side with the cusp at |f|=0) has lincost sensitive to
+//   Delta; the away-from-zero direction always has lincost = +length regardless
+//   of Delta.  So lincost invalidation at change_delta — whether Delta halves
+//   or increases when a new batch of pins arrives — is limited to:
+//     (a) non-empty arcs (both directions), and
+//     (b) the toward-zero direction of empty arcs with nonzero flow.
+//   The away-from-zero direction of empty arcs, and all empty/zero-flow arcs,
+//   remain valid across batch boundaries and need not be evicted.
+//
 // -- State component dependency graph ---------------------------------------
 //
 //   supply   (fixed) ──┐
