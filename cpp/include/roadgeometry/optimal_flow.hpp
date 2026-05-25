@@ -1,10 +1,10 @@
 #pragma once
 #include <cmath>
-#include <functional>
 #include <limits>
 #include <optional>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 #include "double_ended_vector.hpp"
 #include "input_graph.hpp"
@@ -143,63 +143,101 @@ inline PiecewiseLinear pwl_negate(const PiecewiseLinear& obj) {
 }
 
 // ---------------------------------------------------------------------------
+// LinearCost
+//
+// Zero-cost callable for empty roads: cost = length × |f|.
+// Returned by value from MatchingCostMap::find() for edges with no pins.
+// No heap allocation; fits in a register.
+// ---------------------------------------------------------------------------
+struct LinearCost {
+    double length;
+    double operator()(double x) const noexcept { return length * std::abs(x); }
+};
+
+// ---------------------------------------------------------------------------
 // MatchingCostMap
 //
 // Unified cost container for the matching MCCF reduction.  Carries:
-//   fns     — PWL cost function per edge_id, for non-empty roads only
-//             (or all roads when EmptyRoadCost=true).  Absent = empty road.
-//   lengths — road length per edge_id, for all edges.  Used by
-//             fragile_mccf_sparse to compute empty-road lincost on demand.
+//   fns     — PWL cost function per edge_id, for non-empty roads only.
+//   lengths — road length per edge_id, for all edges.
 //
-// Implements the Cost concept expected by fragile_mccf_sparse:
-//   find(key)  → iterator to PiecewiseLinear, or end() if absent (empty road)
-//   begin/end  → iterates over non-empty road entries (for Stage 1 and make_cbound)
-//   length(e)  → road length for lincost of empty arcs
-//   empty_road_cbound(U) → sum of length×U for roads absent from fns (for cycle-
-//                          edge prohibitive cost when EmptyRoadCost=false)
+// Implements the MatchingCost concept expected by fragile_mccf_sparse:
+//   find(key)         → always valid; empty roads return CostRef{LinearCost{len}}.
+//   is_non_empty(key) → bool; true iff edge has a PWL cost fn (fns.count > 0).
+//   non_empty_edges() → const ref to fns; for change_delta lincost invalidation
+//                       and future negative_arcs tracked set.
+//   length(e)         → road length; for empty-arc fast-path lincost computation.
 // ---------------------------------------------------------------------------
 struct MatchingCostMap {
     std::unordered_map<int, PiecewiseLinear> fns;
     std::vector<double>                      lengths;
 
-    using const_iterator = std::unordered_map<int, PiecewiseLinear>::const_iterator;
-    const_iterator find(int key)  const { return fns.find(key); }
-    const_iterator begin()        const { return fns.begin(); }
-    const_iterator end()          const { return fns.end(); }
+    // Callable cost reference: non-owning pointer to PWL (non-empty road) or
+    // inline LinearCost (empty road).  No heap allocation in either case.
+    struct CostRef {
+        std::variant<const PiecewiseLinear*, LinearCost> v;
+        double operator()(double x) const {
+            if (const auto* p = std::get_if<const PiecewiseLinear*>(&v)) return (**p)(x);
+            return std::get<LinearCost>(v)(x);
+        }
+    };
 
-    double length(int e)          const { return lengths[static_cast<std::size_t>(e)]; }
+    using value_type = std::pair<int, CostRef>;
 
-    double empty_road_cbound(double U) const {
-        double sum = 0.0;
-        for (int e = 0; e < static_cast<int>(lengths.size()); ++e)
-            if (fns.find(e) == fns.end()) sum += lengths[e];
-        return sum * U;
+    struct iterator {
+        std::optional<value_type> entry_;
+        const value_type* operator->() const { return &*entry_; }
+        bool operator==(const iterator& o) const {
+            if (!entry_ && !o.entry_) return true;
+            if (!entry_ || !o.entry_) return false;
+            return entry_->first == o.entry_->first;
+        }
+        bool operator!=(const iterator& o) const { return !(*this == o); }
+    };
+
+    iterator end() const { return {std::nullopt}; }
+
+    iterator find(int key) const {
+        auto it = fns.find(key);
+        if (it != fns.end())
+            return {value_type{key, CostRef{&it->second}}};
+        return {value_type{key, CostRef{LinearCost{lengths[static_cast<std::size_t>(key)]}}}};
     }
+
+    bool is_non_empty(int key) const { return fns.count(key) > 0; }
+
+    const std::unordered_map<int, PiecewiseLinear>& non_empty_edges() const { return fns; }
+
+    double length(int e) const { return lengths[static_cast<std::size_t>(e)]; }
 };
 
 // ---------------------------------------------------------------------------
-// FlowInstance<Vertex>
+// FlowInstance<Vertex, Cost>
 //
 // A pure MCCF problem instance: network, supply, cost, U.
 // Road-agnostic — suitable for passing directly to robust_mccf.
+//
+// Cost type:
+//   UseSparse=true  → MatchingCostMap  (default)
+//   UseSparse=false → std::unordered_map<int, PiecewiseLinear>
 // ---------------------------------------------------------------------------
-template <typename Vertex>
+template <typename Vertex, typename Cost = MatchingCostMap>
 struct FlowInstance {
     HashMapGraph<Vertex, int>          network;
     std::unordered_map<Vertex, double> vertex_supply;
-    MatchingCostMap                    cost;
+    Cost                               cost;
     double                             U;
 };
 
 // ---------------------------------------------------------------------------
-// FlowReduction<Road, Vertex>
+// FlowReduction<Road, Vertex, Cost>
 //
 // A FlowInstance together with the translation members needed to decode
 // the edge-indexed flow back to Road-keyed flow.
 // ---------------------------------------------------------------------------
-template <typename Road, typename Vertex>
+template <typename Road, typename Vertex, typename Cost = MatchingCostMap>
 struct FlowReduction {
-    FlowInstance<Vertex>             instance;
+    FlowInstance<Vertex, Cost>       instance;
     std::vector<std::pair<Road,int>> edge_to_road; // indexed by edge_id; {road, sign}
     std::vector<double>              oneway_zmin;  // indexed by edge_id; 0.0 for bidirectional
 };
@@ -216,16 +254,23 @@ struct FlowReduction {
 //   - Bidirectional road: forward edge u→v with obj, reverse edge v→u with
 //     negated objective obj(-z).
 //   - Accumulates U = 1 + sum over roads of (measure size - 1).
+//
+// UseSparse=true  → Cost = MatchingCostMap: empty roads stored in lengths only,
+//                   no PWL fn (fragile_mccf_sparse computes lincost on demand).
+// UseSparse=false → Cost = unordered_map<int, PiecewiseLinear>: all roads get
+//                   an explicit PWL fn (required by dense solver).
 // ---------------------------------------------------------------------------
-template <typename Road, typename Vertex>
-FlowReduction<Road, Vertex> build_flow_reduction(
+template <typename Road, typename Vertex, bool UseSparse = true>
+auto build_flow_reduction(
     RoadSegments<Road>&                                        segments,
     const std::unordered_map<Road, std::pair<Vertex,Vertex>>& endpoints,
     const std::unordered_map<Road, double>&                   lengths,
-    const std::unordered_map<Road, bool>&                     is_oneway,
-    bool empty_road_cost = true
+    const std::unordered_map<Road, bool>&                     is_oneway
 ) {
-    FlowReduction<Road, Vertex> red;
+    using Cost = std::conditional_t<UseSparse,
+                     MatchingCostMap,
+                     std::unordered_map<int, PiecewiseLinear>>;
+    FlowReduction<Road, Vertex, Cost> red;
     auto& inst = red.instance;
     inst.U = 1.0;  // base: +1 ensures U > max possible edge flow on empty network
     int edge_id = 0;
@@ -250,36 +295,49 @@ FlowReduction<Road, Vertex> build_flow_reduction(
         for (auto& g : seg) surplus += (int)g.supply.size() - (int)g.demand.size();
         inst.vertex_supply[v] += static_cast<double>(surplus);
 
-        // When empty_road_cost=false, skip cost fn for roads with no pins;
-        // fragile_mccf_sparse detects absent key and computes lincost from edge_lengths.
-        bool skip_cost = !empty_road_cost && seg.empty();
+        // Sparse: skip PWL fn for empty roads (lincost computed from length on demand).
+        // Dense: always build PWL fn (solver has no length-based fallback).
+        bool is_empty = seg.empty();
         std::optional<PiecewiseLinear> obj_opt;
-        if (!skip_cost) obj_opt = objective_from_measure(m);
+        if (!is_empty || !UseSparse) obj_opt = objective_from_measure(m);
 
         auto ow_it = is_oneway.find(road);
         bool oneway = ow_it != is_oneway.end() && ow_it->second;
+
+        // Helper: store cost fn for one edge_id in the cost map.
+        auto add_cost = [&](int eid, const PiecewiseLinear& fn) {
+            if constexpr (UseSparse) {
+                inst.cost.fns.emplace(eid, fn);
+            } else {
+                inst.cost.emplace(eid, fn);
+            }
+        };
+        // Sparse only: record road length for every edge_id (empty or not).
+        auto add_length = [&]() {
+            if constexpr (UseSparse) inst.cost.lengths.push_back(length);
+        };
 
         if (oneway) {
             double zmin = static_cast<double>(-m.min_index());
             inst.vertex_supply[u] -= zmin;
             inst.vertex_supply[v] += zmin;
             inst.network.add_edge(edge_id, u, v);
-            if (!skip_cost) inst.edge_cost.emplace(edge_id, pwl_shift(*obj_opt, zmin));
-            inst.edge_lengths.push_back(length);
+            if (obj_opt) add_cost(edge_id, pwl_shift(*obj_opt, zmin));
+            add_length();
             red.oneway_zmin.push_back(zmin);
             red.edge_to_road.push_back({road, +1});
             ++edge_id;
         } else {
             inst.network.add_edge(edge_id, u, v);
-            if (!skip_cost) inst.edge_cost.emplace(edge_id, *obj_opt);
-            inst.edge_lengths.push_back(length);
+            if (obj_opt) add_cost(edge_id, *obj_opt);
+            add_length();
             red.oneway_zmin.push_back(0.0);
             red.edge_to_road.push_back({road, +1});
             ++edge_id;
 
             inst.network.add_edge(edge_id, v, u);
-            if (!skip_cost) inst.edge_cost.emplace(edge_id, pwl_negate(*obj_opt));
-            inst.edge_lengths.push_back(length);
+            if (obj_opt) add_cost(edge_id, pwl_negate(*obj_opt));
+            add_length();
             red.oneway_zmin.push_back(0.0);
             red.edge_to_road.push_back({road, -1});
             ++edge_id;
@@ -310,10 +368,7 @@ FlowReduction<Road, Vertex> build_flow_reduction(
 // OUTPUT
 //   flow : Road → int  — integer optimal flow per road
 // ---------------------------------------------------------------------------
-// EmptyRoadCost=true  — include explicit PWL cost fn for every road (required for dense).
-// EmptyRoadCost=false — omit cost fn for empty roads; sparse solver computes lincost from
-//                       edge_lengths on demand.  Illegal with UseSparse=false.
-template <typename Road, typename Vertex, bool UseSparse = true, bool EmptyRoadCost = !UseSparse>
+template <typename Road, typename Vertex, bool UseSparse = true>
 std::unordered_map<Road, int> compute_optimal_flow(
     RoadSegments<Road>&                                        segments,
     const std::unordered_map<Road, std::pair<Vertex,Vertex>>& endpoints,
@@ -321,23 +376,13 @@ std::unordered_map<Road, int> compute_optimal_flow(
     const std::unordered_map<Road, bool>&                     is_oneway,
     double epsilon = 1.0
 ) {
-    static_assert(EmptyRoadCost || UseSparse,
-        "EmptyRoadCost=false requires UseSparse=true (dense solver needs explicit cost fns)");
-    auto red = build_flow_reduction<Road, Vertex>(segments, endpoints, lengths, is_oneway, EmptyRoadCost);
+    auto red = build_flow_reduction<Road, Vertex, UseSparse>(segments, endpoints, lengths, is_oneway);
     auto& inst = red.instance;
     int num_edges = static_cast<int>(red.edge_to_road.size());
 
-    // For empty roads absent from edge_cost, add length*U to cbound so cycle edges
-    // remain prohibitively expensive relative to any feasible solution.
-    double extra_cbound = 0.0;
-    for (int e = 0; e < (int)inst.edge_lengths.size(); ++e)
-        if (inst.edge_cost.find(e) == inst.edge_cost.end())
-            extra_cbound += inst.edge_lengths[e] * inst.U;
-
     std::unordered_map<int, double> capacity;  // empty — no explicit capacity bounds
     auto int_flow = robust_mccf<UseSparse>(inst.network, capacity, inst.vertex_supply,
-                                           inst.edge_cost, VectorMap{inst.edge_lengths},
-                                           inst.U, extra_cbound, epsilon);
+                                           inst.cost, inst.U, epsilon);
 
     // De-normalize: accumulate signed flow back to Road-keyed result.
     // For oneway roads: add back zmin bias.

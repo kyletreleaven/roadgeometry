@@ -228,26 +228,6 @@ struct RobustCapacity {
 };
 
 // ---------------------------------------------------------------------------
-// RobustEdgeLengths<Edge, Lengths>
-//
-// Adapts an inner Lengths map (e.g. VectorMap<double> indexed by edge_id)
-// to the RobustInputGraph edge type.  RegularEdge delegates to the inner map;
-// CycleEdge returns 0.0 (cycle edges always have explicit cost fns, never empty).
-// ---------------------------------------------------------------------------
-template <typename Edge, typename Lengths>
-struct RobustEdgeLengths {
-    const Lengths& inner_;
-
-    double get(const RobustEdge<Edge>& e) const {
-        if (const auto* r = std::get_if<RegularEdge<Edge>>(&e)) {
-            auto it = inner_.find(r->e);
-            if (it != inner_.end()) return (*it).second;
-        }
-        return 0.0;
-    }
-};
-
-// ---------------------------------------------------------------------------
 // RobustCost<Edge, Cost>
 //
 // A cost map view for a RobustInputGraph.  Regular edges delegate to the
@@ -280,28 +260,44 @@ struct RobustCost {
     double      slope_;    // prohibitive slope; TODO: replace with InfiniteSlope type
     double      offset_;   // prohibitive offset (currently 0)
 
-    RobustCost(const Cost& cost, double U, double extra_cbound = 0.0)
+    // Takes the original (pre-wrapping) network to compute the prohibitive slope.
+    // cost_.find(e) is always valid for every edge in the network (MatchingCostMap
+    // guarantees this), so make_cbound needs no end() check.
+    template <InputGraph G2>
+    RobustCost(const G2& network, const Cost& cost, double U)
         : cost_(cost)
-        , slope_(make_cbound(cost, U) + extra_cbound)
+        , slope_(make_cbound(network, cost, U))
         , offset_(0.0)
     {}
 
     iterator end() const { return {std::nullopt}; }
 
+    // Regular edges: delegate to inner cost (find() always valid; no end() branch).
+    // Cycle edges: prohibitive linear fn with slope = sum of all edge costs at U.
     iterator find(const key_type& e) const {
         if (const auto* r = std::get_if<RegularEdge<Edge>>(&e)) {
             auto it = cost_.find(r->e);
-            if (it == cost_.end()) return end();
-            return {value_type{e, (*it).second}};
+            return {value_type{e, it->second}};
         }
-        // cycle edge: return prohibit by value
         return {value_type{e, [s = slope_, o = offset_](double x) { return s * x + o; }}};
     }
 
+    // Regular edges: delegate to inner cost.
+    // Cycle edges: always false (prohibitive cost, not a real road arc).
+    bool is_non_empty(const key_type& e) const {
+        if (const auto* r = std::get_if<RegularEdge<Edge>>(&e))
+            return cost_.is_non_empty(r->e);
+        return false;
+    }
+
 private:
-    static double make_cbound(const Cost& cost, double U) {
+    template <InputGraph G2>
+    static double make_cbound(const G2& network, const Cost& cost, double U) {
         double cbound = 0.0;
-        for (auto [e, fn] : cost) cbound += fn(U);
+        for (const auto& e : network.edges()) {
+            auto ci = cost.find(e);
+            cbound += ci->second(U);
+        }
         return cbound;
     }
 };
@@ -329,7 +325,7 @@ robust_mccf(
 
     RobustInputGraph<G>       robust_network(network);
     RobustCapacity<Edge, Cap> robust_capacity{capacity};
-    RobustCost<Edge, Cost>    robust_cost{cost, U};
+    RobustCost<Edge, Cost>    robust_cost{network, cost, U};
 
     auto flow = [&]() {
         if constexpr (UseSparse)

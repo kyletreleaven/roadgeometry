@@ -15,6 +15,18 @@
 namespace roadgeometry {
 
 // ---------------------------------------------------------------------------
+// BasicCost<C, E>
+//
+// Minimal concept for cost maps accepted by fragile_mccf (dense solver).
+// find(key) must always return a valid iterator (never end()).
+// ---------------------------------------------------------------------------
+template <typename C, typename E>
+concept BasicCost = requires(const C& c, E key) {
+    { c.find(key) };
+    { c.end() };
+};
+
+// ---------------------------------------------------------------------------
 // fragile_mccf
 //
 // Capacity-scaling successive shortest-paths algorithm for convex-cost flow.
