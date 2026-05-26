@@ -194,3 +194,60 @@ The capacity-scaling invariants are unchanged: linearized cost and reduced-cost 
 are evaluated at the current flow `x`, and the residual availability conditions are the
 only places `lb` appears.  The argument holds for any `lb[e] ≤ 0`; positive lower bounds
 require the standard feasibility pre-flow and are out of scope here.
+
+---
+
+## Implicit connectivity + ordinal costs (replace `RobustInputGraph`)
+
+### Motivation
+`RobustInputGraph` adds a Hamiltonian cycle over all n nodes to guarantee strong
+connectivity of every Delta-residual graph.  This requires:
+1. Materializing a specific node ordering (`node_order_`, `node_index_`) in memory.
+2. Adding n explicit cycle arcs to the residual graph, each processed in every Dijkstra
+   and Stage 1 pass.
+3. Computing a CBOUND slope (sum of `cost(U)` over all edges) to make cycle-edge cost
+   prohibitive — fragile and potentially imprecise.
+
+### Proposed change
+Replace `RobustInputGraph` with implicit connectivity inside Dijkstra:
+
+- **Ordinal costs**: represent arc costs as `(ordinal, real)` pairs ordered
+  lexicographically.  Connectivity arcs have cost `(1, 0.0)`, dominating any pure-real-cost
+  path `(0, *)`.  Eliminates CBOUND entirely.  Runtime cost: ~2x comparison cost per heap operation (ordinal first, then real when
+  ordinals are equal — almost always for real arcs), multiplying the O(log n) heap cost
+  by a constant factor.  Mitigating factors: (a) heap cost may not be the bottleneck
+  (profiling shows LinearizeCost+ReducedCost dominating Dijkstra); (b) since ordinal=0
+  for virtually all comparisons, branch prediction may eliminate the misprediction penalty —
+  real cost is one extra integer load per comparison.
+- **Implicit direct arc s→t**: since t is known before each Dijkstra call, treat s as
+  having one implicit arc to t with cost `(0, 1)`.  No arcs stored, no specific cycle
+  chosen.  When taken, flow on this arc is tracked (it carries a real "loan" that gets
+  repaid at finer scales via real backward arcs).
+
+### Tradeoffs vs. Hamiltonian cycle
+- **When disconnection is rare** (e.g. well-connected road networks): direct s→t wins.
+  The Hamiltonian cycle traverses O(n/2) arcs on average per disconnection event (flow
+  updates + residual updates + reduced-cost recomputes for each); direct s→t costs O(1).
+- **Loan granularity**: the cycle can use real arcs for part of the path and a cycle arc
+  only where needed, so the loan is smaller.  Direct s→t always takes the full loan,
+  bypassing available real capacity.  More flow on connectivity arcs means more repayment
+  work at finer scales — but proportional to how often disconnection occurs, which is rare.
+- **Space**: Hamiltonian cycle has fixed O(n) arc state; implicit approach accumulates
+  one flow entry per distinct (s, t) pair that needed connectivity — hopefully sparse, but
+  O(n log U/ε) in the worst case.
+- **Dijkstra always prefers direct s→t** over "real arcs partway + implicit arc" since
+  the implicit arc has zero real cost and d_real(s, s) = 0.  No partial real-arc usage on
+  the connectivity path.
+- **Asymptotic dominance**: per disconnection event, the Hamiltonian cycle accumulates
+  debt on O(n/2) arcs (each gets Δ flow), whereas direct s→t accumulates Δ on one arc —
+  O(n) times less total debt, which directly bounds repayment work at finer scales.
+  Whether this translates to a formal asymptotic improvement needs further investigation.
+
+### Impact
+- `RobustInputGraph`, `RobustCapacity`, `RobustCost`, and `robust_mccf` can be removed
+  entirely (or reduced to a thin wrapper that passes t to the solver).
+- Residual graph shrinks by n arcs; no node-ordering bookkeeping.
+- Dijkstra needs to know t upfront — already the case (s and t are chosen before each
+  augmentation step).
+- Stage 1 (saturate negative-redcost arcs) is unaffected: ordinal cost ≥ 0 always, so
+  connectivity arcs are never pushed.
