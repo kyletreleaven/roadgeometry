@@ -245,15 +245,44 @@ struct FlowReduction {
 // ---------------------------------------------------------------------------
 // build_flow_reduction
 //
+// Reduces the roadnet matching problem to a min-cost convex flow instance.
+//
 // For each road in `lengths`:
-//   - Computes measure from the (possibly pre-matched) segment.
+//   - Computes measure m from the (possibly pre-matched) segment, where m[k]
+//     is the total road length at flow level k.
 //   - Derives surplus (net supply - demand) → added to vertex_supply[v].
-//   - Builds a convex PWL objective from the measure.
+//   - Builds obj = objective_from_measure(m): the convex PWL function whose
+//     value obj(z) is the optimal matching cost on this road given net flow z.
 //   - Oneway road: shifts objective so domain starts at 0; adds supply bias
 //     to u and v to compensate.  One forward edge.
-//   - Bidirectional road: forward edge u→v with obj, reverse edge v→u with
-//     negated objective obj(-z).
+//   - Bidirectional road: two antiparallel edges —
+//       e_fwd (u→v) with cost obj(z)
+//       e_rev (v→u) with cost obj(-z)  [via pwl_negate]
 //   - Accumulates U = 1 + sum over roads of (measure size - 1).
+//
+// Correctness of the bidirectional decomposition
+// -----------------------------------------------
+// The reduction is a related MCCF instance, not a direct encoding of the
+// signed-flow matching problem.  The matching problem minimises Σ obj(z_e)
+// over signed net flows z_e ∈ [−U, U]; the reduction instead minimises
+// Σ [c_fwd(f_e) + c_rev(g_e)] over non-negative arc flows, where
+// c_fwd(f) = obj(f) and c_rev(g) = obj(−g).
+//
+// The two problems share the same optimal net flows:
+//
+//   Bijection: every unidirectional reduction flow (f_e ≥ 0, g_e = 0, or
+//   f_e = 0, g_e ≥ 0) corresponds bijectively to a signed flow z_e = f_e − g_e
+//   on the original, with reduction cost obj(z_e) + obj(0).
+//
+//   Dominance: any anti-parallel reduction flow (f_e > 0 and g_e > 0) has
+//   strictly higher cost than the cancellation (f_e − δ, g_e − δ) for any
+//   δ ∈ (0, min(f_e, g_e)] — by convexity of obj.  So every optimal
+//   reduction flow is unidirectional.
+//
+//   Conclusion: the reduction's optimal unidirectional flow maps to the
+//   matching problem's optimal net flow.  Costs differ by a fixed constant
+//   Σ obj(0) per bidirectional road, which does not affect which flow is
+//   optimal.
 //
 // UseSparse=true  → Cost = MatchingCostMap: empty roads stored in lengths only,
 //                   no PWL fn (fragile_mccf_sparse computes lincost on demand).
