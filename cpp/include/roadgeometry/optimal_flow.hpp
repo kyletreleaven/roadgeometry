@@ -284,6 +284,13 @@ struct FlowReduction {
 //   Σ obj(0) per bidirectional road, which does not affect which flow is
 //   optimal.
 //
+//   Lower bounds: fragile_mccf assumes all arcs have lb = 0 (initial flow
+//   x = 0 is feasible).  The reduction preserves this: bidirectional roads
+//   use two non-negative arcs; oneway roads shift the domain so that zmin
+//   maps to 0, absorbed into the supply map.
+//   See TODO.md: native lb[e] ≤ 0 support in fragile_mccf would allow a
+//   single arc per road and dramatically reduce the supply shift and re-translation.
+//
 // UseSparse=true  → Cost = MatchingCostMap: empty roads stored in lengths only,
 //                   no PWL fn (fragile_mccf_sparse computes lincost on demand).
 // UseSparse=false → Cost = unordered_map<int, PiecewiseLinear>: all roads get
