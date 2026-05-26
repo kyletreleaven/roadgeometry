@@ -36,6 +36,26 @@ concept BasicCost = requires(const C& c, E key) {
 //   2. Every Delta-residual graph is strongly connected for all Delta in the
 //      scaling sequence.  (Use a robust-instance wrapper if not guaranteed.)
 //
+// Guarantee: returns an epsilon-optimal feasible flow — no augmenting cycle
+// of capacity epsilon has negative cost in the residual graph at termination.
+//
+// Correctness sketch:
+//   For any arc e at flow f, convexity of the cost c gives:
+//
+//     redcost(e,+1) + redcost(e,-1) = [c(f+Δ) + c(f-Δ) - 2c(f)] / Δ ≥ 0
+//
+//   so at most one direction is negative.  Stage 1 pushes on each arc at most
+//   once per pass: after a push on {e,+1}, the code immediately recomputes
+//   redcost(e,−1) = −old_redcost(e,+1) ≥ 0, so the opposite direction is
+//   never pushed in the same pass without a fresh re-evaluation.  Stage 2
+//   augments along a Dijkstra shortest path, which is a simple (acyclic) path:
+//   each arc appears at most once, so no arc is augmented twice in one step.
+//   The backward arc of any augmented arc enters the residual with
+//   redcost = −old_redcost ≥ 0; the Dijkstra triangle inequality ensures all
+//   other arcs also remain non-negative.  Dijkstra augmentation subsumes
+//   cancellation: the backward arc {e,−1} is simply a residual arc like any
+//   other, and routing through it reduces flow on e.
+//
 // Template parameters:
 //   G    — InputGraph satisfying the InputGraph concept.
 //   Cap  — Map-like: Edge → double.  Needs find(Edge).
