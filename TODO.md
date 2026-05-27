@@ -243,6 +243,18 @@ Replace `RobustInputGraph` with implicit connectivity inside Dijkstra:
   O(n) times less total debt, which directly bounds repayment work at finer scales.
   Whether this translates to a formal asymptotic improvement needs further investigation.
 
+### Design: swappable policies
+Both choices should be independently swappable template parameters, consistent with the
+existing architecture's philosophy of composable parts with good defaults:
+
+| Policy | Options |
+|---|---|
+| `ConnectivityPolicy` | `HamiltonianCycle` (current default), `ImplicitDirect` (s→t per step), `None` (caller guarantees strong connectivity) |
+| `ConnectivityCostPolicy` | `FiniteSlope` / CBOUND (current default), `Ordinal` (lexicographic `(ordinal, real)`), `Custom` (user-supplied slope or function) |
+
+Power users can compose freely; `None` + any cost policy is valid for well-connected
+instances and pays zero connectivity overhead.
+
 ### Impact
 - `RobustInputGraph`, `RobustCapacity`, `RobustCost`, and `robust_mccf` can be removed
   entirely (or reduced to a thin wrapper that passes t to the solver).
