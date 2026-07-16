@@ -206,19 +206,18 @@ connectivity of every Delta-residual graph.  This requires:
 2. Adding n explicit cycle arcs to the residual graph, each processed in every Dijkstra
    and Stage 1 pass.
 3. Computing a CBOUND slope (sum of `cost(U)` over all edges) to make cycle-edge cost
-   prohibitive — fragile and potentially imprecise.
+   prohibitive — a per-instance O(E) preprocessing pass, and (though a sound bound) a
+   dynamic-range/precision cost at fine Δ.  See [plans/ordinal_costs.md](plans/ordinal_costs.md).
 
 ### Proposed change
 Replace `RobustInputGraph` with implicit connectivity inside Dijkstra:
 
-- **Ordinal costs**: represent arc costs as `(ordinal, real)` pairs ordered
-  lexicographically.  Connectivity arcs have cost `(1, 0.0)`, dominating any pure-real-cost
-  path `(0, *)`.  Eliminates CBOUND entirely.  Runtime cost: ~2x comparison cost per heap operation (ordinal first, then real when
-  ordinals are equal — almost always for real arcs), multiplying the O(log n) heap cost
-  by a constant factor.  Mitigating factors: (a) heap cost may not be the bottleneck
-  (profiling shows LinearizeCost+ReducedCost dominating Dijkstra); (b) since ordinal=0
-  for virtually all comparisons, branch prediction may eliminate the misprediction penalty —
-  real cost is one extra integer load per comparison.
+- **Ordinal costs**: represent connectivity-arc cost as a lexicographic `(ordinal, real)`
+  pair — `(1, 0.0)` dominates any pure-real path `(0, *)`, eliminating CBOUND.  The pair type
+  is forced through `lincost`/`redcost`/`dist`/`potential` by the reduced-cost update chain.
+  Full pros/cons vs. the CBOUND slope — correctness, precision/dynamic-range, preprocessing,
+  compare vs. footprint cost, instance-dependence — are analyzed in
+  [plans/ordinal_costs.md](plans/ordinal_costs.md).
 - **Implicit direct arc s→t**: since t is known before each Dijkstra call, treat s as
   having one implicit arc to t with cost `(0, 1)`.  No arcs stored, no specific cycle
   chosen.  When taken, flow on this arc is tracked (it carries a real "loan" that gets
