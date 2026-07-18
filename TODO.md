@@ -165,66 +165,16 @@ Design: [plans/capacity_ranges.md](plans/capacity_ranges.md).
 
 ## Implicit connectivity + ordinal costs (replace `RobustInputGraph`)
 
-### Motivation
-`RobustInputGraph` adds a Hamiltonian cycle over all n nodes to guarantee strong
-connectivity of every Delta-residual graph.  This requires:
-1. Materializing a specific node ordering (`node_order_`, `node_index_`) in memory.
-2. Adding n explicit cycle arcs to the residual graph, each processed in every Dijkstra
-   and Stage 1 pass.
-3. Computing a CBOUND slope (sum of `cost(U)` over all edges) to make cycle-edge cost
-   prohibitive — a per-instance O(E) preprocessing pass, and (though a sound bound) a
-   dynamic-range/precision cost at fine Δ.  See [plans/ordinal_costs.md](plans/ordinal_costs.md).
+Design: [plans/connectivity.md](plans/connectivity.md) — connectivity topology × materialization
+policies (`HamCycle`/`Direct`/`None` × `Explicit`/`Implicit`), lazy loans, loan-count analysis,
+potential-update interaction; and [plans/ordinal_costs.md](plans/ordinal_costs.md) — ordinal vs.
+CBOUND cost representation. Defaults stay `HamCycle` × `Explicit` + CBOUND.
 
-### Proposed change
-Replace `RobustInputGraph` with implicit connectivity inside Dijkstra:
-
-- **Ordinal costs**: represent connectivity-arc cost as a lexicographic `(ordinal, real)`
-  pair — `(1, 0.0)` dominates any pure-real path `(0, *)`, eliminating CBOUND.  The pair type
-  is forced through `lincost`/`redcost`/`dist`/`potential` by the reduced-cost update chain.
-  Full pros/cons vs. the CBOUND slope — correctness, precision/dynamic-range, preprocessing,
-  compare vs. footprint cost, instance-dependence — are analyzed in
-  [plans/ordinal_costs.md](plans/ordinal_costs.md).
-- **Implicit direct arc s→t**: since t is known before each Dijkstra call, treat s as
-  having one implicit arc to t with cost `(0, 1)`.  No arcs stored, no specific cycle
-  chosen.  When taken, flow on this arc is tracked (it carries a real "loan" that gets
-  repaid at finer scales via real backward arcs).
-
-### Tradeoffs vs. Hamiltonian cycle
-- **When disconnection is rare** (e.g. well-connected road networks): direct s→t wins.
-  The Hamiltonian cycle traverses O(n/2) arcs on average per disconnection event (flow
-  updates + residual updates + reduced-cost recomputes for each); direct s→t costs O(1).
-- **Loan granularity**: the cycle can use real arcs for part of the path and a cycle arc
-  only where needed, so the loan is smaller.  Direct s→t always takes the full loan,
-  bypassing available real capacity.  More flow on connectivity arcs means more repayment
-  work at finer scales — but proportional to how often disconnection occurs, which is rare.
-- **Space**: Hamiltonian cycle has fixed O(n) arc state; implicit approach accumulates
-  one flow entry per distinct (s, t) pair that needed connectivity — hopefully sparse, but
-  O(n log U/ε) in the worst case.
-- **Dijkstra always prefers direct s→t** over "real arcs partway + implicit arc" since
-  the implicit arc has zero real cost and d_real(s, s) = 0.  No partial real-arc usage on
-  the connectivity path.
-- **Asymptotic dominance**: per disconnection event, the Hamiltonian cycle accumulates
-  debt on O(n/2) arcs (each gets Δ flow), whereas direct s→t accumulates Δ on one arc —
-  O(n) times less total debt, which directly bounds repayment work at finer scales.
-  Whether this translates to a formal asymptotic improvement needs further investigation.
-
-### Design: swappable policies
-Both choices should be independently swappable template parameters, consistent with the
-existing architecture's philosophy of composable parts with good defaults:
-
-| Policy | Options |
-|---|---|
-| `ConnectivityPolicy` | `HamiltonianCycle` (current default), `ImplicitDirect` (s→t per step), `None` (caller guarantees strong connectivity) |
-| `ConnectivityCostPolicy` | `FiniteSlope` / CBOUND (current default), `Ordinal` (lexicographic `(ordinal, real)`), `Custom` (user-supplied slope or function) |
-
-Power users can compose freely; `None` + any cost policy is valid for well-connected
-instances and pays zero connectivity overhead.
-
-### Impact
-- `RobustInputGraph`, `RobustCapacity`, `RobustCost`, and `robust_mccf` can be removed
-  entirely (or reduced to a thin wrapper that passes t to the solver).
-- Residual graph shrinks by n arcs; no node-ordering bookkeeping.
-- Dijkstra needs to know t upfront — already the case (s and t are chosen before each
-  augmentation step).
-- Stage 1 (saturate negative-redcost arcs) is unaffected: ordinal cost ≥ 0 always, so
-  connectivity arcs are never pushed.
+Removal checklist once a non-`HamCycle` policy lands:
+- [ ] Expose `ConnectivityPolicy` and `ConnectivityCostPolicy` as swappable params (option
+  matrix in the design docs).
+- [ ] Remove / thin `RobustInputGraph`, `RobustCapacity`, `RobustCost`, `robust_mccf` (reduce to a
+  wrapper that passes `t` to the solver).
+- [ ] Drop node-ordering bookkeeping (`node_order_`, `node_index_`); residual graph shrinks by n arcs.
+- [ ] Under `Direct`/`None`: guard the potential update to settled nodes; handle the disconnected
+  loan-splice (see connectivity.md).
