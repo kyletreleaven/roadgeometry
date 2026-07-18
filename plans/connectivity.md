@@ -129,34 +129,21 @@ Storage here is *idle* footprint only; an arc carrying flow is stored regardless
 
 ---
 
-## Interaction: the potential-update reachability caveat
+## Interaction: the potential update
 
-Stage 2 updates potentials with a **blanket** loop (`cvxcostflow.py:410-412`):
+Stage 2's potential update (`cvxcostflow.py:410-412`) is a Johnson reweighting. The efficient
+frontier form and why the blanket loop over `network.nodes()` is O(V) rather than O(|frontier|)
+are general and connectivity-independent — see [potential_updates.md](potential_updates.md). Two
+things about it *are* connectivity-specific:
 
-```python
-# by connectivity, should touch *every* node
-for i in network.nodes() : potential[i] -= dist[i]
-```
-
-This is a Johnson reweighting and only makes sense for nodes Dijkstra actually settled.
-Under `HamCycle` every node is reachable from `s`, so every `dist[i]` is finite and the
-blanket loop is correct — the code comment is literally relying on the cycle.
-
-Under `Direct` / `None` the residual graph is not strongly connected, so unreached nodes
-have infinite/absent `dist`. The loop must be guarded:
-
-```python
-for i in network.nodes():
-    if dist[i] < inf:            # settled this round
-        potential[i] -= dist[i]
-    # else: leave potential[i] unchanged
-```
-
-This is the standard successive-shortest-paths treatment (cf. [ssp.md](ssp.md)). The
-choice of Axis 1 therefore dictates whether line 412 needs the guard — an
-**implementation coupling** to record, independent of the cost-representation question.
-(The path reconstruction at `upstream[t]` likewise assumes `t` is reached: `Direct`
-guarantees `t` specifically; `None` guarantees nothing.)
+- **The guard.** The blanket loop is correct only because `HamCycle` makes every Δ-residual graph
+  strongly connected, so **R = V** and Dijkstra reaches every node. Under `Direct` / `None` the
+  reached set can be ≪ V, so the update must be restricted to nodes actually settled (unreached
+  nodes have infinite/absent `dist`). The path reconstruction at `upstream[t]` likewise needs `t`
+  reached — `Direct` supplies that arc when it is not, `None` guarantees nothing.
+- **Exploration cost.** Forcing `R = V` is exactly what makes `HamCycle` pay O(V) exploration per
+  augmentation; `Direct` explores only the real-reachable set (≪ V on a sparse Δ-residual),
+  dovetailing with [large_graph_optimization.md](large_graph_optimization.md).
 
 ---
 
@@ -177,40 +164,51 @@ as far as they reach and borrows only across the gap. Which dominates repayment 
 is **unresolved** — likely `Direct` wins in practice on well-connected graphs (rare, small
 events), but there is no proof either way, and it is the interesting cycle-vs-direct question.
 
-### Escalating prohibitive loan (ordinal only)
+### Lazy loan creation
 
-A mechanism that gives `Direct` the granularity of `HamCycle` but *only over arcs disconnection
-actually touched*: during Dijkstra, price a **new** loan (a connectivity arc not already under
-load) at ordinal `(n+1, 0)`, where `n` = loans currently live; an **existing** loan keeps
-`(1, 0)`. Committing an augment still uses `(1, 0)`. This enforces **reuse-before-create** —
-Dijkstra freely chains real arcs and existing loans, and pays for a new loan only when even that
-combined graph cannot reach `t`.
+`Direct` × `Implicit` reduces to a simple rule with **no connectivity cost during search**:
 
-Consequence: the loan set grows lazily into a *demand-tailored cycle*. Early on `Direct` is
-coarse (full-jump loans); as loans accumulate, paths string real arcs + existing loans + one new
-loan across the gap — the same partial-real-usage granularity `HamCycle` had from the start, but
-provisioned only where disconnection occurred. It **interpolates from coarse to cycle-like**.
+1. Run Dijkstra from `s` on **existing arcs only** — real arcs plus loans already carrying flow
+   (each at its committed `(1, 0)` ordinal cost). No prospective connectivity arc is in the graph.
+2. If `upstream[t]` is set, augment along that path. **Reuse** of existing loans is automatic:
+   they are ordinary arcs, and being ordinal ≥ 1 vs. real `(0, ·)`, Dijkstra prefers pure-real
+   paths and touches loans only when it must.
+3. **Iff `upstream[t]` is null** (t unreachable), add a direct `s→t` loan and augment Δ on it.
 
-### SSP risk from search ≠ commit cost — and why it is likely benign
+A loan "exists" — as a normal `(1, 0)` arc Dijkstra sees in step 1 — exactly while it carries
+flow; before creation and after full repayment it is simply absent. So a not-yet-created loan can
+never appear on a search path, and it never participates in any shortest-path computation: `dist`
+and potentials are computed purely on existing arcs at their true costs, uncontaminated by
+connectivity cost. The loan set grows into a *demand-tailored* structure that later augmentations
+reuse (step 2).
 
-The escalation searches at `(n+1, 0)` but commits at `(1, 0)`, so the potential update
-(`cvxcostflow.py:412`) is derived against a different cost than the reduced-cost certificate —
-the classic SSP trap (shortest path w.r.t. one cost, accounting at another). Three reasons it is
-probably harmless, the last of which removes it outright:
+### Potential update when t is unreachable
 
-- **Real optimum untouched.** The search/commit difference is `(n, 0)` — **purely ordinal, zero
-  real component**. Real potentials, real reduced costs, and the real-cost optimum are provably
-  unaffected; the risk is confined to the *ordinal* component of potentials (whether ordinal
-  reduced costs stay ≥ 0 the next round).
-- **Connectivity flow is transient.** Loans are repaid by `ε` (zero connectivity flow in the
-  final answer), so the ordinal bookkeeping never surfaces in the result.
-- **Fix — don't propagate until commit.** If the potential update absorbs only the *committed*
-  `(1, 0)` cost of arcs actually augmented, the inflated search cost never enters persistent
-  state and the trap cannot spring. Caveat: the *current* code does **not** defer — CBOUND
-  propagates eagerly into potentials via the blanket update whenever a shortest path crosses a
-  cycle arc (the only existing laziness is that the cost lands solely on nodes actually routed
-  through connectivity). So commit-time-only propagation would be a new, deliberate structure —
-  and the thing to verify is that it preserves ordinal reduced-cost ≥ 0.
+When `t` is unreachable, Dijkstra drains `s`'s reachable component and `dist[t] = ∞`, so the
+frontier formula (reweight by `dist[t] − dist[v]`) does not apply. The infinity is a signal, not a
+problem: it means no augmenting path runs through the reached component, so — unlike the connected
+case — **the reached component needs no reweighting at all.** The augment is the loan `s→t` alone;
+no explored arc changes flow, so every existing reduced cost is unchanged and still ≥ 0.
+
+All that is left is **pinning the loan**. For the next Dijkstra the loan needs reduced cost ≥ 0,
+and *tight* (= 0) when its forward residual survives (scale Δ, high-capacity loan). That fixes
+`t`'s potential relative to `s`'s (`π[t] := π[s] ⊖ c_loan`). Since `t`'s component was
+disconnected, its level is free up to an additive constant, so shifting that whole component by the
+pinning constant suffices — `s`'s side is untouched.
+
+Two views, and why the minimal one is cleaner:
+
+- **Loan-included (foil).** Pretend the loan is present during search; then `dist[t] = (1, 0)`
+  (finite — reachable at ordinal 1), the frontier is `S = R_s ∪ {t}`, and the ordinary frontier
+  formula applies. Valid, but it reweights *all* of `R_s` — O(|R_s|) — for an augment that touched
+  a single arc.
+- **Minimal (clean).** Reweight nothing on `s`'s side; pin only `t`'s component. O(t-side), and it
+  never references `dist[t]` — the loan *cost* `(1, 0)` does the pinning, sidestepping the ∞
+  entirely. Clearly preferable.
+
+(Implementation loose-end, not needed to follow the update: if `t`'s component has arcs *into*
+`s`'s side its offset is already pinned by them, so the shift may need the standard
+negative-residual saturation. Flag for when `Direct` is built.)
 
 ### How many loans? — greedy is Θ(n²), not O(cycle)
 
