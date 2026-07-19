@@ -2,3 +2,6 @@
 __pycache__
 .coverage
 *.egg-info
+
+# native C++ test build dir (scripts/cpptest.sh)
+cpp/build-tests/

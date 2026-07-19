@@ -21,3 +21,11 @@ install(EXPORT roadgeometryTargets
     NAMESPACE roadgeometry::
     DESTINATION lib/cmake/roadgeometry
 )
+
+# Native C++ tests (doctest + CTest). Off by default so the pybind11 /
+# scikit-build path that add_subdirectory()s this file is unaffected.
+option(ROADGEOMETRY_BUILD_TESTS "Build native C++ tests" OFF)
+if (ROADGEOMETRY_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
