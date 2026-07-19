@@ -83,6 +83,21 @@ Removal checklist once a non-`HamCycle` policy lands:
 
 ---
 
+## Testing infrastructure
+
+Design: [testing.md](testing.md). Land before Solver efficiency — its changes are the
+answer-preserving ones the differential + certificate harness guards.
+
+- [ ] Native C++ test target (doctest + CTest) in `cpp/CMakeLists.txt`, buildable without the
+  pybind11 module.
+- [ ] Framework-free test machinery: seeded instance generator, optimality-certificate oracle,
+  parity harness, flow/cost comparators (return plain results; no framework dependency).
+- [ ] Portable `for_each_policy<Test>()` typelist helper for the policy matrix.
+- [ ] Seed suite: one certificate check + one policy-parity test.
+- [ ] `nox`/Make target for the fast `cmake --build && ctest` loop; keep pytest as acceptance.
+
+---
+
 ## Solver efficiency
 
 Design: [plans/potential_updates.md](plans/potential_updates.md),
