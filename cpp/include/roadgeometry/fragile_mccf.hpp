@@ -76,7 +76,10 @@ fragile_mccf(
     const std::unordered_map<typename G::node_type, double>& supply,
     const Cost& cost,
     double U,
-    double epsilon = 1.0
+    double epsilon = 1.0,
+    // Optional per-edge lower bound (default 0). Only lb <= 0 is supported here:
+    // it needs no feasibility pre-flow since the initial flow x = 0 satisfies it.
+    const std::unordered_map<typename G::edge_type, double>& lb = {}
 )
 {
     using Node   = typename G::node_type;
@@ -149,7 +152,7 @@ fragile_mccf(
 
         Arc bwd{e, -1};
         if (rgraph.has_edge(bwd)) rgraph.remove_edge(bwd);
-        if (x >= D)               rgraph.add_edge(bwd, v, u);
+        if (x - map_get(lb, e, 0.0) >= D) rgraph.add_edge(bwd, v, u);
     };
 
     auto linearize_cost_edge = [&](const Edge& e, double D) {
