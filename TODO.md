@@ -80,3 +80,24 @@ Removal checklist once a non-`HamCycle` policy lands:
 - [ ] Drop node-ordering bookkeeping (`node_order_`, `node_index_`); residual graph shrinks by n arcs.
 - [ ] Under `Direct`/`None`: guard the potential update to settled nodes; handle the disconnected
   loan-splice (see connectivity.md).
+
+---
+
+## Solver efficiency
+
+Design: [plans/potential_updates.md](plans/potential_updates.md),
+[plans/large_graph_optimization.md](plans/large_graph_optimization.md).
+
+- [ ] Incremental `ReducedCost` — recompute only arcs incident to moved potentials (profiled
+  hotspot; the evidence-backed win).
+- [ ] Lazy edgeless roads — O(n) instead of O(|E|) on sparse-pin instances.
+- [ ] Early-termination + frontier potential update — needs the `dist[t]` clamp; minor on its own,
+  pairs with incremental `ReducedCost`.
+
+---
+
+## Alternative solver: SSP
+
+Design: [plans/ssp.md](plans/ssp.md).
+
+- [ ] Successive shortest paths as an alternative `FlowSolver`, for the incremental / web-app path.
