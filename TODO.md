@@ -2,6 +2,14 @@
 
 ---
 
+## Housekeeping (pre-merge)
+
+- [ ] Purge `polyglot-monorepo.md` and `orchestrator-design.md` from `mccf-sparse` history
+  before promoting to `main`. They were moved to their own repo and deleted in commit `f37c29b`,
+  but remain in earlier history — rewrite with `git filter-repo` (or equivalent) to evict.
+
+---
+
 ## C++ backend & multi-language distribution
 
 ### Goal
