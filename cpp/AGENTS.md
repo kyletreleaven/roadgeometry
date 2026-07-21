@@ -105,6 +105,30 @@ Most efficiency-bearing special cases are value/structural, so **trait/tag is th
 refinement is the exception** — which is why the STL ships both (`iterator_category` traits *and*
 capability concepts).
 
+## Companion mixins (kernel spec → full interface)
+
+A concept has a **required (core)** interface and a **provided (derived)** one. Let an implementor
+write only the *kernel* (the core, plus what's genuinely special) and inherit the rest from a
+**mixin** — the C++ analog of Rust trait defaults / Python `collections.abc` mixin methods. C++
+concepts can't carry defaults, so the concept↔mixin pairing is manual; name it predictably and
+document core-vs-provided so it's discoverable here even though the language won't surface it.
+
+Two flavours:
+- **Defaults base** (`<Concept>Defaults`) — pure derivations valid for *every* model (e.g. fill
+  optional accessors with trivial values). Always safe.
+- **Specialization mixin** (`ZeroLowerBounds`, `Uncapacitated`) — bundles a special-case *value +
+  its tag* (`static constexpr bool has_lower_bounds = false; double lb(Edge) const { return 0; }`),
+  so one inheritance yields the free accessor *and* the `if constexpr` marker.
+
+Two disciplines, because C++ multiple inheritance is clunkier than Rust/Python here:
+- **Keep mixins orthogonal** — each owns a *disjoint* set of accessors; overlapping defaults →
+  MI ambiguity (hard error or a silent wrong pick). At most one defaults base.
+- **Keep value defaults dumb** — trivial, obviously-correct values only (`lb = 0`, `ub = ∞`);
+  never clever/derived values that could silently mask a model's bug.
+
+Tags are **members** (mixin-injectable); use an external `<trait><I>` template only to retrofit a
+type you don't own (no mixin there — specialize the trait instead).
+
 ## Conventions in this tree
 
 - `EdgeMap<M, E>` — map-like (`.find()` / `.end()`); the basis for bound maps (lb, ub) and cost
