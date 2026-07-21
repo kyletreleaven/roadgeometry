@@ -77,57 +77,21 @@ This is guardrail 2 (data vs. machinery) in file form: concepts *constrain data*
 
 ## Special cases → optimization: refinement vs. trait
 
-A special case always carries more invariants (less freedom), and more known structure means more
-optimization headroom — every fast path is "I know something extra about this input, so I can drop
-work." The only design question is *how to encode the specialness at the type level*, and it forks:
-
-- **Capability invariant** — the special case *can do more* (richer interface). Encode as a
-  **concept refinement**; dispatch by subsumption. Direction aligns: the more-special concept is
-  the more-capable one. (`random_access_iterator` refines `forward_iterator`; the O(1) `advance`
-  is chosen for it.)
-- **Value / structural invariant** — the special case *constrains values or shape* and thereby
-  *needs less* (same or sparser interface). Encode as a **trait/tag** + `if constexpr`; dispatch on
-  the trait. Direction inverts or is orthogonal. (`lb ≡ 0`, "is sorted", "is acyclic",
-  trivially-copyable, symmetric.)
-
-**The tell** — can you write a *syntactic* requirement that captures the specialness?
-- Yes (`it + n` compiles) → capability → **refinement**.
-- No (`lb ≡ 0`, sortedness, acyclicity are unprovable from the interface) → value/structural →
-  **trait/tag**.
-
-**The trap:** forcing a value-specialization into a refinement *inverts generality*. The special
-case (zero-lb) is a semantic *subset* of the general problem, but omitting the accessor makes its
-concept the *less*-refined one — so "is-a" ends up backwards (the square-rectangle inversion). Keep
-the general concept general (`Instance` keeps `lb`); mark the trivial case with a trait
-(`has_lower_bounds<I> == false`) and `if constexpr` past the work.
-
-Most efficiency-bearing special cases are value/structural, so **trait/tag is the default and
-refinement is the exception** — which is why the STL ships both (`iterator_category` traits *and*
-capability concepts).
+A special case enables optimization; encode it as a **concept refinement** iff the specialness is a
+capability the interface can *syntactically check* (`it + n` compiles) — else a **trait/tag +
+`if constexpr`** (`lb ≡ 0`, sorted, acyclic: unprovable from the interface). Never force a
+value/structural specialization into a refinement — it inverts generality (the square-rectangle
+trap). Value/structural is the common case, so trait is the default.
+→ [rationale.md](rationale.md#special-cases--optimization-refinement-vs-trait)
 
 ## Companion mixins (kernel spec → full interface)
 
-A concept has a **required (core)** interface and a **provided (derived)** one. Let an implementor
-write only the *kernel* (the core, plus what's genuinely special) and inherit the rest from a
-**mixin** — the C++ analog of Rust trait defaults / Python `collections.abc` mixin methods. C++
-concepts can't carry defaults, so the concept↔mixin pairing is manual; name it predictably and
-document core-vs-provided so it's discoverable here even though the language won't surface it.
-
-Two flavours:
-- **Defaults base** (`<Concept>Defaults`) — pure derivations valid for *every* model (e.g. fill
-  optional accessors with trivial values). Always safe.
-- **Specialization mixin** (`ZeroLowerBounds`, `Uncapacitated`) — bundles a special-case *value +
-  its tag* (`static constexpr bool has_lower_bounds = false; double lb(Edge) const { return 0; }`),
-  so one inheritance yields the free accessor *and* the `if constexpr` marker.
-
-Two disciplines, because C++ multiple inheritance is clunkier than Rust/Python here:
-- **Keep mixins orthogonal** — each owns a *disjoint* set of accessors; overlapping defaults →
-  MI ambiguity (hard error or a silent wrong pick). At most one defaults base.
-- **Keep value defaults dumb** — trivial, obviously-correct values only (`lb = 0`, `ub = ∞`);
-  never clever/derived values that could silently mask a model's bug.
-
-Tags are **members** (mixin-injectable); use an external `<trait><I>` template only to retrofit a
-type you don't own (no mixin there — specialize the trait instead).
+Ship companion mixins so an implementor writes only the kernel and inherits the rest: a
+`<Concept>Defaults` base (universal derivations) + per-specialization mixins bundling *value + tag*.
+Disciplines: keep mixins **orthogonal** (disjoint accessors; ≤1 defaults base) to avoid MI
+ambiguity; keep value defaults **dumb**. Tags are members (mixin-injectable); external `<trait><I>`
+only to retrofit types you don't own.
+→ [rationale.md](rationale.md#companion-mixins-kernel-spec--full-interface)
 
 ## Associated types (derive, don't duplicate)
 
