@@ -75,6 +75,36 @@ Keep four roles distinct — conflating them is where the tree rots:
 This is guardrail 2 (data vs. machinery) in file form: concepts *constrain data* (`Instance`,
 `EdgeMap`); traits *provide machinery* (`PriorityQueue`, `ResidualGraph`, policies).
 
+## Special cases → optimization: refinement vs. trait
+
+A special case always carries more invariants (less freedom), and more known structure means more
+optimization headroom — every fast path is "I know something extra about this input, so I can drop
+work." The only design question is *how to encode the specialness at the type level*, and it forks:
+
+- **Capability invariant** — the special case *can do more* (richer interface). Encode as a
+  **concept refinement**; dispatch by subsumption. Direction aligns: the more-special concept is
+  the more-capable one. (`random_access_iterator` refines `forward_iterator`; the O(1) `advance`
+  is chosen for it.)
+- **Value / structural invariant** — the special case *constrains values or shape* and thereby
+  *needs less* (same or sparser interface). Encode as a **trait/tag** + `if constexpr`; dispatch on
+  the trait. Direction inverts or is orthogonal. (`lb ≡ 0`, "is sorted", "is acyclic",
+  trivially-copyable, symmetric.)
+
+**The tell** — can you write a *syntactic* requirement that captures the specialness?
+- Yes (`it + n` compiles) → capability → **refinement**.
+- No (`lb ≡ 0`, sortedness, acyclicity are unprovable from the interface) → value/structural →
+  **trait/tag**.
+
+**The trap:** forcing a value-specialization into a refinement *inverts generality*. The special
+case (zero-lb) is a semantic *subset* of the general problem, but omitting the accessor makes its
+concept the *less*-refined one — so "is-a" ends up backwards (the square-rectangle inversion). Keep
+the general concept general (`Instance` keeps `lb`); mark the trivial case with a trait
+(`has_lower_bounds<I> == false`) and `if constexpr` past the work.
+
+Most efficiency-bearing special cases are value/structural, so **trait/tag is the default and
+refinement is the exception** — which is why the STL ships both (`iterator_category` traits *and*
+capability concepts).
+
 ## Conventions in this tree
 
 - `EdgeMap<M, E>` — map-like (`.find()` / `.end()`); the basis for bound maps (lb, ub) and cost
