@@ -45,6 +45,36 @@ fully specialized — no vtable, no runtime policy branch.
   makes overloads *ambiguous* (hard error), not auto-resolved. Fix by naming the join
   (`template <A_and_B T>` where `A_and_B = A<T> && B<T>`).
 
+## Organizing concepts, traits, models, algorithms
+
+Keep four roles distinct — conflating them is where the tree rots:
+
+| Role | Is | Lives in |
+|---|---|---|
+| **Concept** | a contract (required ops) | `concepts.hpp` |
+| **Model** | a concrete type satisfying a concept | `traits.hpp` (defaults), or `models.hpp` once they multiply |
+| **Traits** | a bridge: associated types + default behaviour, per-type specializable | `traits.hpp` |
+| **Algorithm** | generic code constrained by concepts | its own header (`solver.hpp`, `certificate.hpp`) |
+
+- **Organize by role, not feature.** Don't colocate a concept with its model in one `foo.hpp`;
+  put concepts together so refinements `&&`-compose and subsumption works.
+- **Concepts at the altitude of their generality.** Cross-cutting contracts (`InputGraph`,
+  `EdgeMap`) → top-level `concepts.hpp`; domain-specific ones (`Instance`) → the module's
+  `mccf/concepts.hpp`.
+- **`traits.hpp` = bridges + default models/policies** for a module — a "defaults + plumbing"
+  file. But a model (*satisfies* a concept) is not a trait (*bridges to* one); split models into
+  `models.hpp` the moment they multiply, so `traits.hpp` doesn't become a junk drawer.
+- **Prefer named associated types over inline `decltype`.** Expose `using network_type = G;` and
+  constrain `InputGraph<typename I::network_type>`, not `remove_cvref_t<decltype(inst.network())>`.
+  Member typedefs for types you own; a traits class only to retrofit types you don't.
+- **Per-problem subdirectory** (`mccf/`) once a problem outgrows a header or two.
+- **Customization points:** member-accessor concepts (`requires { inst.cost(e, x); }`) are the
+  default. CPOs / `tag_invoke` are for retrofitting external types you can't modify — reach for
+  them only when that need is real.
+
+This is guardrail 2 (data vs. machinery) in file form: concepts *constrain data* (`Instance`,
+`EdgeMap`); traits *provide machinery* (`PriorityQueue`, `ResidualGraph`, policies).
+
 ## Conventions in this tree
 
 - `EdgeMap<M, E>` — map-like (`.find()` / `.end()`); the basis for bound maps (lb, ub) and cost
