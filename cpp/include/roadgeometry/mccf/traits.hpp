@@ -4,16 +4,9 @@
 #include <utility>
 
 #include "roadgeometry/mccf/concepts.hpp"
+#include "roadgeometry/mccf/detail.hpp"   // map_get
 
 namespace roadgeometry::mccf {
-
-namespace detail {
-template <class M, class K>
-double map_get(const M& m, const K& k, double def) {
-    auto it = m.find(k);
-    return it != m.end() ? it->second : def;
-}
-} // namespace detail
 
 // ---------------------------------------------------------------------------
 // has_lower_bounds<I> — value-specialization tag (see AGENTS.md).

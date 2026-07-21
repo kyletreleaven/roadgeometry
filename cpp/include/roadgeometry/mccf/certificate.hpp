@@ -3,6 +3,7 @@
 #include <string>
 
 #include "roadgeometry/mccf/concepts.hpp"
+#include "roadgeometry/mccf/detail.hpp"   // map_get
 #include "roadgeometry/mccf/traits.hpp"   // has_lower_bounds_v
 
 namespace roadgeometry::mccf {
@@ -25,14 +26,6 @@ OptimalityCertificate<Flow, Potential> certificate_of(const Flow& f, const Poten
     return {f, p};
 }
 
-namespace detail {
-template <class M, class K>
-double cert_get(const M& m, const K& k, double def) {
-    auto it = m.find(k);
-    return it != m.end() ? it->second : def;
-}
-} // namespace detail
-
 // ---------------------------------------------------------------------------
 // certifies_optimality(instance, certificate) -> "" iff the certificate proves
 // optimality: the flow is feasible (conservation + [lb, ub] bounds) AND every
@@ -47,7 +40,7 @@ std::string certifies_optimality(const I& inst,
                                  const OptimalityCertificate<Flow, Potential>& cert,
                                  double tol = 1e-6)
 {
-    using detail::cert_get;
+    using detail::map_get;
     const auto& g    = inst.network();
     const auto& flow = cert.flow;
     const auto& pot  = cert.potential;
@@ -55,15 +48,15 @@ std::string certifies_optimality(const I& inst,
     // Feasibility: flow conservation at every node.
     for (auto n : g.nodes()) {
         double net = inst.supply(n);
-        for (auto e : g.in_edges(n))  net += cert_get(flow, e, 0.0);
-        for (auto e : g.out_edges(n)) net -= cert_get(flow, e, 0.0);
+        for (auto e : g.in_edges(n))  net += map_get(flow, e, 0.0);
+        for (auto e : g.out_edges(n)) net -= map_get(flow, e, 0.0);
         if (std::abs(net) > tol) return "conservation violated at a node";
     }
 
     // Feasibility (bounds) + optimality (reduced costs) per edge.
     for (auto e : g.edges()) {
         auto [i, j] = g.endpoints(e);
-        double x  = cert_get(flow, e, 0.0);
+        double x  = map_get(flow, e, 0.0);
         double ub = inst.ub(e);
         double lb = 0.0;
         if constexpr (has_lower_bounds_v<I>) lb = inst.lb(e);
@@ -71,8 +64,8 @@ std::string certifies_optimality(const I& inst,
         if (x < lb - tol) return "flow below lb on an edge";
         if (x > ub + tol) return "flow above ub on an edge";
 
-        double pi_i = cert_get(pot, i, 0.0);
-        double pi_j = cert_get(pot, j, 0.0);
+        double pi_i = map_get(pot, i, 0.0);
+        double pi_j = map_get(pot, j, 0.0);
 
         if (x + 1.0 <= ub + tol) {   // forward residual arc i->j available
             double m = inst.cost(e, x + 1.0) - inst.cost(e, x);
