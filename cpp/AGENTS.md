@@ -129,6 +129,13 @@ Two disciplines, because C++ multiple inheritance is clunkier than Rust/Python h
 Tags are **members** (mixin-injectable); use an external `<trait><I>` template only to retrofit a
 type you don't own (no mixin there — specialize the trait instead).
 
+## Associated types (derive, don't duplicate)
+
+Derive a composed concept's associated types through the source with a helper alias
+(`edge_t<I> = typename I::network_type::edge_type`); don't duplicate as an outer-type member +
+`same_as` tie. Member types + a supplying mixin only when you specifically want the `I::edge_type`
+spelling on representations you control. → [rationale.md](rationale.md#associated-types-derive-dont-duplicate)
+
 ## Conventions in this tree
 
 - `EdgeMap<M, E>` — map-like (`.find()` / `.end()`); the basis for bound maps (lb, ub) and cost
