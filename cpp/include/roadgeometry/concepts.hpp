@@ -62,6 +62,20 @@ concept ResidualGraph = requires(G g,
 
 
 // ---------------------------------------------------------------------------
+// EdgeMap
+//
+// A read-only map from edges to scalars (e.g. lower/upper flow bounds). Any type
+// with find()/end() qualifies — std::unordered_map, std::map, a flat adapter, or
+// a constant-valued view — so lb and ub are never nailed to one container.
+// ---------------------------------------------------------------------------
+template <typename M, typename E>
+concept EdgeMap = requires(const M& m, E e) {
+    m.find(e);
+    m.end();
+};
+
+
+// ---------------------------------------------------------------------------
 // residual_graph_traits
 //
 // Associates a default ResidualGraph implementation with an InputGraph type.

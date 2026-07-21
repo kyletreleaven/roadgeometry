@@ -1,0 +1,68 @@
+#pragma once
+#include <limits>
+#include <utility>
+
+#include "roadgeometry/mccf/concepts.hpp"
+
+namespace roadgeometry::mccf {
+
+namespace detail {
+template <class M, class K>
+double map_get(const M& m, const K& k, double def) {
+    auto it = m.find(k);
+    return it != m.end() ? it->second : def;
+}
+} // namespace detail
+
+// ---------------------------------------------------------------------------
+// MapBackedInstance — the default Instance model, over plain maps.
+//
+// Owns its arguments (moved in), so passing temporaries is safe. For large
+// data, model Instance directly with a view-based type instead of copying.
+//   Cost:   map edge -> callable double(double)   (missing => zero cost)
+//   UB/LB:  EdgeMap                               (missing ub => +inf, lb => 0)
+//   Supply: map node -> double                    (missing => 0)
+// ---------------------------------------------------------------------------
+template <InputGraph G, class Cost,
+          EdgeMap<typename G::edge_type> UB,
+          EdgeMap<typename G::edge_type> LB,
+          class Supply>
+class MapBackedInstance {
+public:
+    using network_type = G;
+    using node_type    = typename G::node_type;
+    using edge_type    = typename G::edge_type;
+
+    MapBackedInstance(G g, Cost cost, UB ub, LB lb, Supply supply)
+        : g_(std::move(g)), cost_(std::move(cost)), ub_(std::move(ub)),
+          lb_(std::move(lb)), supply_(std::move(supply)) {}
+
+    const G& network() const { return g_; }
+
+    double cost(edge_type e, double x) const {
+        auto it = cost_.find(e);
+        return it != cost_.end() ? it->second(x) : 0.0;
+    }
+    double ub(edge_type e) const {
+        return detail::map_get(ub_, e, std::numeric_limits<double>::infinity());
+    }
+    double lb(edge_type e)     const { return detail::map_get(lb_, e, 0.0); }
+    double supply(node_type n) const { return detail::map_get(supply_, n, 0.0); }
+
+private:
+    G g_;
+    Cost cost_;
+    UB ub_;
+    LB lb_;
+    Supply supply_;
+};
+
+template <InputGraph G, class Cost, class UB, class LB, class Supply>
+MapBackedInstance<G, Cost, UB, LB, Supply>
+map_backed_instance(G g, Cost cost, UB ub, LB lb, Supply supply) {
+    return MapBackedInstance<G, Cost, UB, LB, Supply>(
+        std::move(g), std::move(cost), std::move(ub),
+        std::move(lb), std::move(supply));
+}
+
+} // namespace roadgeometry::mccf

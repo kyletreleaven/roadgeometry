@@ -13,7 +13,7 @@ function(roadgeometry_add_test name)
 endfunction()
 
 # Green suite.
-roadgeometry_add_test(roadgeometry_tests test_fragile_mccf.cpp)
+roadgeometry_add_test(roadgeometry_tests test_fragile_mccf.cpp test_instance.cpp)
 
 # North-star acceptance target: currently RED (references not-yet-built headers).
 # Kept separate so the green suite stays buildable/runnable while we drive this
