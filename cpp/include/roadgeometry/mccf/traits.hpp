@@ -1,5 +1,6 @@
 #pragma once
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 #include "roadgeometry/mccf/concepts.hpp"
@@ -13,6 +14,39 @@ double map_get(const M& m, const K& k, double def) {
     return it != m.end() ? it->second : def;
 }
 } // namespace detail
+
+// ---------------------------------------------------------------------------
+// has_lower_bounds<I> — value-specialization tag (see AGENTS.md).
+//
+// Reads the model's `has_lower_bounds` member if present, else true: a general
+// Instance carries lower bounds. A member (not an external trait) so a mixin can
+// inject it. The solver/checker branch on has_lower_bounds_v<I> via `if constexpr`
+// to skip the lb() call, the subtraction, and lb storage on the lb ≡ 0 fast path.
+// ---------------------------------------------------------------------------
+// Detects the `has_lower_bounds` tag member (named, so no inline `requires requires`).
+template <class I>
+concept has_lower_bounds_tag = requires { I::has_lower_bounds; };
+
+template <class I>
+struct lower_bounds_trait : std::true_type {};
+template <has_lower_bounds_tag I>
+struct lower_bounds_trait<I> : std::bool_constant<I::has_lower_bounds> {};
+
+template <class I>
+inline constexpr bool has_lower_bounds_v = lower_bounds_trait<I>::value;
+
+// ---------------------------------------------------------------------------
+// ZeroLowerBounds<Edge> — specialization mixin (value + tag).
+//
+// Inherit to get a trivial lb() = 0 for free and mark the lb ≡ 0 fast path.
+// Keep such mixins ORTHOGONAL (each owns disjoint accessors) to avoid MI
+// ambiguity, and keep the default value dumb.
+// ---------------------------------------------------------------------------
+template <class Edge>
+struct ZeroLowerBounds {
+    static constexpr bool has_lower_bounds = false;
+    double lb(Edge) const { return 0.0; }
+};
 
 // ---------------------------------------------------------------------------
 // MapBackedInstance — the default Instance model, over plain maps.
