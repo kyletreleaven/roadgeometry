@@ -65,6 +65,12 @@ concept BasicCost = requires(const C& c, E key) {
 //   RG   — ResidualGraph type; defaults to residual_graph_traits<G>::type.
 //
 // Returns: flow map edge → double (same key set as network.edges()).
+//
+// TODO(unification): replace the unpacked network/capacity/supply/cost/U/lb
+// params with a single `Instance` argument (its accessors — network(), cost(e),
+// ub(e), lb(e), supply(n) — already model these). That is the seam that lets
+// dense and sparse become one template-differentiated family differing only by
+// residual-maintenance strategy. Keep the unpacked signature as a shim.
 // ---------------------------------------------------------------------------
 template <InputGraph G,
           typename Cap,

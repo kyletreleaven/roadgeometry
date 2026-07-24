@@ -37,6 +37,11 @@ interface surfaces, distribution, and design decisions.
   `ReducedCost` (combined ~37%) and `bintrees.floor_item` (13%); Dijkstra no longer dominates.
 - [ ] **Step 3: `ConvexCostFlowSolver<Graph, PriorityQueue>`** — C++ template, bound via
   pybind11 as default `<int,int>` instantiation, validated against Python impl with existing tests
+  - [ ] Convert `fragile_mccf_state` to consume an `Instance` (single arg) instead of the
+    unpacked `network/capacity/supply/cost/U/epsilon/lb` params — the accessors (`network()`,
+    `cost(e)`, `ub(e)`, `lb(e)`, `supply(n)`) already model this. This is the unification seam:
+    once dense is Instance-based, dense and sparse differ only by residual-maintenance strategy.
+    Keep the current unpacked wrapper as a shim so existing callers/binding are untouched.
   - [ ] Sorted container (`std::map`) replacing `bintrees.RBTree`
   - [ ] `IntRoadnet` mirror and augmentation graph
 - [ ] **Step 4: wire into matching** — Python `RoadnetMatchingProblem` uses C++ solver by
