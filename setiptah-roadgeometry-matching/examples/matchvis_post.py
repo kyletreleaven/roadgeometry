@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from setiptah.roadgeometry.formats import from_networkx
-from setiptah.roadgeometry.matching import RoadnetMatchingProblem, MatchingResult
+from setiptah.roadgeometry.matching.bm import RoadnetMatchingProblem, MatchingResult
 from setiptah.roadgeometry.matching.draw.matchvis import show_matching
 from setiptah.roadgeometry.planar import PlanarRoadnet
 

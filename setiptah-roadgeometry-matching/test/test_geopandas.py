@@ -5,7 +5,7 @@ import pandas as pd
 from shapely import Point, LineString
 
 from setiptah.roadgeometry.geopandas import GeoFramesRoads
-from setiptah.roadgeometry.matching import compute_roadnet_objective_fns
+from setiptah.roadgeometry.matching.bm import compute_roadnet_objective_fns
 from setiptah.roadgeometry.matching.geopandas import create_path_network_with_surplus
 
 

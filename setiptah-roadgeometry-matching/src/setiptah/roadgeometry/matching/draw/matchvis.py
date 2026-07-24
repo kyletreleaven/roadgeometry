@@ -10,7 +10,8 @@ from setiptah.roadgeometry.dijkstra import (
 )
 from setiptah.roadgeometry.draw import draw_planar_roadnet
 from setiptah.roadgeometry.formats import from_networkx
-from setiptah.roadgeometry.matching import bm, mygraph
+from setiptah.roadgeometry.matching import bm
+from setiptah.roadgeometry.matching.util.mygraph import mygraph
 from setiptah.roadgeometry.planar import PlanarRoadnet
 from setiptah.roadgeometry.protocol import Roadnet, Topology
 

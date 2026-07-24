@@ -6,7 +6,7 @@ import geopandas as gpd
 from setiptah.roadgeometry.dijkstra import VertexNode, PointNode
 from setiptah.roadgeometry.geopandas import GeoFramesNetwork
 from setiptah.roadgeometry.graphs import RoadNetwork
-from setiptah.roadgeometry.matching import compute_segments2
+from setiptah.roadgeometry.matching.bm import compute_segments2
 from setiptah.roadgeometry.protocol import Roadnet
 from setiptah.roadgeometry.util.shapely import crop_line_string
 

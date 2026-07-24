@@ -65,6 +65,10 @@ def _install_test_deps(session):
 @nox.session
 def test(session):
     _install_test_deps(session)
+    # The matching package itself is not installed: pytest.ini sets `pythonpath = src`,
+    # which puts the source tree on sys.path directly (subpackages without __init__.py
+    # resolve as implicit namespace packages). Installing it editable creates a rival
+    # editable finder that shadows those namespace subpackages (demo/, nxopt/, ...).
     session.install("gcovr")
     session.run("pytest", *(session.posargs or []))
     Path("coverage_report").mkdir(exist_ok=True)

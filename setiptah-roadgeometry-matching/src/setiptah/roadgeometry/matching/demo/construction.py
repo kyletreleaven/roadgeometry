@@ -5,8 +5,8 @@ import numpy as np
 from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet
 
 """ my dependencies """
-from setiptah.roadgeometry.matching import (
-    nx_legacy as roadbm,
+from setiptah.roadgeometry.matching import nx_legacy as roadbm
+from setiptah.roadgeometry.matching.bm import (
     RoadnetMatchingProblem,
     MatchingResult,
 )

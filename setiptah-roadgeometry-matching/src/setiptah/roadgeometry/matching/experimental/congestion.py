@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 import scipy.signal as sig
 
-import setiptah.roadgeometry.matching as roadbm
+from setiptah.roadgeometry.matching import bm as roadbm
 from setiptah.roadgeometry.matching.nx_legacy import MultiDiGraphRoadnet, CHECKFLOW
 
 

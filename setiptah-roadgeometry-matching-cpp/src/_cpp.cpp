@@ -131,7 +131,10 @@ PYBIND11_MODULE(_cpp, m) {
             if (std::isfinite(capacity_arr[e]))
                 capacity[e] = capacity_arr[e];
 
-        auto flow_map = fragile_mccf_sparse(network, capacity, supply, cost, U, epsilon);
+        // Dense engine: the cost here is a plain (type-erased) map, which is
+        // dense-appropriate. The sparse engine requires MatchingCost (is_non_empty
+        // to skip empty roads), which a plain std::function map cannot provide.
+        auto flow_map = fragile_mccf(network, capacity, supply, cost, U, epsilon);
 
         std::vector<double> flow_arr(m, 0.0);
         for (auto& [e, x] : flow_map)
@@ -189,7 +192,9 @@ PYBIND11_MODULE(_cpp, m) {
             if (std::isfinite(capacity_arr[e]))
                 capacity[e] = capacity_arr[e];
 
-        auto flow_map = robust_mccf(network, capacity, supply, cost, U, epsilon);
+        // Dense instantiation: the cost here is a plain (type-erased) map. The
+        // sparse path needs MatchingCost (is_non_empty), which it can't provide.
+        auto flow_map = robust_mccf</*UseSparse=*/false>(network, capacity, supply, cost, U, epsilon);
 
         std::vector<double> flow_arr(m, 0.0);
         for (auto& [e, x] : flow_map)
@@ -315,9 +320,16 @@ PYBIND11_MODULE(_cpp, m) {
         for (auto z : red.oneway_zmin)
             oneway_zmin_py.append(z);
 
+        // Cost moved from a flat edge_cost vector to a unified cost container
+        // (MatchingCostMap): PWLs live in .fns for non-empty roads. Emit per-edge
+        // in edge order; empty roads (no PWL) -> None.
         py::list cost_py;
-        for (auto& pwl : red.instance.edge_cost)
-            cost_py.append(pwl);
+        int nedges_bfr = static_cast<int>(red.edge_to_road.size());
+        for (int e = 0; e < nedges_bfr; ++e) {
+            auto it = red.instance.cost.fns.find(e);
+            if (it != red.instance.cost.fns.end()) cost_py.append(it->second);
+            else cost_py.append(py::none());
+        }
 
         py::list edge_endpoints_py;
         for (auto& [road, sign] : red.edge_to_road) {
