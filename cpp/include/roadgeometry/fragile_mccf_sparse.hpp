@@ -10,6 +10,7 @@
 
 #include "concepts.hpp"
 #include "dijkstra.hpp"
+#include "flow_potential.hpp"
 #include "fragile_mccf.hpp"
 #include "hash_utils.hpp"
 
@@ -304,16 +305,8 @@ concept MatchingCost = BasicCost<C, E> && requires(const C& c, E key) {
     { c.is_non_empty(key) } -> std::convertible_to<bool>;
 };
 
-// Primal-dual result of the sparse engine core: the flow plus the certifying
-// potentials it maintained. (Potentials are computed regardless — returning them
-// is free; they are the optimality certificate and the SSP warm-start memo.)
-template <class Edge, class Node>
-struct FlowPotential {
-    std::unordered_map<Edge, double> flow;
-    std::unordered_map<Node, double> potential;
-};
-
-// Core: returns {flow, potential}. The bare-flow `fragile_mccf_sparse` below is a
+// Core: returns {flow, potential} (FlowPotential, shared with the dense engine via
+// flow_potential.hpp). The bare-flow `fragile_mccf_sparse` below is a
 // thin wrapper over this, so existing callers (robust_mccf, pybind) are untouched.
 template <InputGraph G, KeyMap<typename G::edge_type> Cap, MatchingCost<typename G::edge_type> Cost>
 FlowPotential<typename G::edge_type, typename G::node_type>

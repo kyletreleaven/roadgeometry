@@ -6,7 +6,12 @@
 #include "roadgeometry/input_graph.hpp"
 #include "roadgeometry/fragile_mccf.hpp"
 #include "roadgeometry/robust_mccf.hpp"
+#include "roadgeometry/mccf/concepts.hpp"
+#include "roadgeometry/mccf/traits.hpp"
+#include "roadgeometry/mccf/certificate.hpp"
 #include "support.hpp"
+
+namespace mccf = roadgeometry::mccf;
 
 using Graph   = roadgeometry::HashMapGraph<int, int>;
 using CostMap = std::unordered_map<int, std::function<double(double)>>;
@@ -51,4 +56,28 @@ TEST_CASE("fragile_mccf: lb < 0 lets an edge carry reverse (negative) flow") {
 
     CHECK(flow.at(0) == doctest::Approx(-1.0));   // reverse flow: 1 -> 0 via road 0
     CHECK(rgtest::feasibility_violation(g, supply, flow, lb) == "");
+}
+
+// The dense engine's {flow, potential} is a self-certifying memo: solving with
+// fragile_mccf_state and feeding the result to the certificate oracle passes.
+// Capacities are set to U so the engine's (trimmed) residual matches the one the
+// certificate checks against.
+TEST_CASE("mccf: dense fragile_mccf_state output self-certifies") {
+    Graph g;
+    g.add_edge(0, 0, 1);   // road 0: 0 -> 1 (cheap)
+    g.add_edge(1, 1, 0);   // road 1: 1 -> 0 (expensive) — strong connectivity
+
+    std::unordered_map<int, double> capacity{{0, 1.0}, {1, 1.0}};   // = U
+    std::unordered_map<int, double> supply  {{0, +1.0}, {1, -1.0}};
+    CostMap cost{
+        {0, [](double x) { return 1.0 * x; }},
+        {1, [](double x) { return 5.0 * x; }},
+    };
+
+    auto st = roadgeometry::fragile_mccf_state(g, capacity, supply, cost, /*U=*/1.0);
+    CHECK(st.flow.at(0) == doctest::Approx(1.0));   // 1 unit along the cheap arc
+
+    auto inst = mccf::map_backed_instance(g, cost, capacity,
+                                          std::unordered_map<int, double>{}, supply);
+    CHECK(mccf::certifies_optimality(inst, mccf::certificate_of(st.flow, st.potential)) == "");
 }

@@ -9,6 +9,7 @@
 
 #include "concepts.hpp"
 #include "dijkstra.hpp"
+#include "flow_potential.hpp"
 #include "hash_utils.hpp"
 #include "residual_graph.hpp"
 
@@ -69,8 +70,10 @@ template <InputGraph G,
           typename Cap,
           typename Cost,
           typename RG = typename residual_graph_traits<G>::type>
-std::unordered_map<typename G::edge_type, double>
-fragile_mccf(
+// Core: returns {flow, potential}. The bare-flow `fragile_mccf` below is a thin
+// wrapper over this, so existing callers are untouched.
+FlowPotential<typename G::edge_type, typename G::node_type>
+fragile_mccf_state(
     const G& network,
     const Cap&  capacity_in,
     const std::unordered_map<typename G::node_type, double>& supply,
@@ -269,7 +272,28 @@ fragile_mccf(
         Delta /= 2.0;
     }
 
-    return flow;
+    return { std::move(flow), std::move(potential) };
+}
+
+// Thin wrapper: the original signature, returning just the flow. Existing callers
+// are unchanged; new callers wanting the potentials use ..._state above.
+template <InputGraph G,
+          typename Cap,
+          typename Cost,
+          typename RG = typename residual_graph_traits<G>::type>
+std::unordered_map<typename G::edge_type, double>
+fragile_mccf(
+    const G& network,
+    const Cap&  capacity_in,
+    const std::unordered_map<typename G::node_type, double>& supply,
+    const Cost& cost,
+    double U,
+    double epsilon = 1.0,
+    const std::unordered_map<typename G::edge_type, double>& lb = {}
+)
+{
+    return fragile_mccf_state<G, Cap, Cost, RG>(
+        network, capacity_in, supply, cost, U, epsilon, lb).flow;
 }
 
 } // namespace roadgeometry
