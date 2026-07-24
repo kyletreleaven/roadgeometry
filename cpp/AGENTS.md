@@ -39,8 +39,8 @@ fully specialized — no vtable, no runtime policy branch.
   spelled `requires{}` blocks do **not** subsume each other even when one logically implies the
   other. If you re-spell shared requirements instead of `&&`-ing the base concept, you silently
   lose specialization ordering.
-- **Concepts are always templates; multi-param is fine** (`EdgeMap<M, E>`). Used as a constraint,
-  the constrained type *prepends*: `template <EdgeMap<Edge> M>` means `EdgeMap<M, Edge>`.
+- **Concepts are always templates; multi-param is fine** (`KeyMap<M, E>`). Used as a constraint,
+  the constrained type *prepends*: `template <KeyMap<Edge> M>` means `KeyMap<M, Edge>`.
 - **Orthogonal policy concepts form a partial order.** A type modeling two independent concepts
   makes overloads *ambiguous* (hard error), not auto-resolved. Fix by naming the join
   (`template <A_and_B T>` where `A_and_B = A<T> && B<T>`).
@@ -59,7 +59,7 @@ Keep four roles distinct — conflating them is where the tree rots:
 - **Organize by role, not feature.** Don't colocate a concept with its model in one `foo.hpp`;
   put concepts together so refinements `&&`-compose and subsumption works.
 - **Concepts at the altitude of their generality.** Cross-cutting contracts (`InputGraph`,
-  `EdgeMap`) → top-level `concepts.hpp`; domain-specific ones (`Instance`) → the module's
+  `KeyMap`) → top-level `concepts.hpp`; domain-specific ones (`Instance`) → the module's
   `mccf/concepts.hpp`.
 - **`traits.hpp` = bridges + default models/policies** for a module — a "defaults + plumbing"
   file. But a model (*satisfies* a concept) is not a trait (*bridges to* one); split models into
@@ -73,7 +73,7 @@ Keep four roles distinct — conflating them is where the tree rots:
   them only when that need is real.
 
 This is guardrail 2 (data vs. machinery) in file form: concepts *constrain data* (`Instance`,
-`EdgeMap`); traits *provide machinery* (`PriorityQueue`, `ResidualGraph`, policies).
+`KeyMap`); traits *provide machinery* (`PriorityQueue`, `ResidualGraph`, policies).
 
 ## Special cases → optimization: refinement vs. trait
 
@@ -102,8 +102,8 @@ spelling on representations you control. → [rationale.md](rationale.md#associa
 
 ## Conventions in this tree
 
-- `EdgeMap<M, E>` — map-like (`.find()` / `.end()`); the basis for bound maps (lb, ub) and cost
-  maps. lb and ub are symmetric — type them the same way.
+- `KeyMap<M, K>` — a lookup keyed by `K` (`.find()` / `.end()`); used for edge→scalar bound maps
+  (lb, ub — symmetric, type them the same way), flow maps, and node→potential maps.
 - Solver entry points are read-only: `const&` throughout; instance and traits are never mutated.
 - Adding a structural choice: make it work **concretely + a native test first**; extract a concept
   only when a second implementation motivates it, and **refine from the existing base concept** so

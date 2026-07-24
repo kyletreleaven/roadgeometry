@@ -62,15 +62,16 @@ concept ResidualGraph = requires(G g,
 
 
 // ---------------------------------------------------------------------------
-// EdgeMap
+// KeyMap
 //
-// A read-only map from edges to scalars (e.g. lower/upper flow bounds). Any type
-// with find()/end() qualifies — std::unordered_map, std::map, a flat adapter, or
-// a constant-valued view — so lb and ub are never nailed to one container.
+// A read-only lookup keyed by K (find()/end()): edge->scalar bound maps, flow
+// maps, node->potential maps. Any type with find()/end() qualifies —
+// std::unordered_map, std::map, a flat adapter, a constant-valued view — so no
+// map is nailed to one container.
 // ---------------------------------------------------------------------------
-template <typename M, typename E>
-concept EdgeMap = requires(const M& m, E e) {
-    m.find(e);
+template <typename M, typename K>
+concept KeyMap = requires(const M& m, K k) {
+    m.find(k);
     m.end();
 };
 

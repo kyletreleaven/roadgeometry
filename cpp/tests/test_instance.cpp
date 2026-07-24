@@ -27,7 +27,7 @@ TEST_CASE("mccf::map_backed_instance models Instance and exposes the problem dat
     // The default model satisfies the concept (compile-time contract check).
     static_assert(mccf::Instance<decltype(inst)>);
 
-    CHECK(inst.cost(0, 3.0) == doctest::Approx(6.0));   // convex cost evaluated at x=3
+    CHECK(inst.cost(0)(3.0) == doctest::Approx(6.0));   // retrieve the cost callable, evaluate at x=3
     CHECK(inst.ub(0)     == doctest::Approx(5.0));
     CHECK(inst.lb(0)     == doctest::Approx(-1.0));
     CHECK(inst.supply(0) == doctest::Approx(1.0));
@@ -42,5 +42,5 @@ TEST_CASE("mccf::map_backed_instance models Instance and exposes the problem dat
         std::unordered_map<int, double>{}, std::unordered_map<int, double>{});
     CHECK(bare.lb(7) == doctest::Approx(0.0));
     CHECK(bare.supply(0) == doctest::Approx(0.0));
-    CHECK(bare.cost(7, 5.0) == doctest::Approx(0.0));   // missing cost => 0
+    CHECK(bare.cost(7)(5.0) == doctest::Approx(0.0));   // missing cost => zero callable
 }

@@ -13,7 +13,12 @@ namespace roadgeometry::mccf {
 // fields, a view over external data):
 //
 //   network()     an InputGraph (network_type)
-//   cost(e, x)    convex per-edge cost evaluated at flow value x
+//   cost(e)       the edge's convex cost as an invocable — call it cost(e)(x).
+//                 Returning an object (not a value) (a) lets the caller retrieve
+//                 once and evaluate many (amortizes the lookup in the hot loop),
+//                 and (b) preserves the cost's *type*, so a later PiecewiseLinear
+//                 refinement can constrain the returned type and the solver can
+//                 branch general-vs-PWL at compile time.
 //   ub(e), lb(e)  per-edge upper / lower flow bounds
 //   supply(n)     net supply at a node (conservative: sums to 0)
 //
@@ -30,9 +35,9 @@ concept Instance = requires(const I& inst,
     typename I::network_type;
     requires InputGraph<typename I::network_type>;
 
-    { inst.network()  } -> std::convertible_to<const typename I::network_type&>;
-    { inst.cost(e, x) } -> std::convertible_to<double>;
-    { inst.ub(e)      } -> std::convertible_to<double>;
+    { inst.network()   } -> std::convertible_to<const typename I::network_type&>;
+    { inst.cost(e)(x)  } -> std::convertible_to<double>;   // cost(e) returns an invocable
+    { inst.ub(e)       } -> std::convertible_to<double>;
     { inst.lb(e)      } -> std::convertible_to<double>;
     { inst.supply(n)  } -> std::convertible_to<double>;
 };

@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -51,8 +52,8 @@ struct ZeroLowerBounds {
 //   Supply: map node -> double                    (missing => 0)
 // ---------------------------------------------------------------------------
 template <InputGraph G, class Cost,
-          EdgeMap<typename G::edge_type> UB,
-          EdgeMap<typename G::edge_type> LB,
+          KeyMap<typename G::edge_type> UB,
+          KeyMap<typename G::edge_type> LB,
           class Supply>
 class MapBackedInstance {
 public:
@@ -66,9 +67,12 @@ public:
 
     const G& network() const { return g_; }
 
-    double cost(edge_type e, double x) const {
+    // Retrieve the edge's cost callable once (const-ref, no copy); a static zero
+    // callable covers missing keys so we can always return a reference.
+    const std::function<double(double)>& cost(edge_type e) const {
+        static const std::function<double(double)> zero = [](double) { return 0.0; };
         auto it = cost_.find(e);
-        return it != cost_.end() ? it->second(x) : 0.0;
+        return it != cost_.end() ? it->second : zero;
     }
     double ub(edge_type e) const {
         return detail::map_get(ub_, e, std::numeric_limits<double>::infinity());

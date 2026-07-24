@@ -40,7 +40,7 @@ struct ZeroLbInstance : mccf::ZeroLowerBounds<int> {
     using edge_type    = int;
     Graph g;
     const Graph& network() const { return g; }
-    double cost(int, double x) const { return x; }
+    auto cost(int) const { return [](double x) { return x; }; }   // returns an invocable
     double ub(int) const { return 5.0; }
     double supply(int n) const { return n == 0 ? +1.0 : (n == 1 ? -1.0 : 0.0); }
 };
@@ -55,4 +55,23 @@ TEST_CASE("certificate: zero-lb instance (mixin) certifies via the fast path") {
     DMap flow{{0, 1.0}};
     DMap pot {{0, 1.0}, {1, 0.0}};
     CHECK(mccf::certifies_optimality(inst, mccf::certificate_of(flow, pot)) == "");
+}
+
+// epsilon is really used: a strictly-convex cost makes the per-unit marginal
+// depend on the step, so the same {flow, pi} certifies at one epsilon and not
+// another. Guards against epsilon silently becoming a dead parameter again.
+TEST_CASE("certificate: epsilon changes the verdict (guards a dead parameter)") {
+    Graph g;
+    g.add_edge(0, 0, 1);
+    auto inst = mccf::map_backed_instance(
+        g, CostMap{ {0, [](double x) { return x * x; }} },   // strictly convex
+        DMap{{0, 10.0}}, DMap{{0, 0.0}}, DMap{{0, +2.0}, {1, -2.0}});
+
+    DMap flow{{0, 2.0}};
+    DMap pot {{0, 5.0}, {1, 0.0}};
+    auto cert = mccf::certificate_of(flow, pot);
+
+    // forward per-unit marginal at x=2 is 4 + eps, so forward reduced cost = eps - 1.
+    CHECK(mccf::certifies_optimality(inst, cert, /*epsilon=*/1.0) == "");   // eps-1 = 0
+    CHECK(mccf::certifies_optimality(inst, cert, /*epsilon=*/0.5) != "");   // eps-1 = -0.5 < 0
 }

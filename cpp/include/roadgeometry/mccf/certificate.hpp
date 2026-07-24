@@ -35,9 +35,20 @@ OptimalityCertificate<Flow, Potential> certificate_of(const Flow& f, const Poten
 // On an lb ≡ 0 instance (has_lower_bounds_v<I> == false) the lb path is compiled
 // out: no lb() call, no subtraction against a nonzero lower bound.
 // ---------------------------------------------------------------------------
-template <Instance I, class Flow, class Potential>
+// `epsilon` is the solver's finest scale (residual step); default 1.0 = integer
+// optimality. Marginals are taken per-unit so they match the solver's potentials.
+//
+// TODO: the std::string return ("" = ok, else a reason) is stringly-typed — a
+// bool + message that surfaces only the FIRST violation and can't be inspected
+// programmatically. Replace with a structured, lazily-iterable set of violations
+// (each: kind {conservation, bounds, reduced-cost}, the edge/node, direction,
+// amount). Empty range = optimal; callers short-circuit or enumerate all.
+template <Instance I,
+          KeyMap<edge_t<I>> Flow,        // flow keyed by I's edges
+          KeyMap<node_t<I>> Potential>   // potentials keyed by I's nodes
 std::string certifies_optimality(const I& inst,
                                  const OptimalityCertificate<Flow, Potential>& cert,
+                                 double epsilon = 1.0,
                                  double tol = 1e-6)
 {
     using detail::map_get;
@@ -66,14 +77,15 @@ std::string certifies_optimality(const I& inst,
 
         double pi_i = map_get(pot, i, 0.0);
         double pi_j = map_get(pot, j, 0.0);
+        const auto& c = inst.cost(e);   // retrieve once; evaluate below
 
-        if (x + 1.0 <= ub + tol) {   // forward residual arc i->j available
-            double m = inst.cost(e, x + 1.0) - inst.cost(e, x);
+        if (x + epsilon <= ub + tol) {   // forward residual arc i->j available
+            double m = (c(x + epsilon) - c(x)) / epsilon;   // per-unit marginal
             if (m + pi_j - pi_i < -tol)
                 return "negative reduced cost on a forward residual arc";
         }
-        if (x - 1.0 >= lb - tol) {   // backward residual arc j->i available
-            double m = inst.cost(e, x - 1.0) - inst.cost(e, x);
+        if (x - epsilon >= lb - tol) {   // backward residual arc j->i available
+            double m = (c(x - epsilon) - c(x)) / epsilon;
             if (m + pi_i - pi_j < -tol)
                 return "negative reduced cost on a backward residual arc";
         }

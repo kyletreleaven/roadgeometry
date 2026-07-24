@@ -304,9 +304,20 @@ concept MatchingCost = BasicCost<C, E> && requires(const C& c, E key) {
     { c.is_non_empty(key) } -> std::convertible_to<bool>;
 };
 
-template <InputGraph G, typename Cap, MatchingCost<typename G::edge_type> Cost>
-std::unordered_map<typename G::edge_type, double>
-fragile_mccf_sparse(
+// Primal-dual result of the sparse engine core: the flow plus the certifying
+// potentials it maintained. (Potentials are computed regardless — returning them
+// is free; they are the optimality certificate and the SSP warm-start memo.)
+template <class Edge, class Node>
+struct FlowPotential {
+    std::unordered_map<Edge, double> flow;
+    std::unordered_map<Node, double> potential;
+};
+
+// Core: returns {flow, potential}. The bare-flow `fragile_mccf_sparse` below is a
+// thin wrapper over this, so existing callers (robust_mccf, pybind) are untouched.
+template <InputGraph G, KeyMap<typename G::edge_type> Cap, MatchingCost<typename G::edge_type> Cost>
+FlowPotential<typename G::edge_type, typename G::node_type>
+fragile_mccf_sparse_state(
     const G&    network,
     const Cap&  capacity_in,
     const std::unordered_map<typename G::node_type, double>& supply,
@@ -534,7 +545,23 @@ fragile_mccf_sparse(
         Delta /= 2.0;
     }
 
-    return flow;
+    return { std::move(flow), std::move(potential) };
+}
+
+// Thin wrapper: the original signature, returning just the flow. Existing callers
+// are unchanged; new callers wanting the potentials use ..._state above.
+template <InputGraph G, KeyMap<typename G::edge_type> Cap, MatchingCost<typename G::edge_type> Cost>
+std::unordered_map<typename G::edge_type, double>
+fragile_mccf_sparse(
+    const G&    network,
+    const Cap&  capacity_in,
+    const std::unordered_map<typename G::node_type, double>& supply,
+    const Cost& cost,
+    double U,
+    double epsilon = 1.0
+)
+{
+    return fragile_mccf_sparse_state(network, capacity_in, supply, cost, U, epsilon).flow;
 }
 
 } // namespace roadgeometry
