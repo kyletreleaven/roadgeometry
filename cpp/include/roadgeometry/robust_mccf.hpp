@@ -37,6 +37,44 @@ struct CycleEdge {
 template <typename Edge>
 using RobustEdge = std::variant<RegularEdge<Edge>, CycleEdge>;
 
+} // namespace roadgeometry
+
+// std::hash for the RobustEdge alternatives — defined here, right after the types
+// and BEFORE any InputGraph<RobustInputGraph<...>> check. Tightened InputGraph
+// requires Hashable<edge_type>, and Hashable needs the specialization *complete* at
+// the check (a forward declaration won't satisfy the concept), so these must
+// precede RobustInputGraph's static_assert and robust_mccf's body below.
+namespace std {
+
+template <typename Edge>
+struct hash<roadgeometry::RegularEdge<Edge>> {
+    std::size_t operator()(const roadgeometry::RegularEdge<Edge>& r) const noexcept {
+        return std::hash<Edge>{}(r.e);
+    }
+};
+
+template <>
+struct hash<roadgeometry::CycleEdge> {
+    std::size_t operator()(const roadgeometry::CycleEdge& c) const noexcept {
+        return std::hash<int>{}(c.index);
+    }
+};
+
+template <typename Edge>
+struct hash<roadgeometry::RobustEdge<Edge>> {
+    std::size_t operator()(const roadgeometry::RobustEdge<Edge>& e) const noexcept {
+        std::size_t h = std::hash<std::size_t>{}(e.index());
+        std::visit([&](const auto& alt) {
+            h = roadgeometry::hash_combine(h, std::hash<std::decay_t<decltype(alt)>>{}(alt));
+        }, e);
+        return h;
+    }
+};
+
+} // namespace std
+
+namespace roadgeometry {
+
 // ---------------------------------------------------------------------------
 // RobustInputGraph<G>
 //
@@ -237,18 +275,39 @@ struct RobustCapacity {
 template <typename Edge, typename Cost>
 struct RobustCost {
     using key_type = RobustEdge<Edge>;
-    using CostFn   = std::function<double(double)>;
-    // .second REFERENCES stable storage — the inner cost map's fn for regular
-    // edges, or the single shared cycle_fn_ below for cycle edges — so find()'s
-    // iterator carries only a reference, never a copy of the (possibly heavy
-    // PiecewiseLinear) cost fn. A reference_wrapper is invocable, so `it->second(x)`
-    // still works, and it converts to `const CostFn&`, so a caller can bind the
-    // referenced fn without copying or dangling.
-    using value_type = std::pair<key_type, std::reference_wrapper<const CostFn>>;
+
+    // The base cost's per-edge fn type, deduced from the wrapped cost map (e.g.
+    // PiecewiseLinear). PRESERVED — not erased to std::function — so the solver keeps
+    // the concrete cost type. This is the general family member: no requirement on
+    // BaseCostFn (a homogeneous, PWL-constructible specialization can come later).
+    using BaseCostFn = std::remove_cvref_t<
+        decltype(std::declval<const Cost&>().find(std::declval<Edge>())->second)>;
+
+    // Prohibitive linear cost for cycle edges: slope * x (slope = CBOUND). Held once
+    // as the prohibitive_ member that cycle CostRefs point at.
+    // TODO: replace with an InfiniteSlope cost type.
+    struct Prohibitive {
+        double slope;
+        double operator()(double x) const { return slope * x; }
+    };
+
+    // The per-edge cost handed back by find()->second: a closed, type-preserving
+    // BORROWED handle — a pointer to the base cost fn (regular edges) or to the shared
+    // prohibitive cost (cycle edges). Both point into stable storage (the base map / the
+    // prohibitive_ member), so no fn is copied and nothing dangles. Invocable via visit
+    // (both alternatives just deref). Mirrors MatchingCostMap::CostRef.
+    struct CostRef {
+        std::variant<const BaseCostFn*, const Prohibitive*> v;
+        double operator()(double x) const {
+            return std::visit([x](const auto* c) -> double { return (*c)(x); }, v);
+        }
+    };
+
+    using value_type = std::pair<key_type, CostRef>;
 
     // Iterator holds an optional value_type (nullopt = end).
-    // operator-> returns const value_type*, giving access to ->second (a
-    // reference_wrapper<const CostFn>).  operator== compares by key only.
+    // operator-> returns const value_type*, giving access to ->second (a CostRef).
+    // operator== compares by key only.
     struct iterator {
         std::optional<value_type> entry_;  // nullopt → end()
 
@@ -263,10 +322,7 @@ struct RobustCost {
     };
 
     const Cost& cost_;
-    CostFn      cycle_fn_;  // one prohibitive fn shared by every cycle edge (all
-                            // have the same CBOUND slope) — stable storage that
-                            // find() hands back a reference to.
-                            // TODO: replace with an InfiniteSlope cost type.
+    Prohibitive prohibitive_;   // shared prohibitive cost (slope = CBOUND); cycle CostRefs point here.
 
     // Takes the original (pre-wrapping) network to compute the prohibitive slope.
     // cost_.find(e) is always valid for every edge in the network (MatchingCostMap
@@ -274,19 +330,19 @@ struct RobustCost {
     template <InputGraph G2>
     RobustCost(const G2& network, const Cost& cost, double U)
         : cost_(cost)
-        , cycle_fn_([slope = make_cbound(network, cost, U)](double x) { return slope * x; })
+        , prohibitive_{make_cbound(network, cost, U)}
     {}
 
     iterator end() const { return {std::nullopt}; }
 
-    // Regular edges: reference the inner cost fn (find() always valid; no end() branch).
-    // Cycle edges: reference the single shared prohibitive fn.
+    // Regular edges: point at the base cost fn (find() always valid; no copy).
+    // Cycle edges: point at the shared prohibitive cost.
     iterator find(const key_type& e) const {
         if (const auto* r = std::get_if<RegularEdge<Edge>>(&e)) {
             auto it = cost_.find(r->e);
-            return {value_type{e, std::cref(it->second)}};
+            return {value_type{e, CostRef{&it->second}}};
         }
-        return {value_type{e, std::cref(cycle_fn_)}};
+        return {value_type{e, CostRef{&prohibitive_}}};
     }
 
     // Regular edges: delegate to inner cost.
@@ -352,32 +408,3 @@ robust_mccf(
 }
 
 } // namespace roadgeometry
-
-namespace std {
-
-template <typename Edge>
-struct hash<roadgeometry::RegularEdge<Edge>> {
-    std::size_t operator()(const roadgeometry::RegularEdge<Edge>& r) const noexcept {
-        return std::hash<Edge>{}(r.e);
-    }
-};
-
-template <>
-struct hash<roadgeometry::CycleEdge> {
-    std::size_t operator()(const roadgeometry::CycleEdge& c) const noexcept {
-        return std::hash<int>{}(c.index);
-    }
-};
-
-template <typename Edge>
-struct hash<roadgeometry::RobustEdge<Edge>> {
-    std::size_t operator()(const roadgeometry::RobustEdge<Edge>& e) const noexcept {
-        std::size_t h = std::hash<std::size_t>{}(e.index());
-        std::visit([&](const auto& alt) {
-            h = roadgeometry::hash_combine(h, std::hash<std::decay_t<decltype(alt)>>{}(alt));
-        }, e);
-        return h;
-    }
-};
-
-} // namespace std

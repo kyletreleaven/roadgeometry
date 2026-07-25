@@ -68,11 +68,16 @@ public:
     const G& network() const { return g_; }
 
     // Retrieve the edge's cost callable once (const-ref, no copy); a static zero
-    // callable covers missing keys so we can always return a reference.
+    // callable covers missing keys so we can always return a reference. An if-form
+    // (not a ternary) so this also composes with cost maps whose find()->second is
+    // a reference_wrapper<const CostFn> (e.g. reference-based RobustCost): each
+    // return converts to const CostFn& on its own, whereas a ternary between
+    // reference_wrapper and const& is ambiguous (each converts to the other).
     const std::function<double(double)>& cost(edge_type e) const {
         static const std::function<double(double)> zero = [](double) { return 0.0; };
         auto it = cost_.find(e);
-        return it != cost_.end() ? it->second : zero;
+        if (it == cost_.end()) return zero;
+        return it->second;
     }
     double ub(edge_type e) const {
         return detail::map_get(ub_, e, std::numeric_limits<double>::infinity());

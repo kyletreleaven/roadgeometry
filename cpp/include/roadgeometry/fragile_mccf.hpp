@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
@@ -222,18 +223,18 @@ fragile_mccf_state(
 
         // -- Stage 2: augment Delta-flow along shortest paths ---------------
         while (true) {
-            // Find a surplus node s and a deficit node t.
-            Node s{}, t{};
-            bool found_s = false, found_t = false;
+            // Find a surplus node s and a deficit node t. optional doubles as the
+            // "found" flag and needs only copyability — no default-constructible Node.
+            std::optional<Node> s, t;
             for (const Node& i : network.nodes()) {
-                if (!found_s && excess.at(i) >=  Delta) { s = i; found_s = true; }
-                if (!found_t && excess.at(i) <= -Delta) { t = i; found_t = true; }
-                if (found_s && found_t) break;
+                if (!s && excess.at(i) >=  Delta) s = i;
+                if (!t && excess.at(i) <= -Delta) t = i;
+                if (s && t) break;
             }
-            if (!found_s || !found_t) break;
+            if (!s || !t) break;
 
             // Shortest path (w.r.t. reduced costs) from s in the residual graph.
-            auto [dist, upstream] = dijkstra(rgraph, ArcCost{redcost}, s);
+            auto [dist, upstream] = dijkstra(rgraph, ArcCost{redcost}, *s);
 
             // Trace path from s to t via upstream pointers.
             // Use upstream.count(j) instead of j != s: the source node s is
@@ -242,7 +243,7 @@ fragile_mccf_state(
             // same logical node (e.g. distinct PyObject* for the same int).
             std::vector<Arc> path;
             {
-                Node j = t;
+                Node j = *t;
                 while (upstream.count(j)) {
                     Arc arc = upstream.at(j);
                     path.push_back(arc);

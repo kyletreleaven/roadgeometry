@@ -412,10 +412,13 @@ PYBIND11_MODULE(_cpp, m) {
         auto emit = [&](auto flow) {
             for (auto& [road, x] : flow) result[road] = x;
         };
+        // TODO(sparse): the sparse solver is temporarily unsupported — reference-based
+        // RobustCost is incompatible with MatchingCostMap's per-lookup proxy cost. Not
+        // instantiating <...,true> keeps MatchingCostMap out of the build. Re-unify (make
+        // the sparse cost path reference-friendly), then restore the branch + "sparse" default.
         if (solver == "sparse")
-            emit(compute_optimal_flow<Road, Vertex, true>(segments, endpoints, lengths, is_oneway, epsilon));
-        else
-            emit(compute_optimal_flow<Road, Vertex, false>(segments, endpoints, lengths, is_oneway, epsilon));
+            throw std::runtime_error("compute_optimal_flow: sparse solver temporarily unsupported; use solver='dense'");
+        emit(compute_optimal_flow<Road, Vertex, false>(segments, endpoints, lengths, is_oneway, epsilon));
         return result;
     },
     py::arg("segments"),
@@ -423,7 +426,7 @@ PYBIND11_MODULE(_cpp, m) {
     py::arg("lengths"),
     py::arg("is_oneway"),
     py::arg("epsilon") = 1.0,
-    py::arg("solver") = "sparse"
+    py::arg("solver") = "dense"
     );
 
     m.def("compute_matching", [](
@@ -472,16 +475,16 @@ PYBIND11_MODULE(_cpp, m) {
             return py::make_tuple(matching_py, cost);
         };
 
+        // TODO(sparse): temporarily unsupported (see compute_optimal_flow above).
         if (solver == "sparse")
-            return run(compute_matching<Road, Vertex, true>(P, Q, endpoints, lengths, is_oneway));
-        else
-            return run(compute_matching<Road, Vertex, false>(P, Q, endpoints, lengths, is_oneway));
+            throw std::runtime_error("compute_matching: sparse solver temporarily unsupported; use solver='dense'");
+        return run(compute_matching<Road, Vertex, false>(P, Q, endpoints, lengths, is_oneway));
     },
     py::arg("P"),
     py::arg("Q"),
     py::arg("endpoints"),
     py::arg("lengths"),
     py::arg("is_oneway"),
-    py::arg("solver") = "sparse"
+    py::arg("solver") = "dense"
     );
 }

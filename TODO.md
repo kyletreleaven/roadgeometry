@@ -37,11 +37,28 @@ interface surfaces, distribution, and design decisions.
   `ReducedCost` (combined ~37%) and `bintrees.floor_item` (13%); Dijkstra no longer dominates.
 - [ ] **Step 3: `ConvexCostFlowSolver<Graph, PriorityQueue>`** — C++ template, bound via
   pybind11 as default `<int,int>` instantiation, validated against Python impl with existing tests
-  - [ ] Convert `fragile_mccf_state` to consume an `Instance` (single arg) instead of the
-    unpacked `network/capacity/supply/cost/U/epsilon/lb` params — the accessors (`network()`,
-    `cost(e)`, `ub(e)`, `lb(e)`, `supply(n)`) already model this. This is the unification seam:
-    once dense is Instance-based, dense and sparse differ only by residual-maintenance strategy.
-    Keep the current unpacked wrapper as a shim so existing callers/binding are untouched.
+  - [ ] **Convert dense `fragile_mccf_state` to consume an `Instance`** (single arg; U/epsilon
+    stay explicit) via accessors `network()`, `cost(e)(x)`, `ub(e)`, `lb(e)` (guarded by
+    `has_lower_bounds_v`), `supply(n)`. Groundwork done: `RobustCost` is reference-based,
+    `MapBackedInstance::cost` is const-ref, `InputGraph` states its `HashKey` requirements, and the
+    engine no longer needs default-construction (`std::optional` instead of a `Node s{}` sentinel).
+    Keep unpacked map-based shims so the binding and `robust_mccf` are untouched. (An earlier
+    attempt was reverted; this is the redo on the now-solid footing.)
+  - [x] **`RobustCost` preserves the base cost type via a borrowed-pointer variant.** Its
+    `find()->second` is a `CostRef = variant<const BaseCostFn*, const Prohibitive*>` — a pointer into
+    the base map for regular edges, a pointer to a shared `Prohibitive` member for cycle edges —
+    invocable via `visit`. No per-lookup copy of the (PWL) cost fn, the concrete type is preserved
+    (not erased to `std::function`), nothing dangles. This is the *general* family member (no PWL
+    constraint on `BaseCostFn`); a homogeneous PWL-constructible specialization can come later.
+    Trade-off: the sparse cost path (`MatchingCostMap` synthesizes its `CostRef` by value per lookup,
+    so there's no stable pointer) is temporarily incompatible — see "Re-enable sparse".
+  - [ ] **Re-enable sparse (temporarily disabled).** `compute_optimal_flow` / `compute_matching`
+    bindings throw on `solver="sparse"` (default flipped to `"dense"`) and the `<...,true>`
+    instantiations are dropped so `MatchingCostMap` isn't compiled. Re-unify by making the sparse
+    cost path reference-friendly (stable storage for the synthesized `LinearCost`, or a
+    reference-friendly `CostRef`), then restore the branches + `"sparse"` default.
+  - [ ] Convert `fragile_mccf_sparse` to the same `Instance` core (unify residual-maintenance
+    strategy behind the shared algorithm).
   - [ ] Sorted container (`std::map`) replacing `bintrees.RBTree`
   - [ ] `IntRoadnet` mirror and augmentation graph
 - [ ] **Step 4: wire into matching** — Python `RoadnetMatchingProblem` uses C++ solver by

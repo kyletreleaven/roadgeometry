@@ -1,5 +1,7 @@
 #pragma once
 #include <concepts>
+#include <cstddef>
+#include <functional>
 #include <ranges>
 #include <type_traits>
 #include <utility>
@@ -20,16 +22,44 @@ concept range_of =
     std::convertible_to<std::ranges::range_value_t<std::remove_cvref_t<R>>, T>;
 
 // ---------------------------------------------------------------------------
+// Hashable<T> — usable as a std::unordered_map key via std::hash.
+//
+// The standard has no `hashable` concept (only regular / equality_comparable /
+// etc.), so we spell it out: std::hash<T> is well-formed and size_t-ish. This
+// also rejects types whose std::hash specialization is the disabled one. The
+// flow solvers key residual / flow / potential / excess state on node and edge
+// types, so those must be hashable.
+// ---------------------------------------------------------------------------
+template <typename T>
+concept Hashable = requires(const T& t) {
+    { std::hash<T>{}(t) } -> std::convertible_to<std::size_t>;
+};
+
+// ---------------------------------------------------------------------------
+// HashKey<T> — a value usable as an unordered_map key: hashable, equality-
+// comparable, and copyable. (Exactly "regular minus default_initializable", plus
+// Hashable.)
+//
+// Deliberately NOT default-constructible: that isn't part of being a graph key,
+// it's an *algorithm* need (e.g. the dense solver's `Node s{}` sentinel), so it
+// rides on the solver template, not here.
+// ---------------------------------------------------------------------------
+template <typename T>
+concept HashKey = Hashable<T> && std::equality_comparable<T> && std::copyable<T>;
+
+// ---------------------------------------------------------------------------
 // InputGraph
 //
 // A static directed graph over which a flow problem is defined.
 // The algorithm reads it but never mutates it.
 //
-// This concept fixes only the graph's *structure*. Requirements on node_type /
-// edge_type as usable *values* — hashable, equality-comparable, regular,
-// default-constructible, needed because the solvers key map-based state on them —
-// are imposed by the algorithms that consume an InputGraph, NOT here, so "being a
-// graph" stays decoupled from any one solver's storage choices.
+// node_type / edge_type must be usable as unordered_map keys (HashKey below),
+// because every consumer in this codebase keys map-based state (residual / flow /
+// potential / excess) on nodes and edges. This lives here, not on the algorithms,
+// because there is no realistic graph whose identifiers aren't hashable / comparable
+// / copyable — so it's part of what "graph" means here. (Default-constructibility is
+// deliberately NOT required: it isn't part of being a graph key, and the solvers
+// avoid it — e.g. std::optional instead of a `Node s{}` sentinel.)
 //
 // Semantic contract (not syntactically checkable, but part of the interface all
 // the same):
@@ -44,6 +74,10 @@ concept InputGraph = requires(const G& g,
                                typename G::edge_type e) {
     typename G::node_type;
     typename G::edge_type;
+
+    // Usable as unordered_map keys (see HashKey).
+    requires HashKey<typename G::node_type>;
+    requires HashKey<typename G::edge_type>;
 
     // Iteration — each range yields the graph's own node / edge type.
     { g.nodes() } -> range_of<typename G::node_type>;
