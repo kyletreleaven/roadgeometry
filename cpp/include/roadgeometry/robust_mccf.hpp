@@ -238,11 +238,17 @@ template <typename Edge, typename Cost>
 struct RobustCost {
     using key_type = RobustEdge<Edge>;
     using CostFn   = std::function<double(double)>;
-    using value_type = std::pair<key_type, CostFn>;
+    // .second REFERENCES stable storage — the inner cost map's fn for regular
+    // edges, or the single shared cycle_fn_ below for cycle edges — so find()'s
+    // iterator carries only a reference, never a copy of the (possibly heavy
+    // PiecewiseLinear) cost fn. A reference_wrapper is invocable, so `it->second(x)`
+    // still works, and it converts to `const CostFn&`, so a caller can bind the
+    // referenced fn without copying or dangling.
+    using value_type = std::pair<key_type, std::reference_wrapper<const CostFn>>;
 
     // Iterator holds an optional value_type (nullopt = end).
-    // operator-> returns const value_type*, giving access to ->second (the CostFn).
-    // operator== compares by key only to avoid comparing std::function values.
+    // operator-> returns const value_type*, giving access to ->second (a
+    // reference_wrapper<const CostFn>).  operator== compares by key only.
     struct iterator {
         std::optional<value_type> entry_;  // nullopt → end()
 
@@ -257,8 +263,10 @@ struct RobustCost {
     };
 
     const Cost& cost_;
-    double      slope_;    // prohibitive slope; TODO: replace with InfiniteSlope type
-    double      offset_;   // prohibitive offset (currently 0)
+    CostFn      cycle_fn_;  // one prohibitive fn shared by every cycle edge (all
+                            // have the same CBOUND slope) — stable storage that
+                            // find() hands back a reference to.
+                            // TODO: replace with an InfiniteSlope cost type.
 
     // Takes the original (pre-wrapping) network to compute the prohibitive slope.
     // cost_.find(e) is always valid for every edge in the network (MatchingCostMap
@@ -266,20 +274,19 @@ struct RobustCost {
     template <InputGraph G2>
     RobustCost(const G2& network, const Cost& cost, double U)
         : cost_(cost)
-        , slope_(make_cbound(network, cost, U))
-        , offset_(0.0)
+        , cycle_fn_([slope = make_cbound(network, cost, U)](double x) { return slope * x; })
     {}
 
     iterator end() const { return {std::nullopt}; }
 
-    // Regular edges: delegate to inner cost (find() always valid; no end() branch).
-    // Cycle edges: prohibitive linear fn with slope = sum of all edge costs at U.
+    // Regular edges: reference the inner cost fn (find() always valid; no end() branch).
+    // Cycle edges: reference the single shared prohibitive fn.
     iterator find(const key_type& e) const {
         if (const auto* r = std::get_if<RegularEdge<Edge>>(&e)) {
             auto it = cost_.find(r->e);
-            return {value_type{e, it->second}};
+            return {value_type{e, std::cref(it->second)}};
         }
-        return {value_type{e, [s = slope_, o = offset_](double x) { return s * x + o; }}};
+        return {value_type{e, std::cref(cycle_fn_)}};
     }
 
     // Regular edges: delegate to inner cost.
