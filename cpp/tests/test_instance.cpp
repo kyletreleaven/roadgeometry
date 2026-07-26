@@ -34,7 +34,9 @@ TEST_CASE("mccf::map_backed_instance models Instance and exposes the problem dat
     CHECK(inst.supply(1) == doctest::Approx(-1.0));
     CHECK(inst.network().endpoints(0) == std::pair<int, int>{0, 1});
 
-    // Defaults for missing keys: ub -> +inf, lb -> 0, supply -> 0.
+    // Defaults for missing keys: ub -> +inf, lb -> 0, supply -> 0. (cost has NO
+    // fallback — the cost map must be total — so it is only ever queried for a
+    // present edge, not exercised here.)
     Graph g2;
     g2.add_edge(7, 0, 1);
     auto bare = mccf::map_backed_instance(
@@ -42,5 +44,4 @@ TEST_CASE("mccf::map_backed_instance models Instance and exposes the problem dat
         std::unordered_map<int, double>{}, std::unordered_map<int, double>{});
     CHECK(bare.lb(7) == doctest::Approx(0.0));
     CHECK(bare.supply(0) == doctest::Approx(0.0));
-    CHECK(bare.cost(7)(5.0) == doctest::Approx(0.0));   // missing cost => zero callable
 }

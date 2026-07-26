@@ -1,17 +1,17 @@
 #pragma once
+#include <limits>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
-#include <functional>
-#include <limits>
-
 #include "concepts.hpp"
 #include "fragile_mccf.hpp"
-#include "fragile_mccf_sparse.hpp"
 #include "hash_utils.hpp"
 #include "input_graph.hpp"
-#include "piecewise_linear.hpp"
+#include "mccf/concepts.hpp"   // mccf::Instance, node_t, edge_t
+#include "mccf/traits.hpp"     // mccf::map_backed_instance
 
 namespace roadgeometry {
 
@@ -43,7 +43,7 @@ using RobustEdge = std::variant<RegularEdge<Edge>, CycleEdge>;
 // and BEFORE any InputGraph<RobustInputGraph<...>> check. Tightened InputGraph
 // requires Hashable<edge_type>, and Hashable needs the specialization *complete* at
 // the check (a forward declaration won't satisfy the concept), so these must
-// precede RobustInputGraph's static_assert and robust_mccf's body below.
+// precede RobustInputGraph's static_assert and RobustInstance below.
 namespace std {
 
 template <typename Edge>
@@ -82,45 +82,10 @@ namespace roadgeometry {
 // over all nodes.  The cycle guarantees strong connectivity of every
 // Delta-residual graph, satisfying fragile_mccf's precondition.
 //
-// DESIGN
-// ------
-// Templated on G — wraps any InputGraph without copying its structure.
-// Nodes are unchanged; edges are RobustEdge<G::edge_type>.
-//
-// The Hamiltonian cycle visits nodes in the order they were added to
-// node_order_ at construction time.  cycle edge k goes from
+// Templated on G — wraps any InputGraph without copying its structure. Nodes are
+// unchanged; edges are RobustEdge<G::edge_type>. The Hamiltonian cycle visits
+// nodes in node_order_ (g.nodes() iteration order); cycle edge k goes from
 // node_order_[k] to node_order_[(k+1) % n].
-//
-// CONSTRUCTION
-// ------------
-//   RobustInputGraph(g)
-//     Builds node_order_ (vector<Node>) and node_index_ (Node→int map)
-//     from g.nodes() in iteration order.  O(n).
-//
-// QUERY
-// -----
-//   nodes()       → same range as g.nodes()
-//   edges()       → g.edges() mapped to RegularEdge + CycleEdge{0..n-1}
-//   out_edges(u)  → g.out_edges(u) mapped to RegularEdge
-//                   + {CycleEdge{node_index_[u]}}
-//   in_edges(u)   → g.in_edges(u) mapped to RegularEdge
-//                   + {CycleEdge{(node_index_[u] - 1 + n) % n}}
-//   endpoints(e)  → RegularEdge{e}: g.endpoints(e)
-//                   CycleEdge{k}:   {node_order_[k], node_order_[(k+1)%n]}
-//
-// COST / CAPACITY (external, caller's responsibility)
-// ----------------------------------------------------
-// Cycle edges have no finite capacity (omit from capacity map).
-// Cycle edge cost = prohibit, a linear function with slope CBOUND where
-//   CBOUND = sum(cost_fn(U) for each edge with a cost function)
-// Since any feasible flow has cost <= CBOUND, prohibitive cost ensures
-// no cycle edge carries flow in the optimal solution.
-//
-// TODO: replace CBOUND-based prohibitive cost with an InfiniteSlope cost type
-// that returns ±∞ directly, once fragile_mccf's linearize_cost_edge is updated
-// to short-circuit the difference computation for infinite-slope functions.
-//
-// TODO: implement.
 // ---------------------------------------------------------------------------
 template <InputGraph G>
 class RobustInputGraph {
@@ -243,136 +208,137 @@ private:
 static_assert(InputGraph<RobustInputGraph<HashMapGraph<int,int>>>);
 
 // ---------------------------------------------------------------------------
-// RobustCapacity<Edge, Cap>
+// RobustInstance<Base>
 //
-// A capacity map view for a RobustInputGraph.  Regular edges delegate to the
-// original capacity map; cycle edges have no finite capacity (find returns
-// end(), so fragile_mccf will use the default of U).
-// ---------------------------------------------------------------------------
-template <typename Edge, typename Cap>
-struct RobustCapacity {
-    using key_type = RobustEdge<Edge>;
-    using iterator = typename Cap::const_iterator;
-
-    const Cap& cap_;
-
-    iterator end() const { return cap_.end(); }
-
-    iterator find(const key_type& e) const {
-        if (const auto* r = std::get_if<RegularEdge<Edge>>(&e))
-            return cap_.find(r->e);
-        return end();  // cycle edges: no finite capacity
-    }
-};
-
-// ---------------------------------------------------------------------------
-// RobustCost<Edge, Cost>
+// An Instance adapter that wraps a base Instance and adds a Hamiltonian cycle,
+// guaranteeing strong connectivity of every Delta-residual graph (fragile_mccf's
+// precondition). It OWNS the base (move it in) so every accessor borrows from
+// storage this object owns — no cost fn is ever copied.
 //
-// A cost map view for a RobustInputGraph.  Regular edges delegate to the
-// original cost map; cycle edges return a prohibitive PiecewiseLinear with
-// slope CBOUND = sum(cost_fn(U) for all edges with a cost function).
+// This rolls the old RobustCapacity / RobustCost views into accessors:
+//   network()  → a RobustInputGraph over base.network()
+//   cost(e)    → regular: base.cost(inner);  cycle: a prohibitive linear cost
+//                (slope = CBOUND = sum base.cost(e)(U); any feasible flow costs
+//                 <= CBOUND, so no cycle edge carries flow in the optimum)
+//   ub(e)      → regular: base.ub(inner);    cycle: +inf (no finite capacity)
+//   lb(e)      → regular: base.lb(inner);    cycle: 0
+//   supply(n)  → base.supply(n)
 // ---------------------------------------------------------------------------
-template <typename Edge, typename Cost>
-struct RobustCost {
-    using key_type = RobustEdge<Edge>;
+template <mccf::Instance Base>
+class RobustInstance {
+public:
+    using base_network = typename Base::network_type;
+    using base_edge    = typename base_network::edge_type;
 
-    // The base cost's per-edge fn type, deduced from the wrapped cost map (e.g.
-    // PiecewiseLinear). PRESERVED — not erased to std::function — so the solver keeps
-    // the concrete cost type. This is the general family member: no requirement on
-    // BaseCostFn (a homogeneous, PWL-constructible specialization can come later).
-    using BaseCostFn = std::remove_cvref_t<
-        decltype(std::declval<const Cost&>().find(std::declval<Edge>())->second)>;
+    using network_type = RobustInputGraph<base_network>;
+    using node_type    = typename network_type::node_type;
+    using edge_type    = typename network_type::edge_type;   // RobustEdge<base_edge>
 
-    // Prohibitive linear cost for cycle edges: slope * x (slope = CBOUND). Held once
-    // as the prohibitive_ member that cycle CostRefs point at.
-    // TODO: replace with an InfiniteSlope cost type.
+    // Prohibitive linear cost for cycle edges: slope * x (slope = CBOUND).
+    // TODO: make the cycle-edge cost a swappable ConnectivityCostPolicy — CBOUND
+    // prohibitive (this) OR an ordinal / infinite-slope cost — rather than hard-coding
+    // one. Cost representation is a separate policy from connectivity topology; see
+    // plans/connectivity.md and plans/ordinal_costs.md. The ordinal/infinite option
+    // additionally needs linearize_cost_edge to short-circuit the difference computation
+    // for infinite-slope functions.
     struct Prohibitive {
         double slope;
         double operator()(double x) const { return slope * x; }
     };
 
-    // The per-edge cost handed back by find()->second: a closed, type-preserving
-    // BORROWED handle — a pointer to the base cost fn (regular edges) or to the shared
-    // prohibitive cost (cycle edges). Both point into stable storage (the base map / the
-    // prohibitive_ member), so no fn is copied and nothing dangles. Invocable via visit
-    // (both alternatives just deref). Mirrors MatchingCostMap::CostRef.
+    // The base cost's per-edge fn type (base.cost(e) returns it by const reference).
+    using base_cost_fn = std::remove_cvref_t<
+        decltype(std::declval<const Base&>().cost(std::declval<base_edge>()))>;
+
+    // Borrowed, invocable cost handle: a pointer to the base cost fn (regular edges) or
+    // to the shared prohibitive_ member (cycle edges). Both borrowed, both point into
+    // stable storage (the base's owned map / the prohibitive_ member) — one visit, no
+    // handle wrapping, no fn copy. (base.cost returns a const& into the base's map, so we
+    // point straight at it rather than composing through another handle.)
     struct CostRef {
-        std::variant<const BaseCostFn*, const Prohibitive*> v;
+        std::variant<const base_cost_fn*, const Prohibitive*> v;
         double operator()(double x) const {
             return std::visit([x](const auto* c) -> double { return (*c)(x); }, v);
         }
     };
 
-    using value_type = std::pair<key_type, CostRef>;
-
-    // Iterator holds an optional value_type (nullopt = end).
-    // operator-> returns const value_type*, giving access to ->second (a CostRef).
-    // operator== compares by key only.
-    struct iterator {
-        std::optional<value_type> entry_;  // nullopt → end()
-
-        const value_type* operator->() const { return &*entry_; }
-
-        bool operator==(const iterator& o) const {
-            if (!entry_ && !o.entry_) return true;   // both end
-            if (!entry_ || !o.entry_) return false;
-            return entry_->first == o.entry_->first; // compare by key
-        }
-        bool operator!=(const iterator& o) const { return !(*this == o); }
-    };
-
-    const Cost& cost_;
-    Prohibitive prohibitive_;   // shared prohibitive cost (slope = CBOUND); cycle CostRefs point here.
-
-    // Takes the original (pre-wrapping) network to compute the prohibitive slope.
-    // cost_.find(e) is always valid for every edge in the network (MatchingCostMap
-    // guarantees this), so make_cbound needs no end() check.
-    template <InputGraph G2>
-    RobustCost(const G2& network, const Cost& cost, double U)
-        : cost_(cost)
-        , prohibitive_{make_cbound(network, cost, U)}
+    RobustInstance(Base base, double U)
+        : base_(std::move(base))
+        , graph_(base_.network())                       // borrows base_.network() (base_ owned → stable)
+        , prohibitive_{make_cbound(base_, U)}
     {}
 
-    iterator end() const { return {std::nullopt}; }
+    const network_type& network() const { return graph_; }
 
-    // Regular edges: point at the base cost fn (find() always valid; no copy).
-    // Cycle edges: point at the shared prohibitive cost.
-    iterator find(const key_type& e) const {
-        if (const auto* r = std::get_if<RegularEdge<Edge>>(&e)) {
-            auto it = cost_.find(r->e);
-            return {value_type{e, CostRef{&it->second}}};
-        }
-        return {value_type{e, CostRef{&prohibitive_}}};
+    CostRef cost(edge_type e) const {
+        if (const auto* r = std::get_if<RegularEdge<base_edge>>(&e))
+            return CostRef{ &base_.cost(r->e) };
+        return CostRef{ &prohibitive_ };
     }
 
-    // Regular edges: delegate to inner cost.
-    // Cycle edges: always false (prohibitive cost, not a real road arc).
-    bool is_non_empty(const key_type& e) const {
-        if (const auto* r = std::get_if<RegularEdge<Edge>>(&e))
-            return cost_.is_non_empty(r->e);
-        return false;
+    double ub(edge_type e) const {
+        if (const auto* r = std::get_if<RegularEdge<base_edge>>(&e))
+            return base_.ub(r->e);
+        return std::numeric_limits<double>::infinity();   // cycle: no finite capacity
     }
+    double lb(edge_type e) const {
+        if (const auto* r = std::get_if<RegularEdge<base_edge>>(&e))
+            return base_.lb(r->e);
+        return 0.0;   // cycle
+    }
+    double supply(node_type n) const { return base_.supply(n); }
 
 private:
-    template <InputGraph G2>
-    static double make_cbound(const G2& network, const Cost& cost, double U) {
+    Base         base_;         // owned — declared first so graph_/prohibitive_ can borrow it
+    network_type graph_;
+    Prohibitive  prohibitive_;
+
+    static double make_cbound(const Base& base, double U) {
         double cbound = 0.0;
-        for (const auto& e : network.edges()) {
-            auto ci = cost.find(e);
-            cbound += ci->second(U);
-        }
+        for (const base_edge& e : base.network().edges())
+            cbound += base.cost(e)(U);
         return cbound;
     }
 };
 
+template <mccf::Instance Base>
+RobustInstance<Base> robust_instance(Base base, double U) {
+    return RobustInstance<Base>(std::move(base), U);
+}
+
 // ---------------------------------------------------------------------------
 // robust_mccf
 //
-// Wraps fragile_mccf with a RobustInputGraph + RobustCapacity + RobustCost
-// to guarantee strong connectivity of every Delta-residual graph.
+// Robustify an Instance (wrap it in a RobustInstance to guarantee connectivity),
+// solve with fragile_mccf, and filter the cycle-edge flow back out. Symmetric with
+// fragile_mccf: an Instance core plus an unpacked (plain-maps) shim over it.
 //
-// Returns: flow map Edge → double (only original edges, cycle edges filtered out).
+// Returns: flow map Edge → double (original edges only; cycle edges filtered out).
 // ---------------------------------------------------------------------------
+template <mccf::Instance Base>
+std::unordered_map<mccf::edge_t<Base>, double>
+robust_mccf(Base base, double U, double epsilon = 1.0, double cycle_tol = 1e-9)
+{
+    using Edge = mccf::edge_t<Base>;
+
+    auto st = fragile_mccf_state(robust_instance(std::move(base), U), U, epsilon);
+
+    std::unordered_map<Edge, double> result;
+    for (auto& [e, x] : st.flow) {
+        if (const auto* r = std::get_if<RegularEdge<Edge>>(&e))
+            result[r->e] = x;
+        else if (std::abs(x) > cycle_tol)
+            throw std::runtime_error("robust_mccf: infeasible instance (nonzero flow on cycle edge)");
+    }
+    return result;
+}
+
+// Unpacked shim: build a map_backed_instance over the plain maps and delegate to
+// the Instance core above.
+//
+// NOTE: the UseSparse template parameter is retained for binding compatibility but
+// currently ignored — the sparse solver is temporarily unsupported (see TODO.md).
+// The path is always dense.
 template <bool UseSparse = true, InputGraph G, typename Cap, typename Cost>
 std::unordered_map<typename G::edge_type, double>
 robust_mccf(
@@ -384,27 +350,12 @@ robust_mccf(
     double epsilon    = 1.0,
     double cycle_tol  = 1e-9
 ) {
-    using Edge = typename G::edge_type;
-
-    RobustInputGraph<G>       robust_network(network);
-    RobustCapacity<Edge, Cap> robust_capacity{capacity};
-    RobustCost<Edge, Cost>    robust_cost{network, cost, U};
-
-    auto flow = [&]() {
-        if constexpr (UseSparse)
-            return fragile_mccf_sparse(robust_network, robust_capacity, supply, robust_cost, U, epsilon);
-        else
-            return fragile_mccf(robust_network, robust_capacity, supply, robust_cost, U, epsilon);
-    }();
-
-    std::unordered_map<Edge, double> result;
-    for (auto& [e, x] : flow) {
-        if (const auto* r = std::get_if<RegularEdge<Edge>>(&e))
-            result[r->e] = x;
-        else if (std::abs(x) > cycle_tol)
-            throw std::runtime_error("robust_mccf: infeasible instance (nonzero flow on cycle edge)");
-    }
-    return result;
+    return robust_mccf(
+        mccf::map_backed_instance(
+            network, cost, capacity,
+            std::unordered_map<typename G::edge_type, double>{},   // lb = {} (>= 0 ⇒ 0 default)
+            supply),
+        U, epsilon, cycle_tol);
 }
 
 } // namespace roadgeometry

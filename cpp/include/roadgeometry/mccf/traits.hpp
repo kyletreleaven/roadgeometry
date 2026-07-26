@@ -1,5 +1,4 @@
 #pragma once
-#include <functional>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -67,18 +66,20 @@ public:
 
     const G& network() const { return g_; }
 
-    // Retrieve the edge's cost callable once (const-ref, no copy); a static zero
-    // callable covers missing keys so we can always return a reference. An if-form
-    // (not a ternary) so this also composes with cost maps whose find()->second is
-    // a reference_wrapper<const CostFn> (e.g. reference-based RobustCost): each
-    // return converts to const CostFn& on its own, whereas a ternary between
-    // reference_wrapper and const& is ambiguous (each converts to the other).
-    const std::function<double(double)>& cost(edge_type e) const {
-        static const std::function<double(double)> zero = [](double) { return 0.0; };
-        auto it = cost_.find(e);
-        if (it == cost_.end()) return zero;
-        return it->second;
-    }
+    // The cost map's per-edge fn type, preserved (not erased to std::function).
+    using cost_fn_type = std::remove_cvref_t<
+        decltype(std::declval<const Cost&>().find(std::declval<edge_type>())->second)>;
+
+    // cost(e) returns the edge's cost fn BY CONST REFERENCE — a raw borrow into the
+    // owned cost map. Zero abstraction cost, no copy (safe for move-only fns).
+    //
+    // The cost map must be TOTAL — every edge present. There is deliberately NO
+    // missing-edge fallback: "missing => zero" is a footgun (it is the *opposite* of a
+    // real absent-edge cost, e.g. an empty road's length*|f|) and was never used — the
+    // matching reduction fills every edge explicitly. A cost source that *synthesizes*
+    // a real cost for absent edges is a different Instance/cost type returning its
+    // handle by value (a genuine storage/runtime tradeoff), not this borrow.
+    const cost_fn_type& cost(edge_type e) const { return cost_.find(e)->second; }
     double ub(edge_type e) const {
         return detail::map_get(ub_, e, std::numeric_limits<double>::infinity());
     }

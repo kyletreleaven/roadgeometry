@@ -37,21 +37,31 @@ interface surfaces, distribution, and design decisions.
   `ReducedCost` (combined ~37%) and `bintrees.floor_item` (13%); Dijkstra no longer dominates.
 - [ ] **Step 3: `ConvexCostFlowSolver<Graph, PriorityQueue>`** — C++ template, bound via
   pybind11 as default `<int,int>` instantiation, validated against Python impl with existing tests
-  - [ ] **Convert dense `fragile_mccf_state` to consume an `Instance`** (single arg; U/epsilon
-    stay explicit) via accessors `network()`, `cost(e)(x)`, `ub(e)`, `lb(e)` (guarded by
-    `has_lower_bounds_v`), `supply(n)`. Groundwork done: `RobustCost` is reference-based,
-    `MapBackedInstance::cost` is const-ref, `InputGraph` states its `HashKey` requirements, and the
-    engine no longer needs default-construction (`std::optional` instead of a `Node s{}` sentinel).
-    Keep unpacked map-based shims so the binding and `robust_mccf` are untouched. (An earlier
-    attempt was reverted; this is the redo on the now-solid footing.)
-  - [x] **`RobustCost` preserves the base cost type via a borrowed-pointer variant.** Its
-    `find()->second` is a `CostRef = variant<const BaseCostFn*, const Prohibitive*>` — a pointer into
-    the base map for regular edges, a pointer to a shared `Prohibitive` member for cycle edges —
-    invocable via `visit`. No per-lookup copy of the (PWL) cost fn, the concrete type is preserved
-    (not erased to `std::function`), nothing dangles. This is the *general* family member (no PWL
-    constraint on `BaseCostFn`); a homogeneous PWL-constructible specialization can come later.
-    Trade-off: the sparse cost path (`MatchingCostMap` synthesizes its `CostRef` by value per lookup,
-    so there's no stable pointer) is temporarily incompatible — see "Re-enable sparse".
+  - [x] **`fragile_mccf` and `robust_mccf` are Instance-based.** Both have an `Instance` core plus
+    an unpacked (plain-maps) shim that builds a `map_backed_instance` and delegates. The fragile core
+    reads the problem through `network()`, `cost(e)(x)`, `ub(e)`, `lb(e)` (guarded by
+    `has_lower_bounds_v`), `supply(n)`. `robust_mccf(base)` = `fragile_mccf(robust_instance(base))` +
+    cycle filter, so it robustifies *any* instance. Supporting changes that landed with it: engine
+    uses `std::optional` instead of a `Node s{}` sentinel (no default-construction requirement);
+    `InputGraph` states its `HashKey` requirements (`range_of`, `Hashable`, `HashKey` concepts);
+    `RobustEdge` hashes hoisted above their uses.
+  - [x] **Cost path is borrow-based (no per-lookup fn copy, type preserved).**
+    `MapBackedInstance::cost` returns the cost fn `const M&` — a raw borrow into its owned cost map,
+    zero abstraction cost. Its cost map must be **total** (every edge present) — but only because it
+    *stores explicit* costs; totality is **this model's** contract, **not** a permanent one, and it is
+    relaxed by an implicit-cost policy (see NOTE), never by a missing⇒0 fallback.
+    `RobustInstance` folds the old `RobustCost`/`RobustCapacity` views into
+    accessors and returns a `variant<const M*, const Prohibitive*>` — regular edges borrow the base
+    fn, cycle edges point at a shared `Prohibitive` member (one `visit`, no handle layering). Every
+    adapter borrows from storage it owns; only small pointers are copied, never a cost fn (safe even
+    for move-only fns). Deferred: a homogeneous PWL-constructible `RobustInstance` specialization
+    (the general variant member is in).
+    - NOTE — totality is temporary. `MapBackedInstance` needs it only because it *stores* costs; the
+      future **implicit-cost policy** relaxes it by *synthesizing* an absent edge's REAL cost on demand
+      (e.g. an empty road's `length·|f|`, which is NOT zero) — a storage/runtime tradeoff in a
+      different cost type. The thing that is *always* forbidden is a generic "absent ⇒ 0" fallback:
+      under `MapBackedInstance` an absent edge is a precondition violation (UB via `find(e)->second`),
+      never a "free" edge. missing ≠ empty. See [[feedback_question_carried_forward_defaults]].
   - [ ] **Re-enable sparse (temporarily disabled).** `compute_optimal_flow` / `compute_matching`
     bindings throw on `solver="sparse"` (default flipped to `"dense"`) and the `<...,true>`
     instantiations are dropped so `MatchingCostMap` isn't compiled. Re-unify by making the sparse
@@ -80,10 +90,12 @@ interface surfaces, distribution, and design decisions.
 
 Design: [plans/capacity_ranges.md](plans/capacity_ranges.md).
 
-- [ ] Add optional `lb` map (default `lb[e]=0`) to `fragile_mccf` / `fragile_mccf_sparse`;
-  residual condition becomes `x - lb[e] >= D`.
-- [ ] Simplify `build_flow_reduction` for `lb ≤ 0` arcs (drop synthetic arcs / supply shifts /
-  result re-translation for bidirectional + non-positive-min oneway roads).
+- [x] Dense `fragile_mccf` supports `lb` (read via `Instance::lb`, residual `x - lb[e] >= D`,
+  guarded by `has_lower_bounds_v`). Still needed: the same in `fragile_mccf_sparse` (disabled).
+- [ ] **Actually exploit it — remove the double edges.** Simplify `build_flow_reduction` for
+  `lb ≤ 0` arcs to emit a single `[lb, ub]` edge (drop the synthetic reverse arc / supply shifts /
+  result re-translation for bidirectional + non-positive-min oneway roads). Until this lands nothing
+  passes a non-zero `lb`, so the engine support above is unexercised in production.
 
 ---
 

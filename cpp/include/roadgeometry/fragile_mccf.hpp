@@ -13,14 +13,14 @@
 #include "flow_potential.hpp"
 #include "hash_utils.hpp"
 #include "residual_graph.hpp"
+#include "mccf/concepts.hpp"   // mccf::Instance, node_t, edge_t
+#include "mccf/traits.hpp"     // mccf::map_backed_instance, has_lower_bounds_v
 
 namespace roadgeometry {
 
 // ---------------------------------------------------------------------------
-// BasicCost<C, E>
-//
-// Minimal concept for cost maps accepted by fragile_mccf (dense solver).
-// find(key) must always return a valid iterator (never end()).
+// BasicCost<C, E> — minimal cost-map concept (find(key)/end()). Used by the
+// sparse engine; the Instance-based core below takes costs via Instance::cost(e).
 // ---------------------------------------------------------------------------
 template <typename C, typename E>
 concept BasicCost = requires(const C& c, E key) {
@@ -29,14 +29,17 @@ concept BasicCost = requires(const C& c, E key) {
 };
 
 // ---------------------------------------------------------------------------
-// fragile_mccf
+// fragile_mccf_state (Instance-based core)
 //
 // Capacity-scaling successive shortest-paths algorithm for convex-cost flow.
+// Consumes a single mccf::Instance (network + cost + ub/lb + supply); U and
+// epsilon stay explicit algorithm parameters.
 //
 // Preconditions (caller's responsibility — not checked):
 //   1. supply is conservative: sum of all supply values == 0.
 //   2. Every Delta-residual graph is strongly connected for all Delta in the
-//      scaling sequence.  (Use a robust-instance wrapper if not guaranteed.)
+//      scaling sequence.  Callers who can't guarantee this use robust_mccf, which
+//      wraps the instance in a RobustInstance (adds a Hamiltonian cycle).
 //
 // Guarantee: returns an epsilon-optimal feasible flow — no augmenting cycle
 // of capacity epsilon has negative cost in the residual graph at termination.
@@ -58,46 +61,24 @@ concept BasicCost = requires(const C& c, E key) {
 //   cancellation: the backward arc {e,−1} is simply a residual arc like any
 //   other, and routing through it reduces flow on e.
 //
-// Template parameters:
-//   G    — InputGraph satisfying the InputGraph concept.
-//   Cap  — Map-like: Edge → double.  Needs find(Edge).
-//   Cost — Map-like: Edge → callable double(double).  Needs find(Edge).
-//          Missing entries treated as zero cost.
-//   RG   — ResidualGraph type; defaults to residual_graph_traits<G>::type.
-//
-// Returns: flow map edge → double (same key set as network.edges()).
-//
-// TODO(unification): replace the unpacked network/capacity/supply/cost/U/lb
-// params with a single `Instance` argument (its accessors — network(), cost(e),
-// ub(e), lb(e), supply(n) — already model these). That is the seam that lets
-// dense and sparse become one template-differentiated family differing only by
-// residual-maintenance strategy. Keep the unpacked signature as a shim.
+// Returns: {flow, potential}. Potentials are computed regardless, so returning
+// them is a move, not extra work — they are the optimality certificate and the
+// SSP warm-start memo.
 // ---------------------------------------------------------------------------
-template <InputGraph G,
-          typename Cap,
-          typename Cost,
-          typename RG = typename residual_graph_traits<G>::type>
-// Core: returns {flow, potential}. The bare-flow `fragile_mccf` below is a thin
-// wrapper over this, so existing callers are untouched.
-FlowPotential<typename G::edge_type, typename G::node_type>
-fragile_mccf_state(
-    const G& network,
-    const Cap&  capacity_in,
-    const std::unordered_map<typename G::node_type, double>& supply,
-    const Cost& cost,
-    double U,
-    double epsilon = 1.0,
-    // Optional per-edge lower bound (default 0). Only lb <= 0 is supported here:
-    // it needs no feasibility pre-flow since the initial flow x = 0 satisfies it.
-    const std::unordered_map<typename G::edge_type, double>& lb = {}
-)
+template <mccf::Instance I,
+          typename RG = typename residual_graph_traits<typename I::network_type>::type>
+FlowPotential<mccf::edge_t<I>, mccf::node_t<I>>
+fragile_mccf_state(const I& inst, double U, double epsilon = 1.0)
 {
+    using G      = typename I::network_type;
     using Node   = typename G::node_type;
     using Edge   = typename G::edge_type;
     using Arc    = typename RG::edge_type;   // std::pair<Edge, int>
     using ArcMap = std::unordered_map<Arc, double, PairHash>;
 
     constexpr double inf = std::numeric_limits<double>::infinity();
+
+    const G& network = inst.network();
 
     auto map_get = [](const auto& m, const auto& k, double def = 0.0) -> double {
         auto it = m.find(k);
@@ -109,7 +90,7 @@ fragile_mccf_state(
     // typically much smaller (only nodes with nonzero supply are keyed).
     {
         double total = 0.0;
-        for (const Node& i : network.nodes()) total += map_get(supply, i, 0.0);
+        for (const Node& i : network.nodes()) total += inst.supply(i);
         if (std::abs(total) > epsilon)
             throw std::invalid_argument("fragile_mccf: supply is not epsilon-conservative (|sum| > epsilon)");
     }
@@ -119,7 +100,7 @@ fragile_mccf_state(
     // Trim infinite capacities to U (allows negative-slope initialization).
     std::unordered_map<Edge, double> capacity;
     for (const Edge& e : network.edges())
-        capacity[e] = std::min(U, map_get(capacity_in, e, inf));
+        capacity[e] = std::min(U, inst.ub(e));
 
     std::unordered_map<Edge, double> flow;
     for (const Edge& e : network.edges()) flow[e] = 0.0;
@@ -129,7 +110,7 @@ fragile_mccf_state(
     std::unordered_map<Node, double> excess;
 
     auto recompute_excess_node = [&](const Node& i) {
-        double ex = map_get(supply, i, 0.0);
+        double ex = inst.supply(i);
         for (const Edge& e : network.in_edges(i))  ex += flow.at(e);
         for (const Edge& e : network.out_edges(i)) ex -= flow.at(e);
         excess[i] = ex;
@@ -162,17 +143,17 @@ fragile_mccf_state(
 
         Arc bwd{e, -1};
         if (rgraph.has_edge(bwd)) rgraph.remove_edge(bwd);
-        if (x - map_get(lb, e, 0.0) >= D) rgraph.add_edge(bwd, v, u);
+        // lb ≡ 0 fast path: skip the lb() call and the subtraction entirely.
+        double lb_e = 0.0;
+        if constexpr (mccf::has_lower_bounds_v<I>) lb_e = inst.lb(e);
+        if (x - lb_e >= D) rgraph.add_edge(bwd, v, u);
     };
 
     auto linearize_cost_edge = [&](const Edge& e, double D) {
-        double x  = flow.at(e);
-        auto   it = cost.find(e);
-        for (int dir : {+1, -1}) {
-            lincost[Arc{e, dir}] = (it != cost.end())
-                ? (it->second(x + dir * D) - it->second(x)) / D
-                : 0.0;
-        }
+        double x = flow.at(e);
+        const auto& c = inst.cost(e);   // retrieve the invocable once, evaluate many
+        for (int dir : {+1, -1})
+            lincost[Arc{e, dir}] = (c(x + dir * D) - c(x)) / D;
     };
 
     auto reduce_cost_edge = [&](const Edge& e) {
@@ -282,8 +263,39 @@ fragile_mccf_state(
     return { std::move(flow), std::move(potential) };
 }
 
-// Thin wrapper: the original signature, returning just the flow. Existing callers
-// are unchanged; new callers wanting the potentials use ..._state above.
+// ---------------------------------------------------------------------------
+// Unpacked shims — the map-based signatures, for callers who guarantee
+// connectivity themselves. They build a map_backed_instance over the plain maps
+// and delegate to the Instance core. (robust_mccf has the symmetric pair and
+// interposes a RobustInstance before delegating.)
+// ---------------------------------------------------------------------------
+template <InputGraph G,
+          typename Cap,
+          typename Cost,
+          typename RG = typename residual_graph_traits<G>::type>
+FlowPotential<typename G::edge_type, typename G::node_type>
+fragile_mccf_state(
+    const G& network,
+    const Cap&  capacity_in,
+    const std::unordered_map<typename G::node_type, double>& supply,
+    const Cost& cost,
+    double U,
+    double epsilon = 1.0,
+    // Optional per-edge lower bound (default 0). Only lb <= 0 is supported here:
+    // it needs no feasibility pre-flow since the initial flow x = 0 satisfies it.
+    const std::unordered_map<typename G::edge_type, double>& lb = {}
+)
+{
+    return fragile_mccf_state<
+        mccf::MapBackedInstance<G, Cost, Cap,
+            std::unordered_map<typename G::edge_type, double>,
+            std::unordered_map<typename G::node_type, double>>,
+        RG>(
+        mccf::map_backed_instance(network, cost, capacity_in, lb, supply),
+        U, epsilon);
+}
+
+// Thin wrapper: the map-based signature, returning just the flow.
 template <InputGraph G,
           typename Cap,
           typename Cost,
